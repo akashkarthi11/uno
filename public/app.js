@@ -63,6 +63,25 @@ function noteBuild(build) {
 }
 $("reloadBtn").addEventListener("click", () => location.reload());
 
+/** ‹ › buttons appear only when the hand is wider than the screen; they scroll it by most of a screenful. */
+function updateHandArrows() {
+  const hand = $("hand");
+  const more = hand.scrollWidth > hand.clientWidth + 2;
+  $("handLeft").classList.toggle("hidden", !(more && hand.scrollLeft > 2));
+  $("handRight").classList.toggle("hidden", !(more && hand.scrollLeft + hand.clientWidth < hand.scrollWidth - 2));
+}
+$("hand").addEventListener("scroll", updateHandArrows, { passive: true });
+window.addEventListener("resize", updateHandArrows);
+function scrollHand(direction) {
+  const hand = $("hand");
+  const calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  hand.scrollBy({ left: direction * Math.round(hand.clientWidth * 0.7), behavior: calm ? "auto" : "smooth" });
+  // refresh the arrows once the scroll has finished (and again later, in case the animation is slow)
+  [120, 450, 900].forEach((ms) => setTimeout(updateHandArrows, ms));
+}
+$("handLeft").addEventListener("click", () => scrollHand(-1));
+$("handRight").addEventListener("click", () => scrollHand(1));
+
 /** The real visible height of the screen (browser bars excluded), kept in a CSS variable the phone layout uses. */
 function setAppHeight() {
   const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
@@ -402,6 +421,7 @@ function renderGame(s) {
       : "✔ You're out of cards.";
     hand.appendChild(note);
   }
+  requestAnimationFrame(updateHandArrows); // after layout, so the arrows know whether the hand overflows
 
   seenCards = nowSeen;
   turn = s.over ? null : { deadline: Date.now() + s.turnLeft, frozen: s.turnLeft, paused: s.paused, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
@@ -931,4 +951,39 @@ $("copyLink").addEventListener("click", () => {
   if (r) $("roomInput").value = r;
   const n = store("uno-name");
   if (n) $("nameInput").value = n;
+})();
+
+/* ---------- phone helpers: "Desktop site" hint and ?debug=1 diagnostics ---------- */
+
+/** True when a small phone screen is showing a desktop-width page (the browser's "Desktop site" option is on). */
+function desktopOnPhone(screenW, screenH, innerW) {
+  return Math.min(screenW, screenH) <= 600 && innerW > 700;
+}
+
+(function phoneHelpers() {
+  if (desktopOnPhone(screen.width, screen.height, window.innerWidth)) {
+    $("desktopHint").classList.remove("hidden");
+    $("desktopHintOk").addEventListener("click", () => $("desktopHint").classList.add("hidden"));
+  }
+  if (new URLSearchParams(location.search).get("debug") !== "1") return;
+  const box = document.createElement("div");
+  box.id = "debugBox";
+  document.body.appendChild(box);
+  let brave = "no";
+  if (navigator.brave && navigator.brave.isBrave) navigator.brave.isBrave().then((b) => { brave = b ? "yes" : "no"; });
+  const tick = () => {
+    const hand = $("hand"), doc = document.documentElement, vv = window.visualViewport;
+    const hr = hand.getBoundingClientRect();
+    box.textContent = [
+      "window " + window.innerWidth + "x" + window.innerHeight + "  visual " + (vv ? Math.round(vv.width) + "x" + Math.round(vv.height) : "n/a"),
+      "screen " + screen.width + "x" + screen.height + "  dpr " + window.devicePixelRatio,
+      "brave: " + brave + "  desktop-site? " + desktopOnPhone(screen.width, screen.height, window.innerWidth),
+      "in-game class: " + document.body.classList.contains("in-game") + "  --app-h: " + doc.style.getPropertyValue("--app-h"),
+      "page scrollable: " + (doc.scrollHeight > doc.clientHeight + 1) + " (" + doc.scrollHeight + " vs " + doc.clientHeight + ")",
+      "hand: cards " + hand.querySelectorAll(".card").length + "  top " + Math.round(hr.top) + "  bottom " + Math.round(hr.bottom) + "  scrollW " + hand.scrollWidth + "/" + hand.clientWidth,
+      "state: " + (state ? (state.started ? "game" : "lobby") + " seated=" + state.seated + " hand=" + (state.hand ? state.hand.length : "-") : "none"),
+    ].join("\n");
+  };
+  tick();
+  setInterval(tick, 1000);
 })();

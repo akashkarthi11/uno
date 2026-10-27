@@ -88,9 +88,14 @@
   </section>
 
   </div>
-  <section id="hand"></section>
+  <div id="handWrap">
+    <button id="handLeft" class="hand-arrow hidden" type="button" aria-label="Scroll cards left">‹</button>
+    <section id="hand"></section>
+    <button id="handRight" class="hand-arrow hidden" type="button" aria-label="Scroll cards right">›</button>
+  </div>
 </main>
 
+<div id="desktopHint" class="hidden">📱 You're seeing the computer version of this page on a phone. In Brave: tap ⋮ and untick <b>Desktop site</b>. <button id="desktopHintOk" type="button">OK</button></div>
 <div id="updateBanner" class="hidden">🔄 A new version of the game is available. <button id="reloadBtn" type="button">Reload</button></div>
 <button id="chatToggle" class="hidden" title="Chat">💬<span id="chatBadge" class="hidden"></span></button>
 <div id="chatDock" class="hidden"></div>
