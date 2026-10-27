@@ -347,8 +347,7 @@ function updateTimer() {
   const root = document.documentElement;
   if (!turn) {
     bar.classList.add("hidden");
-    document.body.classList.remove("myturn");
-    root.style.removeProperty("--turn-color");
+    setTurnTheme(null);
     return;
   }
   const left = Math.max(0, turn.deadline - Date.now());
@@ -358,16 +357,32 @@ function updateTimer() {
   bar.classList.remove("hidden");
   fill.style.width = frac * 100 + "%";
   if (turn.mine) {
-    const color = "hsl(" + Math.round(120 * frac) + " 78% 42%)"; // 120 = green ... 0 = red
+    const hue = Math.round(120 * frac); // 120 = green ... 0 = red
+    const color = "hsl(" + hue + ", 78%, 42%)";
     fill.style.background = color;
-    root.style.setProperty("--turn-color", color);
-    document.body.classList.add("myturn");
+    setTurnTheme(color, "hsla(" + hue + ", 78%, 42%, 0.12)");
     $("turnText").textContent = "Your turn · " + secs + "s";
   } else {
     fill.style.background = "";
-    document.body.classList.remove("myturn");
-    root.style.removeProperty("--turn-color");
+    setTurnTheme(null);
     $("turnText").textContent = turn.name + "'s turn · " + secs + "s";
+  }
+}
+
+/** Colours the screen frame, status bar, and the phone's browser bar; null restores the normal theme. */
+function setTurnTheme(color, tint) {
+  const root = document.documentElement;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (color) {
+    root.style.setProperty("--turn-color", color);
+    root.style.setProperty("--turn-tint", tint);
+    $("turnFrame").classList.remove("hidden");
+    if (meta) meta.setAttribute("content", color);
+  } else {
+    root.style.removeProperty("--turn-color");
+    root.style.removeProperty("--turn-tint");
+    $("turnFrame").classList.add("hidden");
+    if (meta) meta.setAttribute("content", "#7c5cff");
   }
 }
 setInterval(updateTimer, 250);

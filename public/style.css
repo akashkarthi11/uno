@@ -85,10 +85,11 @@ main { max-width: 1040px; margin: 0 auto; padding: 16px; display: flex; flex-dir
 #turnBar { position: relative; height: 32px; border-radius: 999px; background: var(--line-2); border: 1px solid var(--line); overflow: hidden; margin-top: 4px; display: flex; align-items: center; justify-content: center; }
 #turnFill { position: absolute; inset: 0 auto 0 0; width: 100%; background: var(--brand-grad); transition: width .25s linear, background .25s; }
 #turnText { position: relative; z-index: 1; padding: 2px 16px; border-radius: 999px; background: rgba(15,23,42,.62); font-weight: 800; font-size: 14px; color: #fff; }
-/* on your own turn the whole window edge follows the timer colour: green -> red */
-body.myturn::before {
-  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 8;
-  box-shadow: inset 0 0 0 6px var(--turn-color), inset 0 0 70px var(--turn-color); opacity: .75; transition: box-shadow .25s;
+/* on your own turn a frame around the whole screen (plus a light tint) follows the timer colour: green -> red */
+#turnFrame {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; z-index: 50;
+  border: 10px solid var(--turn-color, transparent); background: var(--turn-tint, transparent);
+  box-shadow: inset 0 0 60px var(--turn-color, transparent);
 }
 
 /* ---------- opponents ---------- */
@@ -236,7 +237,15 @@ button.kick {
 
 /* ---------- small screens ---------- */
 @media (max-width: 640px) {
-  header { padding: 10px 14px; }
+  html, body { overflow-x: hidden; }
+  header { padding: 8px 12px; flex-direction: column; align-items: flex-start; gap: 6px; }
+  #roomInfo { width: 100%; flex-wrap: wrap; gap: 6px; font-size: 13px; }
+  #roomInfo button { padding: 6px 12px; font-size: 13px; }
+  #opponents { gap: 8px; }
+  .opp { flex: 1 1 88px; max-width: 130px; min-width: 0 !important; padding: 12px 6px 8px !important; }
+  .opp .count { font-size: 12px; }
+  .actions { flex-wrap: wrap; }
+  #status { padding: 10px 12px; }
   main { padding: 10px; gap: 12px; }
   #table { gap: 28px; padding: 22px 10px; }
   .card { width: 68px; height: 102px; font-size: 28px; border-width: 4px; }
