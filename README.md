@@ -1,43 +1,36 @@
-# UNO Online (Spring Boot + WebSocket, Docker)
+# GrowX Cards (Node.js on Vercel)
 
-Multiplayer UNO. The Spring Boot server holds all game state and rules; browsers connect over a
-WebSocket (`/ws`) and are served from the same port.
+Multiplayer card game. Static page in `public/`, game rules in a Vercel serverless function
+(`api/game.js` + `api/_lib/game.js`). Browsers poll the function about every 1.5 s. Shared state lives
+in Upstash Redis.
 
-## Run
+## Rules in this build
+
+- 2–8 players, 108-card deck, **5 cards each**, classic rules (match colour/number/symbol, Skip, Reverse,
+  Draw Two, Wild, Wild Draw Four only when you hold no card of the current colour, call **GrowX!** at one
+  card or draw 2).
+- Play continues after someone empties their hand. **The last player still holding cards loses.**
+- Password `123456` joins as a player, `110299` joins as admin. Only the admin can start a game.
+  Override with the environment variables `GAME_PLAYER_PASSWORD` and `GAME_ADMIN_PASSWORD`.
+- A player who goes quiet for 20 s is treated as offline and their turns are played automatically.
+
+## Run locally (Docker, in-memory state)
 
 ```
 docker compose up --build
 ```
 
-Open http://localhost:8080. Other PCs on the same network open `http://<host-pc-ip>:8080`
-(find the IP with `ipconfig`; allow port 8080 through Windows Firewall).
+Open http://localhost:8080. Other PCs on the network use `http://<this-pc-ip>:8080`.
+Tests: `docker run --rm growx-cards:latest node --test test/`
 
-Everyone who opens the link with the same `?room=` name joins the same table, e.g.
-`http://192.168.1.20:8080/?room=friday`. The first player is the host and presses **Start**
-(2–8 players, 5 cards each). Classic rules, but play continues until one player is left holding
-cards — that player loses. People who join during a game are dealt in next game. A dropped player's turns are
-played automatically; reopening the link rejoins the same seat.
+## Deploy to Vercel (free)
 
-## Without Docker
+1. Push this repo to GitHub (already at github.com/akashkarthi11/uno).
+2. Vercel → Add New → Project → import the repo. No build settings needed.
+3. In the project: **Storage** → Marketplace → **Upstash Redis** (free plan) → connect it to the project.
+   This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`. (Without it the API answers "Storage not configured".)
+4. Settings → Environment Variables: add `GAME_PLAYER_PASSWORD` and `GAME_ADMIN_PASSWORD`.
+5. Redeploy. Share the Vercel URL; everyone uses the same `?room=` name to join the same table.
 
-`mvn spring-boot:run` (Java 17+, Maven 3.9+).
-
-## Layout
-
-- `src/main/java/com/uno/Room.java` — game rules and per-room state (synchronized)
-- `src/main/java/com/uno/GameSocketHandler.java` — WebSocket entry, rooms map
-- `src/main/resources/static/` — browser client (index.html, app.js, style.css)
-
-## Deploy: page on Vercel, server on Render (both free)
-
-Vercel cannot run the WebSocket server, so the two halves are hosted separately.
-
-1. Push this folder to a GitHub repo.
-2. **Render** → New → Blueprint (uses `render.yaml`) → set `UNO_PLAYER_PASSWORD` and
-   `UNO_ADMIN_PASSWORD` → deploy. Note the URL, e.g. `https://growx-cards-server.onrender.com`.
-3. Edit `src/main/resources/static/config.js`: `window.GROWX_BACKEND = "wss://growx-cards-server.onrender.com";`
-4. **Vercel** → Add New Project → import the repo. `vercel.json` publishes
-   `src/main/resources/static` as a static site. Share the Vercel URL with players.
-
-The free Render server sleeps when idle (first connection takes about a minute) and loses any game in
-progress when it does.
+Free-tier note: each connected player costs about 1 Redis command per second, so a 4-player hour is roughly
+15k commands. Check the current Upstash free limits.

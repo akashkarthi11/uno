@@ -1,7 +1,7 @@
 services:
   uno:
     build: .
-    image: uno-server:latest
+    image: growx-cards:latest
     container_name: uno
     ports:
       - "8080:8080"

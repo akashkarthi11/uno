@@ -1,12 +1,7 @@
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM node:20-alpine
 WORKDIR /app
-COPY pom.xml .
-RUN mvn -q -B dependency:go-offline
-COPY src ./src
-RUN mvn -q -B package -DskipTests
-
-FROM eclipse-temurin:17-jre
-WORKDIR /app
-COPY --from=build /app/target/uno-server.jar app.jar
+COPY package.json ./
+RUN npm install --omit=dev
+COPY . .
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+CMD ["node", "server.js"]

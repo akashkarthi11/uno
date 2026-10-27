@@ -1,15 +1,18 @@
 "use strict";
 
 const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4" };
+const POLL_MS = 1500;
+const HEARTBEAT_MS = 8000;
 const $ = (id) => document.getElementById(id);
 
-let ws = null;
 let state = null;
 let room = "main";
 let myName = "";
 let myPassword = "";
+let playerId = null;
 let pendingWild = null;
-let wantConnection = false;
+let polling = false;
+let busy = false;
 let toastTimer = null;
 
 function store(key, value) {
@@ -20,42 +23,91 @@ function store(key, value) {
   return null;
 }
 
-/* ---------- connection ---------- */
+/* ---------- server calls ---------- */
 
-function connect() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  const base = (window.GROWX_BACKEND || "").replace(/\/+$/, "") || proto + "://" + location.host;
-  ws = new WebSocket(base + "/ws");
-  ws.onopen = () => {
-    const known = store("uno-id-" + room);
-    ws.send(JSON.stringify({ type: "join", room, name: myName, password: myPassword, playerId: known || undefined }));
-  };
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.type === "denied") {
-      wantConnection = false;
-      state = null;
-      $("roomInfo").classList.add("hidden");
-      $("joinScreen").classList.remove("hidden");
-      toast(m.message);
-    } else if (m.type === "state") {
-      state = m;
-      store("uno-id-" + room, m.you);
-      render();
-    } else if (m.type === "error") {
-      toast(m.message);
-    }
-  };
-  ws.onclose = () => {
-    if (wantConnection) {
-      toast("Disconnected — reconnecting…");
-      setTimeout(connect, 2000);
-    }
-  };
+async function api(body) {
+  const r = await fetch("/api/game", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ room, playerId, ...body }),
+  });
+  let data = {};
+  try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
+  if (!r.ok) {
+    const err = new Error(data.error || "Server error (" + r.status + ")");
+    err.denied = !!data.denied;
+    throw err;
+  }
+  return data;
 }
 
-function send(obj) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+function apply(data) {
+  if (data.state) {
+    state = data.state;
+    playerId = state.you;
+    store("uno-id-" + room, playerId);
+    render();
+  }
+}
+
+async function join() {
+  myName = $("nameInput").value.trim();
+  myPassword = $("pwInput").value;
+  if (!myPassword) { toast("Enter the password"); return; }
+  room = $("roomInput").value.trim() || "main";
+  if (!/^[A-Za-z0-9_-]{1,24}$/.test(room)) { toast("Room: letters, digits, - and _ only"); return; }
+  $("joinBtn").disabled = true;
+  try {
+    playerId = store("uno-id-" + room) || null;
+    apply(await api({ op: "join", name: myName, password: myPassword }));
+  } catch (e) {
+    $("joinBtn").disabled = false;
+    toast(e.message);
+    return;
+  }
+  $("joinBtn").disabled = false;
+  store("uno-name", myName);
+  history.replaceState(null, "", "?room=" + encodeURIComponent(room));
+  $("roomName").textContent = room;
+  $("roomInfo").classList.remove("hidden");
+  $("joinScreen").classList.add("hidden");
+  startPolling();
+}
+
+function startPolling() {
+  if (polling) return;
+  polling = true;
+  let lastBeat = Date.now();
+  const loop = async () => {
+    if (!busy) {
+      try {
+        const data = await api({ op: "state", since: state ? state.version : undefined });
+        if (data.gone) {
+          // The table forgot us (idle too long) — quietly rejoin with the same password.
+          playerId = null;
+          apply(await api({ op: "join", name: myName, password: myPassword }));
+        } else if (!data.unchanged) {
+          apply(data);
+        }
+        lastBeat = Date.now();
+      } catch (e) {
+        if (Date.now() - lastBeat > HEARTBEAT_MS) toast("Connection problem — retrying…");
+      }
+    }
+    setTimeout(loop, POLL_MS);
+  };
+  setTimeout(loop, POLL_MS);
+}
+
+async function send(body) {
+  busy = true;
+  try {
+    apply(await api(body));
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    busy = false;
+  }
 }
 
 function toast(msg) {
@@ -64,23 +116,6 @@ function toast(msg) {
   t.classList.remove("hidden");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.add("hidden"), 3000);
-}
-
-/* ---------- join ---------- */
-
-function join() {
-  myName = $("nameInput").value.trim();
-  myPassword = $("pwInput").value;
-  if (!myPassword) { toast("Enter the password"); return; }
-  room = $("roomInput").value.trim() || "main";
-  if (!/^[A-Za-z0-9_-]{1,24}$/.test(room)) { toast("Room: letters, digits, - and _ only"); return; }
-  store("uno-name", myName);
-  history.replaceState(null, "", "?room=" + encodeURIComponent(room));
-  wantConnection = true;
-  $("roomName").textContent = room;
-  $("roomInfo").classList.remove("hidden");
-  $("joinScreen").classList.add("hidden");
-  connect();
 }
 
 /* ---------- rendering ---------- */
@@ -99,7 +134,10 @@ function render() {
   const inGame = s.started;
   $("lobby").classList.toggle("hidden", inGame);
   $("game").classList.toggle("hidden", !inGame);
-  if (!inGame) return renderLobby(s);
+  if (!inGame) {
+    $("endModal").classList.add("hidden");
+    return renderLobby(s);
+  }
   renderGame(s);
 }
 
@@ -149,7 +187,7 @@ function renderGame(s) {
   const dp = $("discardPile");
   dp.innerHTML = "";
   dp.appendChild(cardEl(s.top));
-  $("colorDot").style.background = "var(--" + s.color + ")";
+  $("colorDot").style.background = "var(--" + (s.color === "yellow" ? "card-yellow" : s.color) + ")";
   $("drawCount").textContent = s.deck + " in pile";
   $("dirInfo").textContent = s.dir === 1 ? "↻" : "↺";
 
@@ -215,25 +253,26 @@ function onCard(card) {
     pendingWild = card;
     $("colorModal").classList.remove("hidden");
   } else {
-    send({ type: "play", cardId: card.id });
+    send({ op: "play", cardId: card.id });
   }
 }
 
 document.querySelectorAll("#colorModal button").forEach((b) =>
   b.addEventListener("click", () => {
     $("colorModal").classList.add("hidden");
-    if (pendingWild) send({ type: "play", cardId: pendingWild.id, color: b.dataset.color });
+    if (pendingWild) send({ op: "play", cardId: pendingWild.id, color: b.dataset.color });
     pendingWild = null;
   }));
 
 $("joinBtn").addEventListener("click", join);
 $("nameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
-$("startBtn").addEventListener("click", () => send({ type: "start" }));
-$("playAgain").addEventListener("click", () => send({ type: "start" }));
-$("drawPile").addEventListener("click", () => send({ type: "draw" }));
-$("passBtn").addEventListener("click", () => send({ type: "pass" }));
-$("unoBtn").addEventListener("click", () => send({ type: "uno" }));
-$("catchBtn").addEventListener("click", () => send({ type: "catch" }));
+$("pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
+$("startBtn").addEventListener("click", () => send({ op: "start" }));
+$("playAgain").addEventListener("click", () => send({ op: "start" }));
+$("drawPile").addEventListener("click", () => send({ op: "draw" }));
+$("passBtn").addEventListener("click", () => send({ op: "pass" }));
+$("unoBtn").addEventListener("click", () => send({ op: "uno" }));
+$("catchBtn").addEventListener("click", () => send({ op: "catch" }));
 $("rulesBtn").addEventListener("click", () => $("rulesModal").classList.remove("hidden"));
 $("closeRules").addEventListener("click", () => $("rulesModal").classList.add("hidden"));
 $("copyLink").addEventListener("click", () => {

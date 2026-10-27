@@ -1,6 +1,5 @@
 {
-  "framework": null,
-  "buildCommand": null,
-  "installCommand": null,
-  "outputDirectory": "src/main/resources/static"
+  "functions": {
+    "api/game.js": { "maxDuration": 10 }
+  }
 }
