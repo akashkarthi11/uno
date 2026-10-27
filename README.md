@@ -6,7 +6,7 @@ in Upstash Redis.
 
 ## Rules in this build
 
-- 2–8 players, 118-card deck (108 classic + 10 super cards, see below), **5 cards each**, classic rules (match colour/number/symbol, Skip, Reverse,
+- 2–8 players, 122-card deck (108 classic + 14 super cards, see below), **5 cards each**, classic rules (match colour/number/symbol, Skip, Reverse,
   Draw Two, Wild, Wild Draw Four only when you hold no card of the current colour). With 2 cards in hand, press
   **GrowX!** before playing the second-to-last card or draw 1 extra card.
 - Play continues after someone empties their hand. **The last player still holding cards loses.**
@@ -59,6 +59,7 @@ frozen (and nothing times out), and a banner tells everyone. Resuming gives the 
 | Card | Count | Playable | Effect |
 |---|---|---|---|
 | 🔁 Play Again | 4 (one per colour) | on its colour or on another Play Again | you take another turn |
+| 🧹 Sweep | 4 (one per colour) | on its colour or on another Sweep | every other card of that colour in your hand goes down with it (no effects, wilds are never swept) — it can empty your hand |
 | 💥 Blast | 2 | any time (choose the next colour) | every other player draws 1 card |
 | 🔄 Swap Hands | 2 | any time (choose colour + a player) | you and that player swap hands |
 | 🎁 Gift | 2 | any time (choose the next colour) | give 1 random card to every other player; you always keep at least 1 |

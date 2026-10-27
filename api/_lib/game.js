@@ -70,6 +70,7 @@ function buildDeck() {
       add(c, v);
     }
     add(c, 'again'); // super card: one per colour
+    add(c, 'sweep'); // super card: one per colour
   }
   for (let i = 0; i < 4; i++) {
     add('wild', 'wild');
@@ -276,7 +277,7 @@ function start(s, p, now) {
   s.discard = [];
   seated(s).forEach((m) => give(s, m, INITIAL_HAND));
   let first = s.deck.pop();
-  while (first.color === 'wild' || ['skip', 'reverse', 'draw2', 'again'].includes(first.value)) {
+  while (first.color === 'wild' || ['skip', 'reverse', 'draw2', 'again', 'sweep'].includes(first.value)) {
     s.deck.unshift(first);
     shuffle(s.deck);
     first = s.deck.pop();
@@ -456,9 +457,9 @@ function sayUno(s, p) {
   addLog(s, p.name + ' says GrowX!');
 }
 
-const SPECIALS = ['skip', 'reverse', 'draw2', 'again', 'wild', 'wild4', 'blast', 'swap', 'gift'];
+const SPECIALS = ['skip', 'reverse', 'draw2', 'again', 'sweep', 'wild', 'wild4', 'blast', 'swap', 'gift'];
 const WILD_KINDS = ['wild', 'wild4', 'blast', 'swap', 'gift']; // cards with no colour of their own
-const SUPER_NAMES = { again: '🔁 Play Again', blast: '💥 Blast', swap: '🔄 Swap Hands', gift: '🎁 Gift' };
+const SUPER_NAMES = { again: '🔁 Play Again', sweep: '🧹 Sweep', blast: '💥 Blast', swap: '🔄 Swap Hands', gift: '🎁 Gift' };
 
 /** Admin-only: the card picked up is the special card the admin chose instead of the top of the pile. */
 function chosenCard(s, p, b) {
@@ -475,11 +476,19 @@ function chosenCard(s, p, b) {
 function doPlay(s, p, c, chosen, now, swapWith = null) {
   const hadTwo = p.hand.length === 2; // playing from two cards is the moment GrowX! must already have been pressed
   p.hand = p.hand.filter((h) => h !== c && h.id !== c.id);
+  let swept = [];
+  if (c.value === 'sweep') {
+    // 🧹 Sweep: every other card of the same colour in the hand goes down too (no effects; wilds are never swept)
+    swept = p.hand.filter((h) => h.color === c.color);
+    p.hand = p.hand.filter((h) => h.color !== c.color);
+    s.discard.push(...swept); // the Sweep card itself lands on top
+  }
   s.discard.push(c);
   s.color = c.color === 'wild' ? chosen : c.color;
   s.drawnId = null;
   const label = SUPER_NAMES[c.value] || c.value;
   addLog(s, `${p.name} played ${c.color === 'wild' ? '' : c.color + ' '}${label}${c.color === 'wild' ? ' → ' + s.color : ''}`);
+  if (swept.length) addLog(s, `🧹 ${p.name} swept ${swept.length} more ${c.color} card${swept.length === 1 ? '' : 's'}.`);
 
   if (p.hand.length === 0) {
     p.finished = true;

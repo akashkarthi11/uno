@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';
-const DECK_SIZE = 118; // 108 classic cards + 10 super cards
+const DECK_SIZE = 122; // 108 classic cards + 14 super cards
 import handler from '../api/game.js';
 
 function playOut(n) {
@@ -239,7 +239,7 @@ function threePlayers(handFor) {
   return { s, p, others, now };
 }
 
-test('super cards: the deck has 118 cards including the 10 new ones', () => {
+test('super cards: the deck has 122 cards including the 14 super cards', () => {
   const s = G.newRoom('t');
   const a = G.join(s, { name: 'A', admin: true }, 1000);
   G.join(s, { name: 'B', admin: false }, 1000);
@@ -247,8 +247,8 @@ test('super cards: the deck has 118 cards including the 10 new ones', () => {
   const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
   assert.equal(all.length, DECK_SIZE);
   const count = (v) => all.filter((c) => c.value === v).length;
-  assert.deepEqual([count('again'), count('blast'), count('swap'), count('gift')], [4, 2, 2, 2]);
-  assert.ok(!['again', 'blast', 'swap', 'gift'].includes(s.discard[0].value), 'the first card is never a super card');
+  assert.deepEqual([count('again'), count('sweep'), count('blast'), count('swap'), count('gift')], [4, 4, 2, 2, 2]);
+  assert.ok(!['again', 'sweep', 'blast', 'swap', 'gift'].includes(s.discard[0].value), 'the first card is never a super card');
 });
 
 test('super card 🔁 Play Again: the same player takes another turn', () => {
@@ -259,6 +259,35 @@ test('super card 🔁 Play Again: the same player takes another turn', () => {
   assert.equal(s.seats[s.cur], p.id, 'still their turn');
   assert.equal(p.hand.length, 2);
   assert.equal(s.color, 'red');
+});
+
+test('super card 🧹 Sweep: every other card of its colour goes down with it; wilds stay', () => {
+  const { s, p, now } = threePlayers([
+    { id: 9601, color: 'red', value: 'sweep' }, { id: 9602, color: 'red', value: '5' }, { id: 9603, color: 'red', value: 'skip' },
+    { id: 9604, color: 'blue', value: '2' }, { id: 9605, color: 'wild', value: 'wild' },
+  ]);
+  G.act(s, p, { op: 'play', cardId: 9601 }, now);
+  assert.deepEqual(p.hand.map((c) => c.id).sort(), [9604, 9605], 'only the blue card and the wild are left');
+  assert.equal(s.discard.at(-1).id, 9601, 'the Sweep card itself is on top');
+  const below = s.discard.slice(-3, -1).map((c) => c.id).sort();
+  assert.deepEqual(below, [9602, 9603], 'the swept cards are underneath');
+  assert.equal(s.color, 'red');
+  assert.equal(s.discard.some((c) => c.id === 9603) && s.seats[s.cur] !== p.id, true, 'a swept Skip has no effect: play moves on normally');
+  assert.ok(s.log.some((l) => /swept 2 more red cards/.test(l)));
+
+  // sweeping everything you hold takes you out of the game
+  const all = threePlayers([
+    { id: 9701, color: 'red', value: 'sweep' }, { id: 9702, color: 'red', value: '5' }, { id: 9703, color: 'red', value: '9' },
+  ]);
+  G.act(all.s, all.p, { op: 'play', cardId: 9701 }, all.now);
+  assert.equal(all.p.hand.length, 0);
+  assert.equal(all.p.finished, true);
+  assert.deepEqual(all.s.ranking, [all.p.name]);
+  assert.ok(!all.s.over, 'two players are still holding cards, so the game goes on');
+
+  // a Sweep can only be played on its colour (or another Sweep)
+  const wrong = threePlayers([{ id: 9801, color: 'blue', value: 'sweep' }, { id: 9802, color: 'blue', value: '4' }, { id: 9803, color: 'green', value: '1' }]);
+  assert.throws(() => G.act(wrong.s, wrong.p, { op: 'play', cardId: 9801 }, wrong.now), /can't play/);
 });
 
 test('super card 💥 Blast: every other player draws 1, then the turn moves on', () => {

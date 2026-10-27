@@ -1,7 +1,7 @@
 "use strict";
 
-const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4", again: "🔁", blast: "💥", swap: "🔄", gift: "🎁" };
-const SUPER = new Set(["again", "blast", "swap", "gift"]); // super cards get a golden look
+const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4", again: "🔁", sweep: "🧹", blast: "💥", swap: "🔄", gift: "🎁" };
+const SUPER = new Set(["again", "sweep", "blast", "swap", "gift"]); // super cards get a golden look
 const POLL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 8000;
 const HEARTBEAT_MS = 8000;
@@ -558,7 +558,7 @@ function openCheat() {
   box.innerHTML = "";
   const options = [];
   for (const c of ["red", "yellow", "green", "blue"]) {
-    for (const v of ["skip", "reverse", "draw2", "again"]) options.push({ color: c, value: v });
+    for (const v of ["skip", "reverse", "draw2", "again", "sweep"]) options.push({ color: c, value: v });
   }
   for (const v of ["wild", "wild4", "blast", "swap", "gift"]) options.push({ color: "wild", value: v });
   for (const o of options) {
