@@ -38,7 +38,7 @@ export default async function handler(req, res) {
       // Cheap read-only path: one Redis GET, no write unless presence/auto-play needs one.
       const s = await readRoom(code);
       const me = s && s.members.find((m) => m.id === b.playerId);
-      if (!me) return res.json({ gone: true });
+      if (!me) return res.json(s && (s.kicked || []).includes(b.playerId) ? { kicked: true } : { gone: true });
       const stale = now - me.lastSeen > G.HEARTBEAT_MS;
       if (!stale && !G.tick(structuredClone(s), now)) {
         if (b.since === s.version) return res.json({ unchanged: true });
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
       }
       const result = await withRoom(code, (r) => {
         const self = r.members.find((m) => m.id === b.playerId);
-        if (!self) return { gone: true };
+        if (!self) return (r.kicked || []).includes(b.playerId) ? { kicked: true } : { gone: true };
         self.lastSeen = now;
         G.tick(r, now);
         return { state: G.view(r, self, now) };
@@ -56,7 +56,10 @@ export default async function handler(req, res) {
 
     const state = await withRoom(code, (r) => {
       const me = r.members.find((m) => m.id === b.playerId);
-      if (!me) throw new G.GameError('You are not in this room — rejoin.');
+      if (!me) {
+        throw new G.GameError((r.kicked || []).includes(b.playerId)
+          ? 'You were removed by the admin.' : 'You are not in this room — rejoin.');
+      }
       me.lastSeen = now;
       G.tick(r, now);
       G.act(r, me, b, now);

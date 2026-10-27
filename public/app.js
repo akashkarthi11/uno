@@ -70,6 +70,7 @@ async function join() {
   room = $("roomInput").value.trim() || "main";
   if (!/^[A-Za-z0-9_-]{1,24}$/.test(room)) { toast("Room: letters, digits, - and _ only"); return; }
   $("joinBtn").disabled = true;
+  removed = false;
   try {
     playerId = store("uno-id-" + room) || null;
     apply(await api({ op: "join", name: myName, password: myPassword }));
@@ -89,13 +90,26 @@ async function join() {
 
 let inFlight = false;
 let lastOk = Date.now();
+let removed = false;
+
+function removedByAdmin() {
+  removed = true;
+  state = null;
+  playerId = null;
+  store("uno-id-" + room, "");
+  ["game", "lobby", "roomInfo", "endModal", "colorModal", "cheatModal"].forEach((id) => $(id).classList.add("hidden"));
+  $("joinScreen").classList.remove("hidden");
+  toast("You were removed by the admin.");
+}
 
 async function pollOnce() {
-  if (busy || inFlight) return;
+  if (busy || inFlight || removed) return;
   inFlight = true;
   try {
     const data = await api({ op: "state", since: state ? state.version : undefined });
-    if (data.gone) {
+    if (data.kicked) {
+      removedByAdmin();
+    } else if (data.gone) {
       // The table forgot us (idle too long) — quietly rejoin with the same password.
       playerId = null;
       state = null;
@@ -130,10 +144,15 @@ async function send(body) {
   try {
     apply(await api(body));
   } catch (e) {
-    toast(e.message);
+    if (/removed by the admin/.test(e.message)) removedByAdmin();
+    else toast(e.message);
   } finally {
     busy = false;
   }
+}
+
+function removePlayer(p) {
+  if (confirm("Remove " + p.name + " from the game?")) send({ op: "kick", targetId: p.id });
 }
 
 function toast(msg) {
@@ -161,6 +180,8 @@ function render() {
   $("lobby").classList.toggle("hidden", inGame);
   $("game").classList.toggle("hidden", !inGame);
   if (!inGame) {
+    seenCards = null;
+    lastTopId = null;
     $("endModal").classList.add("hidden");
     return renderLobby(s);
   }
@@ -172,7 +193,20 @@ function renderLobby(s) {
   ul.innerHTML = "";
   for (const p of s.players) {
     const li = document.createElement("li");
-    li.textContent = p.name + (p.id === s.you ? " (you)" : "");
+    const av = document.createElement("span");
+    av.className = "avatar";
+    paintAvatar(av, p.name);
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = p.name + (p.id === s.you ? " (you)" : "");
+    li.append(av, who);
+    if (s.admin && p.id !== s.you) {
+      const x = document.createElement("button");
+      x.className = "ghost remove";
+      x.textContent = "Remove";
+      x.addEventListener("click", () => removePlayer(p));
+      li.appendChild(x);
+    }
     if (p.id === s.host) {
       const b = document.createElement("span");
       b.className = "badge";
@@ -201,18 +235,34 @@ function renderGame(s) {
     const d = document.createElement("div");
     d.className = "opp" + (s.cur === p.id && !s.over ? " active" : "") + (p.connected ? "" : " offline");
     const rank = s.ranking.indexOf(p.name) + 1;
-    d.innerHTML = '<div class="name"></div><div class="mini">' + "<span></span>".repeat(Math.min(p.count, 10)) +
+    d.innerHTML = '<div class="avatar"></div><div class="name"></div><div class="mini">' + "<span></span>".repeat(Math.min(p.count, 10)) +
       '</div><div class="count">' +
       (p.finished ? '<span class="uno-tag">✔ out (#' + rank + ")</span>" :
         p.count + " card" + (p.count === 1 ? "" : "s") + (p.count === 1 ? ' <span class="uno-tag">GrowX!</span>' : "")) +
       (p.connected ? "" : " · offline") + "</div>";
     d.querySelector(".name").textContent = p.name;
+    paintAvatar(d.querySelector(".avatar"), p.name);
+    if (s.admin && !s.over) {
+      const x = document.createElement("button");
+      x.className = "ghost kick";
+      x.title = "Remove " + p.name;
+      x.textContent = "✕";
+      x.addEventListener("click", () => removePlayer(p));
+      d.appendChild(x);
+    }
     opp.appendChild(d);
   }
 
+  $("game").classList.toggle("myturn", myTurn);
+  $("status").classList.toggle("mine", myTurn);
+
   const dp = $("discardPile");
   dp.innerHTML = "";
-  dp.appendChild(cardEl(s.top));
+  dp.dataset.color = s.color;
+  const topEl = cardEl(s.top);
+  if (lastTopId !== null && lastTopId !== s.top.id) topEl.classList.add("pop");
+  lastTopId = s.top.id;
+  dp.appendChild(topEl);
   $("colorDot").style.background = "var(--" + (s.color === "yellow" ? "card-yellow" : s.color) + ")";
   $("drawCount").textContent = s.deck + " in pile";
   $("dirInfo").textContent = s.dir === 1 ? "↻" : "↺";
@@ -220,12 +270,18 @@ function renderGame(s) {
   const hand = $("hand");
   hand.innerHTML = "";
   const ok = new Set(s.playable);
+  const firstRender = seenCards === null;
+  const nowSeen = new Set();
   for (const card of s.hand) {
     const el = cardEl(card);
+    nowSeen.add(card.id);
+    if (!firstRender && !seenCards.has(card.id)) el.classList.add("deal"); // newly drawn card slides in
     if (ok.has(card.id)) el.classList.add("playable");
     el.addEventListener("click", () => onCard(card));
     hand.appendChild(el);
   }
+
+  seenCards = nowSeen;
 
   let msg;
   if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
@@ -267,9 +323,44 @@ function renderGame(s) {
     $("toLobby").classList.toggle("hidden", !s.admin);
     $("endHint").textContent = s.admin ? "" : "Waiting for the admin to start the next game…";
     end.classList.remove("hidden");
+    const key = s.ranking.join("|") + "|" + (s.loser || "");
+    if (celebrated !== key) {
+      celebrated = key;
+      if (s.loser && s.loser !== mine) confetti(); // anyone who didn't lose gets confetti
+    }
   } else {
     end.classList.add("hidden");
+    celebrated = null;
   }
+}
+
+/* ---------- small visual helpers ---------- */
+
+let lastTopId = null;
+let seenCards = null;
+let celebrated = null;
+
+function paintAvatar(el, name) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  el.style.background = "linear-gradient(135deg, hsl(" + h + " 70% 58%), hsl(" + ((h + 40) % 360) + " 70% 45%))";
+  el.textContent = name.trim().slice(0, 2).toUpperCase();
+}
+
+function confetti() {
+  const box = document.createElement("div");
+  box.className = "confetti";
+  const colors = ["#7c5cff", "#2f6bff", "#12b76a", "#f5b800", "#f04438"];
+  for (let i = 0; i < 70; i++) {
+    const p = document.createElement("span");
+    p.style.left = Math.random() * 100 + "%";
+    p.style.background = colors[i % colors.length];
+    p.style.animationDuration = 2 + Math.random() * 2.5 + "s";
+    p.style.animationDelay = Math.random() * 0.6 + "s";
+    box.appendChild(p);
+  }
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 5500);
 }
 
 /* ---------- actions ---------- */

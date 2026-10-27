@@ -127,6 +127,34 @@ test('admin restart returns everyone to the lobby; mid-game joiner is a spectato
   assert.equal(late.hand.length, 5);
 });
 
+test('admin can remove players in the lobby and mid-game; the game stays consistent', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false }, now);
+  const c = G.join(s, { name: 'C', admin: false }, now);
+  const d = G.join(s, { name: 'D', admin: false }, now);
+  assert.throws(() => G.act(s, b, { op: 'kick', targetId: c.id }, now), /Only the admin/);
+  assert.throws(() => G.act(s, admin, { op: 'kick', targetId: admin.id }, now), /cannot remove an admin/);
+
+  G.act(s, admin, { op: 'kick', targetId: d.id }, now); // lobby removal
+  assert.equal(s.members.length, 3);
+  assert.ok(s.kicked.includes(d.id));
+
+  G.act(s, admin, { op: 'start' }, now);
+  const total = () => s.deck.length + s.discard.length + s.members.reduce((a, m) => a + m.hand.length, 0);
+  assert.equal(total(), 108);
+  s.cur = s.seats.indexOf(b.id); // remove the player whose turn it is
+  G.act(s, admin, { op: 'kick', targetId: b.id }, now);
+  assert.equal(s.seats.length, 2);
+  assert.ok(!s.members.some((m) => m.id === b.id));
+  assert.ok(s.seats[s.cur] !== undefined && !s.over);
+  assert.equal(total(), 108, 'removed player\'s cards return to the pile');
+
+  G.act(s, admin, { op: 'kick', targetId: c.id }, now); // leaves only the admin
+  assert.equal(s.over, true);
+});
+
 test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {
   const s = G.newRoom('t');
   const now = 1000;

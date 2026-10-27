@@ -167,6 +167,7 @@ export function act(s, me, b, now) {
     case 'uno': return sayUno(s, me);
     case 'catch': return catchUno(s, me);
     case 'lobby': return toLobby(s, me);
+    case 'kick': return kick(s, me, String(b.targetId ?? ''), now);
     default: return fail('Unknown action.');
   }
 }
@@ -207,6 +208,45 @@ function start(s, p, now) {
   s.log = [];
   addLog(s, `Game started with ${s.seats.length} players. First card: ${first.color} ${first.value}`);
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
+}
+
+/** Admin removes a player (lobby or mid-game). Their cards go back into the draw pile. */
+function kick(s, admin, targetId, now) {
+  if (!admin.admin) fail('Only the admin can do that.');
+  const t = byId(s, targetId);
+  if (!t) fail('That player is not here.');
+  if (t.admin) fail('You cannot remove an admin.');
+
+  const idx = s.seats.indexOf(t.id);
+  if (s.started && !s.over && idx !== -1) {
+    s.deck.unshift(...t.hand); // bottom of the pile (cards are drawn from the end)
+    t.hand = [];
+    const wasCurrent = idx === s.cur;
+    s.seats.splice(idx, 1);
+    const n = s.seats.length;
+    if (s.unoId === t.id) s.unoId = null;
+    s.members = s.members.filter((m) => m.id !== t.id);
+    const left = active(s);
+    if (left.length <= 1) {
+      s.over = true;
+      s.winner = s.ranking[0] ?? null;
+      s.loser = s.ranking.length && left.length ? left[0].name : null;
+      s.notice = s.loser ? null : 'Game ended: not enough players left.';
+    } else {
+      if (idx < s.cur) s.cur -= 1;
+      if (wasCurrent) s.cur = s.dir === 1 ? idx % n : (idx - 1 + n) % n;
+      while (byId(s, s.seats[s.cur]).finished) s.cur = (s.cur + s.dir + n) % n;
+      if (wasCurrent) {
+        s.drawnId = null;
+        s.turnAt = now;
+      }
+    }
+  } else {
+    s.seats = s.seats.filter((id) => id !== t.id);
+    s.members = s.members.filter((m) => m.id !== t.id);
+  }
+  s.kicked = [...(s.kicked || []), t.id].slice(-50);
+  addLog(s, `${t.name} was removed by the admin.`);
 }
 
 /** Admin ends the current game (running or finished) and sends everyone back to the lobby. */
