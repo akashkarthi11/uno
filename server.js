@@ -18,6 +18,7 @@ http.createServer(async (req, res) => {
       req.body = '{';
     }
     const shim = {
+      setHeader(name, value) { res.setHeader(name, value); },
       status(code) { res.statusCode = code; return shim; },
       json(obj) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(obj)); },
     };
@@ -31,5 +32,6 @@ http.createServer(async (req, res) => {
     return res.end('Not Found');
   }
   res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream');
+  res.setHeader('Cache-Control', 'no-cache'); // local runs: always check for a fresh copy
   return fs.createReadStream(file).pipe(res);
 }).listen(process.env.PORT || 8080, () => console.log('GrowX cards on http://localhost:' + (process.env.PORT || 8080)));

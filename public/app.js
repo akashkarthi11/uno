@@ -48,12 +48,31 @@ async function api(body) {
   }
   let data = {};
   try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
+  if (data.build) noteBuild(data.build);
   if (!r.ok) {
     const err = new Error(data.error || "Server error (" + r.status + ")");
     err.denied = !!data.denied;
     throw err;
   }
   return data;
+}
+
+/** The first answer tells us which version of the game server we are talking to; a different one later means a new deploy. */
+let serverBuild = null;
+function noteBuild(build) {
+  if (serverBuild === null) serverBuild = build;
+  else if (build !== serverBuild) $("updateBanner").classList.remove("hidden");
+}
+$("reloadBtn").addEventListener("click", () => location.reload());
+
+/** Forget everything remembered about the previous table (used when joining again or after being removed). */
+function resetScreenCaches() {
+  chatSig = "";
+  seenCards = null;
+  lastTopId = null;
+  celebrated = null;
+  chatOpen = false;
+  chatSeenT = 0;
 }
 
 function apply(data) {
@@ -77,6 +96,7 @@ async function join() {
   if (!/^[A-Za-z0-9_-]{1,24}$/.test(room)) { toast("Room: letters, digits, - and _ only"); return; }
   $("joinBtn").disabled = true;
   removed = false;
+  resetScreenCaches();
   try {
     playerId = store("uno-id-" + room) || null;
     apply(await api({ op: "join", name: myName, password: myPassword }));
@@ -100,6 +120,7 @@ let removed = false;
 
 function removedByAdmin() {
   removed = true;
+  resetScreenCaches();
   if (typeof voiceStopLocal === "function") voiceStopLocal();
   state = null;
   playerId = null;
@@ -144,6 +165,8 @@ function startPolling() {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pollOnce(); });
   window.addEventListener("focus", pollOnce);
   window.addEventListener("online", pollOnce);
+  // A page restored from the back/forward cache is a frozen old copy: refresh it straight away.
+  window.addEventListener("pageshow", (e) => { if (e.persisted) pollOnce(); });
 }
 
 /** Poll faster while a game is running (that is when waiting for someone's move is felt), slower in a hidden tab. */
@@ -164,6 +187,20 @@ async function send(body, onFail) {
   } finally {
     busy = false;
   }
+}
+
+/** A chat message appears in your own chat box immediately; the server's reply then replaces it with the real one. */
+function sendChat(text) {
+  if (busy || !state) return;
+  const before = state;
+  const me = state.players.find((p) => p.id === state.you);
+  state = { ...state, chat: [...(state.chat || []), { from: state.you, name: me ? me.name : "You", text, t: Date.now() }] };
+  renderChat(state);
+  send({ op: "chat", text }, () => {
+    state = before; // refused (for example: too fast, or the game just ended): take it back
+    chatSig = "";
+    renderChat(state);
+  });
 }
 
 /** Playing a plain card: show it on the pile at once; the server's reply (about a third of a second later) replaces it. */
@@ -532,7 +569,7 @@ EMOJIS.forEach((e) => {
   b.type = "button";
   b.textContent = e;
   b.title = "Send " + e;
-  b.addEventListener("click", () => send({ op: "chat", text: e }));
+  b.addEventListener("click", () => sendChat(e));
   $("emojiBar").appendChild(b);
 });
 
@@ -541,7 +578,7 @@ $("chatForm").addEventListener("submit", (ev) => {
   const text = $("chatInput").value.trim();
   if (!text) return;
   $("chatInput").value = "";
-  send({ op: "chat", text });
+  sendChat(text);
 });
 
 /* ---------- small visual helpers ---------- */
@@ -802,7 +839,13 @@ $("restartBtn").addEventListener("click", () => {
 });
 $("toLobby").addEventListener("click", () => send({ op: "lobby" }));
 $("passBtn").addEventListener("click", () => send({ op: "pass" }));
-$("unoBtn").addEventListener("click", () => send({ op: "uno" }));
+$("unoBtn").addEventListener("click", () => {
+  if (busy || !state) return;
+  const before = state;
+  state = { ...state, saidUno: true }; // the button flips to "GrowX! ✓" straight away
+  render();
+  send({ op: "uno" }, () => { state = before; render(); });
+});
 $("rulesBtn").addEventListener("click", () => $("rulesModal").classList.remove("hidden"));
 $("closeRules").addEventListener("click", () => $("rulesModal").classList.add("hidden"));
 $("copyLink").addEventListener("click", () => {

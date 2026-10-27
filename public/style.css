@@ -123,6 +123,11 @@ main { max-width: 1040px; margin: 0 auto; padding: 16px; display: flex; flex-dir
 .opp.speaking { border-color: var(--green); box-shadow: 0 0 0 4px rgba(18,183,106,.25), var(--shadow); }
 #lobbyPlayers li.speaking { border-color: var(--green); box-shadow: 0 0 0 3px rgba(18,183,106,.2); }
 
+#updateBanner {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; gap: 10px; align-items: center;
+  background: var(--ink); color: #fff; padding: 8px 8px 8px 16px; border-radius: 999px; box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600;
+}
+#updateBanner button { padding: 6px 14px; }
 #pausedBanner {
   text-align: center; font-weight: 800; padding: 10px; border-radius: var(--radius); color: #8a5a00;
   background: #fef4e6; border: 1px solid #f7d9a8; animation: rise .2s ease;

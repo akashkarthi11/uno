@@ -506,7 +506,13 @@ test('admin chosen card with no matching colour is kept and turn passes when unp
 
 function call(body) {
   return new Promise((resolve) => {
-    const res = { code: 200, status(c) { this.code = c; return this; }, json(o) { resolve({ code: this.code, body: o }); } };
+    const res = {
+      code: 200,
+      headers: {},
+      setHeader(k, v) { this.headers[k.toLowerCase()] = v; },
+      status(c) { this.code = c; return this; },
+      json(o) { resolve({ code: this.code, body: o, headers: this.headers }); },
+    };
     handler({ method: 'POST', body }, res);
   });
 }
@@ -684,6 +690,31 @@ test('API: public games admit public players, private games admit private player
   assert.equal((await call({ op: 'join', room: room + 'x', name: 'N', password: '281101' })).code, 401, 'private players cannot enter a public game');
   await call({ op: 'private', room, playerId: admin.body.state.you, on: false });
   assert.equal((await call({ op: 'join', room, name: 'Late', password: '123456' })).code, 200, 'public again');
+});
+
+test('API answers are never cacheable and always carry the deployed build id', async () => {
+  const room = 'nc' + Math.floor(Math.random() * 1e6);
+  const gone = await call({ op: 'state', room, playerId: 'nobody' });
+  assert.equal(gone.headers['cache-control'], 'no-store, max-age=0');
+  assert.equal(typeof gone.body.build, 'string');
+  assert.equal(gone.body.gone, true);
+
+  const denied = await call({ op: 'join', room, name: 'X', password: 'wrong' });
+  assert.equal(denied.code, 401);
+  assert.equal(denied.headers['cache-control'], 'no-store, max-age=0', 'errors are not cacheable either');
+  assert.equal(denied.body.build, gone.body.build, 'the same build id on every answer');
+
+  const joined = await call({ op: 'join', room, name: 'A', password: '110299' });
+  const poll = await call({ op: 'state', room, playerId: joined.body.state.you, since: joined.body.state.version });
+  assert.equal(poll.body.unchanged, true);
+  assert.equal(poll.body.build, gone.body.build, "even the tiny 'nothing changed' answer says which build it is");
+
+  // GET (the 405 page) is covered too
+  const get = await new Promise((resolve) => {
+    const res = { headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; }, status() { return this; }, json(o) { resolve({ body: o, headers: this.headers }); } };
+    handler({ method: 'GET' }, res);
+  });
+  assert.equal(get.headers['cache-control'], 'no-store, max-age=0');
 });
 
 test('API: password gate and admin start', async () => {

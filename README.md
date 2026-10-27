@@ -88,3 +88,14 @@ with a tick box for each super card (Play Again, Sweep, Blast, Swap Hands, Gift,
 Unticked cards are not put in the deck, the admin's pick-up menu no longer offers them, and the Master card does not
 offer the matching rule. Everyone else sees the same list read-only, with the deck size. The choice is kept for the
 room and can only be changed while no game is running.
+
+## Caching rules (what is and isn't cached)
+
+- **Game API (`/api/game`)**: never cached. Every answer, including errors, carries `Cache-Control: no-store, max-age=0`
+  (set in the function and again in `vercel.json`); the page also asks `fetch` for `cache: "no-store"`.
+- **Page files (html / js / css)**: Vercel's default `public, max-age=0, must-revalidate` + ETag, so the browser asks the
+  CDN on every load and only re-downloads when a file changed. There is no service worker and no manifest.
+- **Open tabs across a deploy**: every API answer includes the deployed `build` id. If it changes while a tab is open, a
+  "🔄 A new version is available — Reload" bar appears, so nobody keeps running old page code against the new server.
+- **Back/forward cache**: a page restored with the back button refreshes itself immediately.
+- **Room data**: lives only in Redis (6 h expiry, refreshed by activity); the function keeps no copy between requests.

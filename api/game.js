@@ -20,7 +20,16 @@ const withIce = (state) => {
 
 const cleanRoom = (raw) => (/^[A-Za-z0-9_-]{1,24}$/.test(String(raw ?? '').trim()) ? String(raw).trim() : 'main');
 
+// Identifies the deployed version. Every answer carries it, so a page left open across a deploy can tell the player
+// to reload instead of quietly running old code against the new server.
+const BUILD = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || 'local';
+
 export default async function handler(req, res) {
+  // An API answer must never be kept by a browser, proxy or CDN (errors and the 405 included).
+  if (res.setHeader) res.setHeader('Cache-Control', 'no-store, max-age=0');
+  const sendJson = res.json.bind(res);
+  res.json = (body) => sendJson({ build: BUILD, ...body });
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only.' });
   if (process.env.VERCEL && !usingRedis) {
     return res.status(500).json({ error: 'Storage not configured: add Upstash Redis to the Vercel project (KV_REST_API_URL / KV_REST_API_TOKEN).' });
