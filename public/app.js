@@ -230,6 +230,7 @@ function renderLobby(s) {
     }
     ul.appendChild(li);
   }
+  renderSettings(s);
   const isHost = s.you === s.host;
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
@@ -559,9 +560,13 @@ function openCheat() {
   box.innerHTML = "";
   const options = [];
   for (const c of ["red", "yellow", "green", "blue"]) {
-    for (const v of ["skip", "reverse", "draw2", "again", "sweep"]) options.push({ color: c, value: v });
+    for (const v of ["skip", "reverse", "draw2", "again", "sweep"]) {
+      if (!SUPER.has(v) || superOn(v)) options.push({ color: c, value: v }); // switched-off super cards are not offered
+    }
   }
-  for (const v of ["wild", "wild4", "blast", "swap", "gift", "master"]) options.push({ color: "wild", value: v });
+  for (const v of ["wild", "wild4", "blast", "swap", "gift", "master"]) {
+    if (!SUPER.has(v) || superOn(v)) options.push({ color: "wild", value: v });
+  }
   for (const o of options) {
     const el = cardEl(o);
     el.addEventListener("click", () => {
@@ -589,6 +594,60 @@ function onCard(card) {
     send({ op: "play", cardId: card.id });
   }
 }
+
+/* ---------- lobby: choose which super cards are in the game (admin) ---------- */
+
+const SUPER_INFO = [
+  { k: "again", icon: "🔁", name: "Play Again", n: 4, text: "go again" },
+  { k: "sweep", icon: "🧹", name: "Sweep", n: 4, text: "put down all of its colour" },
+  { k: "blast", icon: "💥", name: "Blast", n: 2, text: "everyone else draws 1" },
+  { k: "swap", icon: "🔄", name: "Swap Hands", n: 2, text: "trade hands" },
+  { k: "gift", icon: "🎁", name: "Gift", n: 2, text: "give 1 card to everyone" },
+  { k: "master", icon: "✨", name: "Master card", n: 1, text: "pick a player + a rule" },
+];
+
+function superOn(k) {
+  return !state || !state.settings || state.settings.supers[k] !== false;
+}
+
+function sendSupers(next) {
+  send({ op: "config", supers: next });
+}
+
+function renderSettings(s) {
+  const list = $("superList");
+  if (!list.children.length) {
+    for (const info of SUPER_INFO) {
+      const row = document.createElement("label");
+      row.dataset.k = info.k;
+      row.innerHTML = '<input type="checkbox"><span class="t"></span><small></small>';
+      row.querySelector(".t").textContent = info.icon + " " + info.name + " ×" + info.n;
+      row.querySelector("small").textContent = info.text;
+      row.querySelector("input").addEventListener("change", (e) => {
+        const next = Object.fromEntries(SUPER_INFO.map((i) => [i.k, superOn(i.k)]));
+        next[info.k] = e.target.checked;
+        sendSupers(next);
+      });
+      list.appendChild(row);
+    }
+  }
+  let total = 108;
+  for (const info of SUPER_INFO) {
+    const on = s.settings ? s.settings.supers[info.k] !== false : true;
+    const row = list.querySelector('[data-k="' + info.k + '"]');
+    const box = row.querySelector("input");
+    box.checked = on;
+    box.disabled = !s.admin; // only the admin can change it; everyone else sees what is in play
+    row.classList.toggle("off", !on);
+    if (on) total += info.n;
+  }
+  $("deckCount").textContent = "Deck: " + total + " cards";
+  $("supersAll").classList.toggle("hidden", !s.admin);
+  $("supersNone").classList.toggle("hidden", !s.admin);
+}
+
+$("supersAll").addEventListener("click", () => sendSupers(Object.fromEntries(SUPER_INFO.map((i) => [i.k, true]))));
+$("supersNone").addEventListener("click", () => sendSupers(Object.fromEntries(SUPER_INFO.map((i) => [i.k, false]))));
 
 /** Swap Hands: pick who to swap with. Master card: pick the player first (you may pick yourself), then a rule. */
 function openTargetPicker(kind) {
@@ -631,7 +690,8 @@ function openRulePicker(target) {
   $("ruleTitle").textContent = "Rule for " + (self ? "yourself" : target.name);
   const list = $("ruleList");
   list.innerHTML = "";
-  for (const r of rules) {
+  // rules that belong to a switched-off super card are not offered (+2 / +4 are always available)
+  for (const r of rules.filter((x) => x.id === "draw2" || x.id === "wild4" || superOn(x.id))) {
     const btn = document.createElement("button");
     btn.className = "ghost target";
     btn.disabled = self && r.needsOther; // those rules need another player

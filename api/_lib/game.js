@@ -55,7 +55,12 @@ function cleanName(raw) {
   return n.slice(0, 16);
 }
 
-function buildDeck() {
+/** The six super-card kinds the admin can switch on or off in the lobby (all on by default). */
+export const SUPER_KINDS = ['again', 'sweep', 'blast', 'swap', 'gift', 'master'];
+const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
+const superSettings = (s) => Object.fromEntries(SUPER_KINDS.map((k) => [k, superOn(s, k)]));
+
+function buildDeck(on = () => true) {
   const d = [];
   let id = 0;
   const add = (color, value) => d.push({ id: id++, color, value });
@@ -69,8 +74,8 @@ function buildDeck() {
       add(c, v);
       add(c, v);
     }
-    add(c, 'again'); // super card: one per colour
-    add(c, 'sweep'); // super card: one per colour
+    if (on('again')) add(c, 'again'); // super card: one per colour
+    if (on('sweep')) add(c, 'sweep'); // super card: one per colour
   }
   for (let i = 0; i < 4; i++) {
     add('wild', 'wild');
@@ -78,11 +83,11 @@ function buildDeck() {
   }
   for (let i = 0; i < 2; i++) {
     // super cards played like a Wild (you also choose the next colour)
-    add('wild', 'blast');
-    add('wild', 'swap');
-    add('wild', 'gift');
+    if (on('blast')) add('wild', 'blast');
+    if (on('swap')) add('wild', 'swap');
+    if (on('gift')) add('wild', 'gift');
   }
-  add('wild', 'master'); // the one plain Master card: pick a player, then pick a super rule for them
+  if (on('master')) add('wild', 'master'); // the one plain Master card: pick a player, then pick a super rule for them
   return d;
 }
 
@@ -261,6 +266,7 @@ function dispatch(s, me, b, now) {
     case 'uno': return sayUno(s, me);
     case 'lobby': return toLobby(s, me);
     case 'private': return setPrivate(s, me, b.on === true, now);
+    case 'config': return setConfig(s, me, b.supers);
     case 'chat': return chat(s, me, b.text, now);
     case 'pause': return setPaused(s, me, true, now);
     case 'resume': return setPaused(s, me, false, now);
@@ -283,7 +289,7 @@ function start(s, p, now) {
     m.skipNext = false;
   });
   s.seats = s.members.slice(0, MAX_SEATS).map((m) => m.id);
-  s.deck = shuffle(buildDeck());
+  s.deck = shuffle(buildDeck((kind) => superOn(s, kind))); // only the super cards the admin left ticked
   s.discard = [];
   seated(s).forEach((m) => give(s, m, INITIAL_HAND));
   let first = s.deck.pop();
@@ -309,6 +315,18 @@ function start(s, p, now) {
   s.paused = false;
   addLog(s, `Game started with ${s.seats.length} players. First card: ${first.color} ${first.value}`);
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
+}
+
+/** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
+function setConfig(s, p, supers) {
+  if (!p.admin) fail('Only the admin can do that.');
+  if (s.started && !s.over) fail('Game settings can only be changed in the lobby.');
+  if (!supers || typeof supers !== 'object') fail('Bad settings.');
+  const next = superSettings(s);
+  for (const kind of SUPER_KINDS) {
+    if (typeof supers[kind] === 'boolean') next[kind] = supers[kind];
+  }
+  s.settings = { supers: next };
 }
 
 /**
@@ -441,6 +459,7 @@ function play(s, p, cardId, chosen, now, targetId = '', ruleId = '') {
     // the Master card names a player (swapWith holds the chosen player) and one super rule to apply to them
     rule = ruleId;
     if (!MASTER_RULES.includes(rule)) fail('Choose a super rule for the Master card.');
+    if (SUPER_KINDS.includes(rule) && !superOn(s, rule)) fail('That rule is switched off for this game.');
     swapWith = byId(s, targetId);
     if (!swapWith || !s.seats.includes(swapWith.id) || swapWith.finished) fail('Choose a player for the Master card.');
     if (swapWith === p && !['again', 'sweep'].includes(rule)) fail('That rule needs another player — choose someone else.');
@@ -490,6 +509,7 @@ function chosenCard(s, p, b) {
   if (!p.admin) fail('Admin only.');
   const value = String(b.value ?? '');
   if (!SPECIALS.includes(value)) fail('Not a special card.');
+  if (SUPER_KINDS.includes(value) && !superOn(s, value)) fail('That super card is switched off for this game.');
   let color = String(b.color ?? '');
   if (WILD_KINDS.includes(value)) color = 'wild';
   else if (!COLORS.includes(color)) fail('Choose a colour.');
@@ -730,6 +750,7 @@ export function view(s, me, now) {
     })),
     log: s.log,
     chat: (s.chat || []).slice(-30),
+    settings: { supers: superSettings(s) },
     canVoice: canVoice(me),
     voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };

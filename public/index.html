@@ -33,6 +33,17 @@
 <section id="lobby" class="center-box hidden">
   <h2>Lobby</h2>
   <ul id="lobbyPlayers"></ul>
+  <div id="settings">
+    <h3>Super cards in this game</h3>
+    <div id="superList"></div>
+    <div class="settings-foot">
+      <small id="deckCount"></small>
+      <span class="settings-actions">
+        <button id="supersAll" type="button" class="ghost hidden">All on</button>
+        <button id="supersNone" type="button" class="ghost hidden">All off</button>
+      </span>
+    </div>
+  </div>
   <button id="privateBtn" class="ghost hidden">🔒 Make private</button>
   <button id="startBtn">Start game</button>
   <p id="lobbyHint" class="hint"></p>
@@ -132,6 +143,7 @@
   <div class="box rules">
     <h2>Game rules</h2>
     <ul>
+      <li>Before a game starts, the admin can tick which super cards are in the deck in the lobby; unticked ones are left out.</li>
       <li><b>★ Super cards</b> (golden border): <b>🔁 Play Again</b> (matches its colour — you go again), <b>🧹 Sweep</b> (matches its colour — every other card of that colour in your hand goes down with it),<b>💥 Blast</b> (play any time, pick a colour — everyone else draws 1), <b>🔄 Swap Hands</b> (play any time, pick a colour and a player — you trade hands), <b>🎁 Gift</b> (play any time, pick a colour — give 1 random card to every other player, you always keep at least 1). The single plain <b>✨ Master card</b> (play any time): pick a colour, then a player, then one super rule to apply to that player — 🔁 they play next, 🧹 they put down all cards of the new colour, 💥 they draw 2, 🔄 you swap hands with them, 🎁 you give them 2 cards, +2 / +4 they draw 2 / 4 cards and lose their next turn. You may pick yourself for 🔁 or 🧹.</li>
       <li>2–8 players. 123-card deck (108 classic + 15 super cards), 5 cards each.</li> The admin starts the game; people who join mid-game play from the next one.</li>
       <li>Play a card that matches the top card by colour, number or symbol. Wilds can be played any time, except <b>Wild Draw Four</b>, which needs a hand with no card of the current colour.</li>

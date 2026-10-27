@@ -430,6 +430,55 @@ test('super card 🎁 Gift: one random card to each other player, always keeping
   assert.deepEqual(t.others.map((o) => o.hand.length), [5, 5]);
 });
 
+test('lobby settings: unticked super cards are not in the deck, the picker or the Master rules', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
+  assert.equal(G.view(s, b, now).settings.supers.sweep, true, 'everything is on by default and visible to everyone');
+
+  assert.throws(() => G.act(s, b, { op: 'config', supers: { sweep: false } }, now), /Only the admin/);
+  assert.throws(() => G.act(s, admin, { op: 'config' }, now), /Bad settings/);
+  G.act(s, admin, { op: 'config', supers: { sweep: false, master: false, bogus: false } }, now);
+  assert.deepEqual(G.view(s, b, now).settings.supers,
+    { again: true, sweep: false, blast: true, swap: true, gift: true, master: false });
+
+  G.act(s, admin, { op: 'start' }, now);
+  const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
+  assert.equal(all.length, DECK_SIZE - 4 - 1, 'the 4 Sweep cards and the Master card are left out');
+  assert.equal(all.filter((c) => c.value === 'sweep' || c.value === 'master').length, 0);
+  assert.equal(all.filter((c) => c.value === 'again').length, 4, 'ticked cards are still there');
+
+  assert.throws(() => G.act(s, admin, { op: 'config', supers: { sweep: true } }, now), /only be changed in the lobby/);
+  s.cur = s.seats.indexOf(admin.id);
+  assert.throws(() => G.act(s, admin, { op: 'draw', value: 'sweep', color: 'red' }, now), /switched off/);
+  assert.throws(() => G.act(s, admin, { op: 'draw', value: 'master', color: 'wild' }, now), /switched off/);
+  G.act(s, admin, { op: 'draw', value: 'again', color: 'red' }, now); // a ticked super card can still be picked
+  assert.ok(admin.hand.some((c) => c.value === 'again'));
+});
+
+test('lobby settings: a Master card cannot use the rule of a switched-off super card', () => {
+  const { s, p, others, now } = threePlayers([
+    { id: 9951, color: 'wild', value: 'master' }, { id: 9952, color: 'red', value: '5' }, { id: 9953, color: 'blue', value: '2' },
+  ]);
+  s.settings = { supers: { again: true, sweep: true, blast: true, swap: false, gift: true, master: true } };
+  assert.throws(() => G.act(s, p, { op: 'play', cardId: 9951, color: 'red', target: others[0].id, rule: 'swap' }, now), /switched off/);
+  G.act(s, p, { op: 'play', cardId: 9951, color: 'red', target: others[0].id, rule: 'wild4' }, now); // +4 is always allowed
+  assert.equal(others[0].hand.length, 9);
+});
+
+test('lobby settings: all super cards off gives the plain 108-card deck and a playable game', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const a = G.join(s, { name: 'A', admin: true }, now);
+  G.join(s, { name: 'B', admin: false }, now);
+  G.act(s, a, { op: 'config', supers: { again: false, sweep: false, blast: false, swap: false, gift: false, master: false } }, now);
+  G.act(s, a, { op: 'start' }, now);
+  const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
+  assert.equal(all.length, 108);
+  assert.ok(all.every((c) => !['again', 'sweep', 'blast', 'swap', 'gift', 'master'].includes(c.value)));
+});
+
 test('admin card picker offers the super cards too', () => {
   const s = G.newRoom('t');
   const a = G.join(s, { name: 'A', admin: true }, 1000);

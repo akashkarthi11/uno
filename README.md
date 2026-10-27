@@ -80,3 +80,11 @@ Playable any time. You pick a colour, then a player, then one super rule that is
 
 You can choose yourself for Play Again or Sweep; the other rules need another player.
 (💥 Blast only makes them draw 2 — nobody loses a turn — whereas +2 also costs them their next turn.)
+
+### Lobby settings: which super cards are in the game
+
+Before a game starts (in the lobby, or on the results screen) the admin gets a **"Super cards in this game"** panel
+with a tick box for each super card (Play Again, Sweep, Blast, Swap Hands, Gift, Master card), plus **All on / All off**.
+Unticked cards are not put in the deck, the admin's pick-up menu no longer offers them, and the Master card does not
+offer the matching rule. Everyone else sees the same list read-only, with the deck size. The choice is kept for the
+room and can only be changed while no game is running.
