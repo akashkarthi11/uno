@@ -101,6 +101,32 @@ test('admin can choose the special card they pick up; players cannot', () => {
   assert.equal(s.deck.length, deckBefore, 'the pile itself is untouched');
 });
 
+test('admin restart returns everyone to the lobby; mid-game joiner is a spectator without cards', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const player = G.join(s, { name: 'B', admin: false }, now);
+  G.act(s, admin, { op: 'start' }, now);
+
+  const late = G.join(s, { name: 'Late', admin: false }, now);
+  const lateView = G.view(s, late, now);
+  assert.equal(lateView.seated, false);
+  assert.equal(lateView.hand.length, 0);
+  assert.equal(lateView.started, true);
+  assert.ok(lateView.players.every((p) => p.id !== late.id));
+  assert.ok(lateView.players.every((p) => typeof p.count === 'number' && !('hand' in p)), 'opponents show counts only');
+
+  assert.throws(() => G.act(s, player, { op: 'lobby' }, now), /Only the admin/);
+  G.act(s, admin, { op: 'lobby' }, now);
+  const v = G.view(s, player, now);
+  assert.equal(v.started, false);
+  assert.equal(v.players.length, 3);
+  assert.ok(s.members.every((m) => m.hand.length === 0));
+
+  G.act(s, admin, { op: 'start' }, now); // late joiner is dealt in next game
+  assert.equal(late.hand.length, 5);
+});
+
 test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {
   const s = G.newRoom('t');
   const now = 1000;

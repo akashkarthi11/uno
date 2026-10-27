@@ -235,6 +235,11 @@ function renderGame(s) {
   else msg = (curPlayer ? curPlayer.name : "?") + "'s turn…";
   $("message").textContent = msg;
 
+  // Spectators (joined mid-game) see the table and card counts only: no hand, no play buttons.
+  ["passBtn", "unoBtn", "catchBtn"].forEach((id) => { if (!s.seated) $(id).classList.add("hidden"); else if (id !== "catchBtn") $(id).classList.remove("hidden"); });
+  $("hand").classList.toggle("hidden", !s.seated);
+  $("drawPile").style.cursor = s.seated ? "pointer" : "default";
+  $("restartBtn").classList.toggle("hidden", !s.admin);
   $("passBtn").disabled = !(myTurn && s.drawn != null);
   const canUno = s.seated && !s.over && me && me.count > 0 && me.count <= 2;
   $("unoBtn").disabled = !canUno;
@@ -258,9 +263,9 @@ function renderGame(s) {
     const order = s.ranking.map((n, i) => (i + 1) + ". " + n).join("   ");
     $("endText").textContent = (s.notice || "") + (order ? "Finished: " + order : "") +
       (s.loser ? "   Last: " + s.loser : "");
-    const isHost = s.you === s.host;
-    $("playAgain").classList.toggle("hidden", !isHost);
-    $("endHint").textContent = isHost ? "" : "Waiting for the admin to start the next game…";
+    $("playAgain").classList.toggle("hidden", !s.admin);
+    $("toLobby").classList.toggle("hidden", !s.admin);
+    $("endHint").textContent = s.admin ? "" : "Waiting for the admin to start the next game…";
     end.classList.remove("hidden");
   } else {
     end.classList.add("hidden");
@@ -346,8 +351,13 @@ $("playAgain").addEventListener("click", () => send({ op: "start" }));
 attachLongPress($("drawPile"));
 $("drawPile").addEventListener("click", () => {
   if (suppressClick) { suppressClick = false; return; }
+  if (state && !state.seated) return; // spectators can't draw
   send({ op: "draw" });
 });
+$("restartBtn").addEventListener("click", () => {
+  if (confirm("End this game and send everyone back to the lobby?")) send({ op: "lobby" });
+});
+$("toLobby").addEventListener("click", () => send({ op: "lobby" }));
 $("passBtn").addEventListener("click", () => send({ op: "pass" }));
 $("unoBtn").addEventListener("click", () => send({ op: "uno" }));
 $("catchBtn").addEventListener("click", () => send({ op: "catch" }));

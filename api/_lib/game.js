@@ -166,6 +166,7 @@ export function act(s, me, b, now) {
     case 'pass': return pass(s, me, now);
     case 'uno': return sayUno(s, me);
     case 'catch': return catchUno(s, me);
+    case 'lobby': return toLobby(s, me);
     default: return fail('Unknown action.');
   }
 }
@@ -206,6 +207,29 @@ function start(s, p, now) {
   s.log = [];
   addLog(s, `Game started with ${s.seats.length} players. First card: ${first.color} ${first.value}`);
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
+}
+
+/** Admin ends the current game (running or finished) and sends everyone back to the lobby. */
+function toLobby(s, p) {
+  if (!p.admin) fail('Only the admin can do that.');
+  s.started = false;
+  s.over = false;
+  s.seats = [];
+  s.members.forEach((m) => {
+    m.hand = [];
+    m.finished = false;
+    m.saidUno = false;
+  });
+  s.deck = [];
+  s.discard = [];
+  s.winner = null;
+  s.loser = null;
+  s.ranking = [];
+  s.notice = null;
+  s.unoId = null;
+  s.drawnId = null;
+  s.log = [];
+  addLog(s, 'Back in the lobby.');
 }
 
 function requireTurn(s, p) {
