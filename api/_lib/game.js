@@ -120,7 +120,7 @@ function advance(s, steps, now) {
 
 /* ---------------- membership ---------------- */
 
-export function join(s, { name, admin, playerId }, now) {
+export function join(s, { name, admin, role, playerId }, now) {
   let p = playerId ? byId(s, playerId) : null;
   if (!p) {
     p = { id: randomUUID(), name: cleanName(name), admin: false, lastSeen: now, hand: [], saidUno: false, finished: false };
@@ -130,6 +130,7 @@ export function join(s, { name, admin, playerId }, now) {
     addLog(s, p.name + ' reconnected.');
   }
   p.admin = !!admin;
+  p.role = admin ? 'admin' : role || 'public'; // which password they used: admin | public | private
   p.lastSeen = now;
   return p;
 }
@@ -174,7 +175,7 @@ export function act(s, me, b, now) {
     case 'pass': return pass(s, me, now);
     case 'uno': return sayUno(s, me);
     case 'lobby': return toLobby(s, me);
-    case 'private': return setPrivate(s, me, b.on === true);
+    case 'private': return setPrivate(s, me, b.on === true, now);
     case 'kick': return kick(s, me, String(b.targetId ?? ''), now);
     default: return fail('Unknown action.');
   }
@@ -217,11 +218,21 @@ function start(s, p, now) {
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
 }
 
-/** Admin makes the game private (new players need the private password) or public again. */
-function setPrivate(s, p, on) {
+/**
+ * Admin makes the game private (private players, password 281101) or public (public players, password 123456).
+ * Players already in the room who joined with the other password no longer qualify and are removed.
+ */
+function setPrivate(s, p, on, now) {
   if (!p.admin) fail('Only the admin can do that.');
   s.private = on;
   addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
+  const want = on ? 'private' : 'public';
+  for (const m of [...s.members]) {
+    if (!m.admin && (m.role ?? 'public') !== want) {
+      removeMember(s, m, now);
+      addLog(s, `${m.name} was removed (this game is now ${want}).`);
+    }
+  }
 }
 
 /** Admin removes a player (lobby or mid-game). Their cards go back into the draw pile. */
@@ -230,7 +241,12 @@ function kick(s, admin, targetId, now) {
   const t = byId(s, targetId);
   if (!t) fail('That player is not here.');
   if (t.admin) fail('You cannot remove an admin.');
+  removeMember(s, t, now);
+  addLog(s, `${t.name} was removed by the admin.`);
+}
 
+/** Takes a player out of the room, lobby or mid-game. Their cards go back into the draw pile. */
+function removeMember(s, t, now) {
   const idx = s.seats.indexOf(t.id);
   if (s.started && !s.over && idx !== -1) {
     s.deck.unshift(...t.hand); // bottom of the pile (cards are drawn from the end)
@@ -259,7 +275,6 @@ function kick(s, admin, targetId, now) {
     s.members = s.members.filter((m) => m.id !== t.id);
   }
   s.kicked = [...(s.kicked || []), t.id].slice(-50);
-  addLog(s, `${t.name} was removed by the admin.`);
 }
 
 /** Admin ends the current game (running or finished) and sends everyone back to the lobby. */
@@ -440,6 +455,7 @@ export function view(s, me, now) {
     seated: s.started && s.seats.includes(me.id),
     players: (s.started ? seated(s) : s.members.filter((m) => online(m, now))).map((p) => ({
       id: p.id, name: p.name, count: p.hand.length, finished: s.started && p.finished, connected: online(p, now),
+      role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     log: s.log,
   };

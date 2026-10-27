@@ -496,7 +496,15 @@ $("joinBtn").addEventListener("click", join);
 $("nameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
 $("pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
 $("startBtn").addEventListener("click", () => send({ op: "start" }));
-$("privateBtn").addEventListener("click", () => send({ op: "private", on: !(state && state.private) }));
+$("privateBtn").addEventListener("click", () => {
+  if (!state) return;
+  const toPrivate = !state.private;
+  const want = toPrivate ? "private" : "public";
+  const n = state.players.filter((p) => p.id !== state.you && p.role && p.role !== "admin" && p.role !== want).length;
+  if (n && !confirm("Making the game " + want + " removes " + n + " player" + (n === 1 ? "" : "s") +
+      " who joined with the " + (toPrivate ? "public" : "private") + " password. Continue?")) return;
+  send({ op: "private", on: toPrivate });
+});
 $("playAgain").addEventListener("click", () => send({ op: "start" }));
 attachLongPress($("drawPile"));
 $("drawPile").addEventListener("click", () => {

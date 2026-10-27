@@ -40,7 +40,8 @@ export default async function handler(req, res) {
       }
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
-        const me = G.join(s, { name: b.name, admin, playerId: b.playerId }, now);
+        const role = admin ? 'admin' : pw === PRIVATE_PASSWORD ? 'private' : 'public';
+        const me = G.join(s, { name: b.name, admin, role, playerId: b.playerId }, now);
         return G.view(s, me, now);
       });
       return res.json({ state });

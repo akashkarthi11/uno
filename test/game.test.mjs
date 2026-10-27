@@ -242,6 +242,31 @@ function call(body) {
   });
 }
 
+test('switching public/private removes players who no longer qualify (lobby and mid-game)', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const pub1 = G.join(s, { name: 'Pub1', admin: false, role: 'public' }, now);
+  const pub2 = G.join(s, { name: 'Pub2', admin: false, role: 'public' }, now);
+  const priv = G.join(s, { name: 'Priv', admin: false, role: 'private' }, now);
+  assert.equal(G.view(s, admin, now).players.find((p) => p.id === priv.id).role, 'private');
+  assert.equal(G.view(s, pub1, now).players[0].role, undefined, 'only the admin sees roles');
+
+  G.act(s, admin, { op: 'private', on: true }, now); // lobby: public players are removed
+  assert.deepEqual(s.members.map((m) => m.name).sort(), ['Boss', 'Priv']);
+  assert.ok(s.kicked.includes(pub1.id) && s.kicked.includes(pub2.id));
+
+  const late = G.join(s, { name: 'Priv2', admin: false, role: 'private' }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  const total = () => s.deck.length + s.discard.length + s.members.reduce((a, m) => a + m.hand.length, 0);
+  assert.equal(total(), 108);
+  G.act(s, admin, { op: 'private', on: false }, now); // mid-game: private players are removed, game ends
+  assert.deepEqual(s.members.map((m) => m.name), ['Boss']);
+  assert.equal(s.over, true);
+  assert.equal(total(), 108, 'removed players\' cards return to the pile');
+  assert.ok(s.kicked.includes(priv.id) && s.kicked.includes(late.id));
+});
+
 test('API: public games admit public players, private games admit private players only', async () => {
   const room = 'priv' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
@@ -250,6 +275,7 @@ test('API: public games admit public players, private games admit private player
   assert.equal((await call({ op: 'private', room, playerId: early.body.state.you, on: true })).code, 400, 'players cannot');
   const set = await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
   assert.equal(set.body.state.private, true);
+  assert.equal((await call({ op: 'state', room, playerId: early.body.state.you })).body.kicked, true, 'public player already in the lobby is removed');
 
   const refused = await call({ op: 'join', room, name: 'New', password: '123456' });
   assert.equal(refused.code, 401, 'player password no longer enough');

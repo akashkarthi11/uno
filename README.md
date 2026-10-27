@@ -14,7 +14,8 @@ in Upstash Redis.
 - Three passwords: `110299` = admin (only the admin can start a game), `123456` = public player,
   `281101` = private player.
 - The admin decides whether a game is **public** or **private** (button in the lobby). A public game admits
-  public players only; a private game admits private players only.
+  public players only; a private game admits private players only. Switching removes players already in the
+  room who joined with the other password.
   Override all three with `GAME_PLAYER_PASSWORD`, `GAME_ADMIN_PASSWORD` and `GAME_PRIVATE_PASSWORD`.
 - A player who goes quiet for 20 s is treated as offline and their turns are played automatically.
 
