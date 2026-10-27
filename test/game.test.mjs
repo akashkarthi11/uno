@@ -155,7 +155,7 @@ test('admin can remove players in the lobby and mid-game; the game stays consist
   assert.equal(s.over, true);
 });
 
-test('a turn left idle for 30s is played automatically, respecting a card just drawn', () => {
+test('a turn left idle for 30s passes to the next player without playing or drawing', () => {
   const s = G.newRoom('t');
   let now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
@@ -173,8 +173,10 @@ test('a turn left idle for 30s is played automatically, respecting a card just d
   assert.equal(G.tick(s, now), true);
   assert.notEqual(s.seats[s.cur], idleId, 'turn moved on');
   assert.ok(s.log.some((l) => /ran out of time/.test(l)));
+  const idle = s.members.find((m) => m.id === idleId);
+  assert.equal(idle.hand.length, 5, 'the idle player kept their 5 cards: nothing played or drawn');
 
-  // after drawing a playable card, a timeout may only play that card
+  // a timeout after drawing a playable card also just passes; the drawn card stays in hand
   const p = s.members.find((m) => m.id === s.seats[s.cur]);
   s.color = 'red';
   s.discard.push({ id: 7000, color: 'red', value: '4' });
@@ -185,8 +187,9 @@ test('a turn left idle for 30s is played automatically, respecting a card just d
   now += 31000;
   a.lastSeen = b.lastSeen = now;
   G.tick(s, now);
-  assert.ok(s.discard.some((c) => c.id === 7001), 'the drawn card was the one played');
-  assert.ok(p.hand.some((c) => c.id === 7002), 'the other card stays in hand');
+  assert.notEqual(s.seats[s.cur], p.id, 'turn moved on');
+  assert.equal(s.drawnId, null);
+  assert.ok(p.hand.some((c) => c.id === 7001) && p.hand.some((c) => c.id === 7002), 'both cards stay in hand');
 });
 
 test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {

@@ -156,8 +156,10 @@ export function tick(s, now) {
     return true;
   }
   if (idle > TURN_MS) {
-    addLog(s, p.name + ' ran out of time.');
-    autoPlay(s, p, now);
+    // time is up: nothing is played or drawn for them, the turn just moves to the next player
+    beforeAction(s, p);
+    addLog(s, p.name + ' ran out of time — turn passes.');
+    advance(s, 1, now);
     return true;
   }
   return false;
