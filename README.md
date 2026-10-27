@@ -11,9 +11,10 @@ in Upstash Redis.
   **GrowX!** before playing the second-to-last card or draw 1 extra card.
 - Play continues after someone empties their hand. **The last player still holding cards loses.**
 - A turn left idle for 30 s passes to the next player.
-- Password `123456` joins as a player, `110299` joins as admin. Only the admin can start a game.
-- The admin can make a game **private** from the lobby: new players then need the private password `281101`
-  instead of `123456`. Players already seated can reconnect.
+- Three passwords: `110299` = admin (only the admin can start a game), `123456` = public player,
+  `281101` = private player.
+- The admin decides whether a game is **public** or **private** (button in the lobby). A public game admits
+  public players only; a private game admits private players only.
   Override all three with `GAME_PLAYER_PASSWORD`, `GAME_ADMIN_PASSWORD` and `GAME_PRIVATE_PASSWORD`.
 - A player who goes quiet for 20 s is treated as offline and their turns are played automatically.
 

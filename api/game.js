@@ -27,15 +27,13 @@ export default async function handler(req, res) {
       const pw = String(b.password ?? '');
       const admin = pw === ADMIN_PASSWORD;
       if (!admin) {
-        // A private game only lets new players in with the private password; people already seated may reconnect
-        // with either player password.
+        // The admin decides whether a game is public or private. Public games admit public players (123456)
+        // only; private games admit private players (281101) only.
         const existing = await readRoom(code);
         const isPrivate = Boolean(existing && existing.private);
-        const isMember = Boolean(existing && b.playerId && existing.members.some((m) => m.id === b.playerId));
-        const ok = isMember ? pw === PLAYER_PASSWORD || pw === PRIVATE_PASSWORD : pw === (isPrivate ? PRIVATE_PASSWORD : PLAYER_PASSWORD);
-        if (!ok) {
-          const msg = isPrivate && !isMember && pw === PLAYER_PASSWORD
-            ? 'This game is private — ask the admin to start the game and share the private password.'
+        if (pw !== (isPrivate ? PRIVATE_PASSWORD : PLAYER_PASSWORD)) {
+          const msg = isPrivate && pw === PLAYER_PASSWORD
+            ? 'Ask the admin to start the game and share the private password.'
             : 'Wrong password.';
           return res.status(401).json({ error: msg, denied: true });
         }

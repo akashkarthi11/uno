@@ -242,7 +242,7 @@ function call(body) {
   });
 }
 
-test('API: private game needs the private password; members can reconnect', async () => {
+test('API: public games admit public players, private games admit private players only', async () => {
   const room = 'priv' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
   const early = await call({ op: 'join', room, name: 'Early', password: '123456' });
@@ -253,14 +253,15 @@ test('API: private game needs the private password; members can reconnect', asyn
 
   const refused = await call({ op: 'join', room, name: 'New', password: '123456' });
   assert.equal(refused.code, 401, 'player password no longer enough');
-  assert.match(refused.body.error, /private.*ask the admin/i);
+  assert.equal(refused.body.error, 'Ask the admin to start the game and share the private password.');
   assert.equal((await call({ op: 'join', room, name: 'New', password: 'nope' })).body.error, 'Wrong password.');
   const joined = await call({ op: 'join', room, name: 'New', password: '281101' });
   assert.equal(joined.code, 200);
   const back = await call({ op: 'join', room, name: 'Early', password: '123456', playerId: early.body.state.you });
-  assert.equal(back.code, 200, 'already-seated player can reconnect');
+  assert.equal(back.code, 401, 'a public player cannot get back into a game that became private');
+  assert.equal((await call({ op: 'join', room, name: 'Boss', password: '110299', playerId: admin.body.state.you })).code, 200, 'admin always');
 
-  assert.equal((await call({ op: 'join', room: room + 'x', name: 'N', password: '281101' })).code, 401, 'private password only works for private games');
+  assert.equal((await call({ op: 'join', room: room + 'x', name: 'N', password: '281101' })).code, 401, 'private players cannot enter a public game');
   await call({ op: 'private', room, playerId: admin.body.state.you, on: false });
   assert.equal((await call({ op: 'join', room, name: 'Late', password: '123456' })).code, 200, 'public again');
 });
