@@ -76,6 +76,9 @@ test('offline player is auto-played so the table never stalls', () => {
   const c = G.join(s, { name: 'C', admin: false }, now);
   G.act(s, a, { op: 'start' }, now);
   s.cur = s.seats.indexOf(b.id);
+  // plain cards only: a random 🔁 Play Again would legitimately keep the turn with B and make this check flaky
+  b.hand = [{ id: 9990, color: 'red', value: '4' }, { id: 9991, color: 'blue', value: '2' }];
+  s.color = 'red';
   now += 25000; // B goes quiet; A and C keep polling
   a.lastSeen = now;
   c.lastSeen = now;

@@ -118,6 +118,7 @@ let removed = false;
 
 function removedByAdmin() {
   removed = true;
+  document.body.classList.remove("in-game");
   resetScreenCaches();
   if (typeof voiceStopLocal === "function") voiceStopLocal();
   state = null;
@@ -268,6 +269,7 @@ function render() {
   const inGame = s.started;
   // the sheet is only useful while it is still your turn and the card is still in your hand
   if (sheet && !(s.started && !s.over && !s.paused && s.cur === s.you && s.hand.some((c) => c.id === sheet.card.id))) closeSheet();
+  document.body.classList.toggle("in-game", inGame); // on phones a running game fills the screen exactly, no page scrolling
   placeChat(inGame);
   renderChat(s);
   updateChatUi(s);

@@ -354,7 +354,7 @@ button.kick {
 
   /* the hand: one row you can swipe, always visible at the bottom of the screen */
   #hand {
-    order: 5; position: sticky; bottom: 0; z-index: 20; margin: 0 -8px; min-height: 0;
+    z-index: 20; margin: 0 -8px; min-height: 0;
     flex-wrap: nowrap; overflow-x: auto; justify-content: safe center; -webkit-overflow-scrolling: touch;
     padding: 14px 10px calc(8px + env(safe-area-inset-bottom));
     background: linear-gradient(to top, var(--canvas) 72%, rgba(246, 247, 251, 0));
@@ -391,10 +391,19 @@ button.kick {
   #toast { bottom: calc(130px + env(safe-area-inset-bottom)); max-width: calc(100% - 24px); }
 }
 
+#gameTop { display: flex; flex-direction: column; gap: 16px; }
+
 @media (max-width: 640px) {
-  /* in a game the page is at least one screen tall, so the hand sits at the bottom edge on tall phones too */
-  #game { min-height: calc(100vh - 96px); min-height: calc(100dvh - 96px); }
-  #hand { margin-top: auto; }
+  /* During a game the page itself never scrolls: it is exactly one screen tall. The table area flexes to fit (and scrolls
+     inside itself on a very small screen) while the hand is a fixed part of the layout at the bottom, so nothing slides
+     around when the browser's address bar hides or shows. */
+  body.in-game { height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; overscroll-behavior: none; }
+  body.in-game header { flex: 0 0 auto; }
+  body.in-game #game { flex: 1 1 auto; min-height: 0; padding-bottom: 0; width: 100%; min-width: 0; }
+  #gameTop { flex: 1 1 auto; min-height: 0; min-width: 0; gap: 8px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  #opponents { min-width: 0; max-width: 100%; }
+  body.in-game #table { flex: 1 1 auto; min-height: 130px; }
+  #hand { flex: 0 0 auto; }
 }
 
 /* stacked buttons in the pickers line up (the generic ".box button + button" spacing is for side-by-side buttons) */
