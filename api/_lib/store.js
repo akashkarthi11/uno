@@ -2,8 +2,10 @@
 import { randomUUID } from 'node:crypto';
 import { newRoom } from './game.js';
 
-const URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+// A second database added with the prefix MUM_ (e.g. a Mumbai one created next to the original) wins automatically;
+// otherwise the original Upstash variables are used. Switching databases needs no code change.
+const URL = process.env.MUM_KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const TOKEN = process.env.MUM_KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 export const usingRedis = Boolean(URL && TOKEN);
 
 const TTL_SECONDS = 6 * 60 * 60;

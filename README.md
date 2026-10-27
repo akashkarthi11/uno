@@ -99,3 +99,14 @@ room and can only be changed while no game is running.
   "🔄 A new version is available — Reload" bar appears, so nobody keeps running old page code against the new server.
 - **Back/forward cache**: a page restored with the back button refreshes itself immediately.
 - **Room data**: lives only in Redis (6 h expiry, refreshed by activity); the function keeps no copy between requests.
+
+## Making it faster for players in India (Mumbai database)
+
+Requests enter Vercel at Mumbai, but the function and database are in the US, which costs about 0.2 s per call. To fix it:
+
+1. Vercel → project `growx-mindrelax` → **Storage** → create an **Upstash Redis** with primary region **Mumbai (ap-south-1)**,
+   and give it the environment-variable prefix **`MUM_`** (CLI: `vercel integration add upstash/upstash-kv --name growx-mumbai-redis --prefix MUM_`).
+2. Set `"regions": ["bom1"]` inside the `functions` → `api/game.js` entry of `vercel.json` (or in Settings → Functions → Region) and redeploy.
+
+The code already prefers `MUM_KV_REST_API_URL` / `MUM_KV_REST_API_TOKEN` when they exist. Move the function **and** the
+database together: either one alone is slower than today. Rooms live in the database, so games in progress are lost at the switch.
