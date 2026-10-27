@@ -162,11 +162,10 @@ export function act(s, me, b, now) {
   switch (b.op) {
     case 'start': return start(s, me, now);
     case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now);
-    case 'draw': return draw(s, me, now);
+    case 'draw': return draw(s, me, now, b);
     case 'pass': return pass(s, me, now);
     case 'uno': return sayUno(s, me);
     case 'catch': return catchUno(s, me);
-    case 'swap': return swapSpecial(s, me, b);
     default: return fail('Unknown action.');
   }
 }
@@ -229,15 +228,16 @@ function play(s, p, cardId, chosen, now) {
   doPlay(s, p, c, chosen, now);
 }
 
-function draw(s, p, now) {
+function draw(s, p, now, b = {}) {
   requireTurn(s, p);
   if (s.drawnId != null) fail('You already drew a card this turn.');
+  const chosen = b.value ? chosenCard(s, p, b) : null; // validates before anything changes
   beforeAction(s, p);
-  drawOne(s, p, now);
+  drawOne(s, p, now, chosen);
 }
 
-function drawOne(s, p, now) {
-  const c = takeFromDeck(s);
+function drawOne(s, p, now, card = null) {
+  const c = card || takeFromDeck(s);
   p.hand.push(c);
   addLog(s, p.name + ' draws a card.');
   if (playable(s, c, p)) s.drawnId = c.id;
@@ -270,22 +270,16 @@ function catchUno(s, p) {
 
 const SPECIALS = ['skip', 'reverse', 'draw2', 'wild', 'wild4'];
 
-/** Admin-only: replace one of the admin's own cards with a special card. Silent — nothing is logged. */
-function swapSpecial(s, p, b) {
+/** Admin-only: the card picked up is the special card the admin chose instead of the top of the pile. */
+function chosenCard(s, p, b) {
   if (!p.admin) fail('Admin only.');
-  if (!s.started || s.over || !s.seats.includes(p.id)) fail('No game running.');
-  const old = p.hand.find((h) => h.id === b.cardId);
-  if (!old) fail('That card is not in your hand.');
   const value = String(b.value ?? '');
   if (!SPECIALS.includes(value)) fail('Not a special card.');
   let color = String(b.color ?? '');
   if (value === 'wild' || value === 'wild4') color = 'wild';
   else if (!COLORS.includes(color)) fail('Choose a colour.');
   s.nextId = (s.nextId ?? 1000) + 1;
-  const fresh = { id: s.nextId, color, value };
-  p.hand = p.hand.map((h) => (h === old ? fresh : h));
-  s.deck.splice(rnd(s.deck.length + 1), 0, old); // the replaced card goes back into the draw pile
-  if (s.drawnId === old.id) s.drawnId = fresh.id;
+  return { id: s.nextId, color, value };
 }
 
 /** Anyone acting after a player dropped to one card without calling it makes that player draw 2. */

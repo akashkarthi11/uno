@@ -224,7 +224,6 @@ function renderGame(s) {
     const el = cardEl(card);
     if (ok.has(card.id)) el.classList.add("playable");
     el.addEventListener("click", () => onCard(card));
-    if (s.admin && s.seated && !s.over) attachLongPress(el, card);
     hand.appendChild(el);
   }
 
@@ -270,34 +269,33 @@ function renderGame(s) {
 
 /* ---------- actions ---------- */
 
-/* ---------- admin long-press: swap a card for a special one ---------- */
+/* ---------- admin long-press on the draw pile: choose the special card you pick up ---------- */
 
 const LONG_PRESS_MS = 600;
 let pressTimer = null;
 let suppressClick = false;
-let cheatTarget = null;
 
 function cancelPress() {
   clearTimeout(pressTimer);
   pressTimer = null;
 }
 
-function attachLongPress(el, card) {
+function attachLongPress(el) {
   el.addEventListener("pointerdown", () => {
     suppressClick = false;
     cancelPress();
+    if (!state || !state.admin) return; // only the admin gets the menu
     pressTimer = setTimeout(() => {
       pressTimer = null;
-      suppressClick = true; // the release after a long press must not also play the card
-      openCheat(card);
+      suppressClick = true; // the release after a long press must not also draw a normal card
+      openCheat();
     }, LONG_PRESS_MS);
   });
   ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => el.addEventListener(ev, cancelPress));
   el.addEventListener("contextmenu", (e) => e.preventDefault());
 }
 
-function openCheat(card) {
-  cheatTarget = card;
+function openCheat() {
   const box = $("cheatOptions");
   box.innerHTML = "";
   const options = [];
@@ -309,7 +307,7 @@ function openCheat(card) {
     const el = cardEl(o);
     el.addEventListener("click", () => {
       $("cheatModal").classList.add("hidden");
-      send({ op: "swap", cardId: cheatTarget.id, value: o.value, color: o.color });
+      send({ op: "draw", value: o.value, color: o.color });
     });
     box.appendChild(el);
   }
@@ -320,7 +318,6 @@ document.addEventListener("pointerup", cancelPress);
 $("cheatCancel").addEventListener("click", () => $("cheatModal").classList.add("hidden"));
 
 function onCard(card) {
-  if (suppressClick) { suppressClick = false; return; }
   if (!state || state.over || state.cur !== state.you) return;
   if (!state.playable.includes(card.id)) {
     toast(card.value === "wild4" ? "Wild Draw Four needs a hand with no card of the current colour." : "You can't play that card.");
@@ -346,7 +343,11 @@ $("nameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(
 $("pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
 $("startBtn").addEventListener("click", () => send({ op: "start" }));
 $("playAgain").addEventListener("click", () => send({ op: "start" }));
-$("drawPile").addEventListener("click", () => send({ op: "draw" }));
+attachLongPress($("drawPile"));
+$("drawPile").addEventListener("click", () => {
+  if (suppressClick) { suppressClick = false; return; }
+  send({ op: "draw" });
+});
 $("passBtn").addEventListener("click", () => send({ op: "pass" }));
 $("unoBtn").addEventListener("click", () => send({ op: "uno" }));
 $("catchBtn").addEventListener("click", () => send({ op: "catch" }));

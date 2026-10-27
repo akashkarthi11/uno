@@ -81,20 +81,39 @@ test('offline player is auto-played so the table never stalls', () => {
   assert.notEqual(s.seats[s.cur], b.id);
 });
 
-test('admin can swap a card for a special one; players cannot', () => {
+test('admin can choose the special card they pick up; players cannot', () => {
   const s = G.newRoom('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const player = G.join(s, { name: 'B', admin: false }, now);
   G.act(s, admin, { op: 'start' }, now);
-  const target = admin.hand[0];
-  G.act(s, admin, { op: 'swap', cardId: target.id, value: 'wild4', color: 'wild' }, now);
-  assert.equal(admin.hand.length, 5);
+  const deckBefore = s.deck.length;
+
+  s.cur = s.seats.indexOf(player.id);
+  assert.throws(() => G.act(s, player, { op: 'draw', value: 'skip', color: 'red' }, now), /Admin only/);
+  assert.equal(player.hand.length, 5, 'refused attempt changes nothing');
+
+  s.cur = s.seats.indexOf(admin.id);
+  assert.throws(() => G.act(s, admin, { op: 'draw', value: '7', color: 'red' }, now), /special/);
+  G.act(s, admin, { op: 'draw', value: 'wild4', color: 'wild' }, now);
+  assert.equal(admin.hand.length, 6);
   assert.ok(admin.hand.some((c) => c.value === 'wild4'));
-  assert.ok(!admin.hand.some((c) => c.id === target.id));
-  assert.ok(s.deck.some((c) => c.id === target.id), 'old card returns to the draw pile');
-  assert.throws(() => G.act(s, player, { op: 'swap', cardId: player.hand[0].id, value: 'skip', color: 'red' }, now), /Admin only/);
-  assert.throws(() => G.act(s, admin, { op: 'swap', cardId: admin.hand[0].id, value: '7', color: 'red' }, now), /special/);
+  assert.equal(s.deck.length, deckBefore, 'the pile itself is untouched');
+});
+
+test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  G.join(s, { name: 'B', admin: false }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  s.cur = s.seats.indexOf(admin.id);
+  s.color = 'red';
+  s.discard.push({ id: 5000, color: 'red', value: '3' });
+  admin.hand = [{ id: 5001, color: 'red', value: '9' }]; // holds red, so a Wild Draw Four is illegal
+  G.act(s, admin, { op: 'draw', value: 'wild4', color: 'wild' }, now);
+  assert.equal(admin.hand.length, 2);
+  assert.notEqual(s.seats[s.cur], admin.id, 'unplayable draw passes the turn');
 });
 
 function call(body) {
