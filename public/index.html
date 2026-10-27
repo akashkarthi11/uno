@@ -12,6 +12,8 @@
   <h1><span class="logo">G</span>GrowX Mindrelax</h1>
   <div id="roomInfo" class="hidden">
     Room <b id="roomName"></b><span id="privateChip" class="badge hidden">🔒 Private</span>
+    <button id="voiceBtn" class="ghost hidden">🎤 Join voice</button>
+    <button id="muteBtn" class="ghost hidden">🎙 Mute</button>
     <button id="copyLink" class="ghost">Copy invite link</button>
     <button id="rulesBtn" class="ghost">Rules</button>
   </div>
@@ -34,6 +36,14 @@
   <button id="privateBtn" class="ghost hidden">🔒 Make private</button>
   <button id="startBtn">Start game</button>
   <p id="lobbyHint" class="hint"></p>
+  <div id="chat">
+    <div id="chatLog"></div>
+    <div id="emojiBar"></div>
+    <form id="chatForm" autocomplete="off">
+      <input id="chatInput" maxlength="200" placeholder="Say something to the lobby…">
+      <button type="submit">Send</button>
+    </form>
+  </div>
 </section>
 
 <!-- game -->
@@ -116,5 +126,6 @@
 </div>
 
 <script src="app.js"></script>
+<script src="voice.js"></script>
 </body>
 </html>

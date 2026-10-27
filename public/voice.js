@@ -1,0 +1,239 @@
+"use strict";
+/*
+ * Voice chat: browser-to-browser audio (WebRTC, one connection per pair of people).
+ * The game server only passes the small set-up messages; the audio never goes through it.
+ * Only the admin and private players can use it; the server enforces that (state.canVoice).
+ * Uses $, api, send, state and toast from app.js.
+ */
+
+const voice = {
+  active: false,
+  muted: false,
+  stream: null,
+  peers: new Map(), // playerId -> { pc, queue, audio }
+  members: [],
+  ice: [{ urls: "stun:stun.l.google.com:19302" }],
+  timer: null,
+  ctx: null,
+  meters: new Map(), // playerId -> { analyser, buf }
+  speaking: new Set(),
+  meterTimer: null,
+};
+
+/** Called by app.js whenever a fresh game state arrives. */
+function voiceSync(s) {
+  const btn = $("voiceBtn");
+  btn.classList.toggle("hidden", !s.canVoice);
+  if (!s.canVoice) {
+    if (voice.active) voiceStopLocal();
+    $("muteBtn").classList.add("hidden");
+    return;
+  }
+  if (s.iceServers) voice.ice = s.iceServers;
+  const before = new Set(voice.members);
+  voice.members = s.voice || [];
+  if (voice.active) {
+    if (!voice.members.includes(s.you)) {
+      voiceStopLocal(); // dropped by the server, e.g. after going offline
+    } else {
+      for (const id of [...voice.peers.keys()]) if (!voice.members.includes(id)) closePeer(id);
+      if (voice.members.some((id) => !before.has(id))) pollSignals(); // someone new: look for their offer now
+    }
+  }
+  btn.classList.toggle("on", voice.active);
+  btn.textContent = voice.active ? "🎤 Leave voice" : "🎤 Join voice" + (voice.members.length ? " (" + voice.members.length + ")" : "");
+  $("muteBtn").classList.toggle("hidden", !voice.active);
+  $("muteBtn").textContent = voice.muted ? "🔇 Unmute" : "🎙 Mute";
+}
+
+async function voiceJoin() {
+  if (voice.active) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast("This browser can't use the microphone here.");
+    return;
+  }
+  try {
+    voice.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (e) {
+    toast("Microphone blocked — allow it in the browser to join voice.");
+    return;
+  }
+  await send({ op: "voiceJoin" });
+  if (!state || !state.voice.includes(state.you)) {
+    stopStream();
+    return; // the server refused (the error toast is already shown)
+  }
+  voice.active = true;
+  voice.muted = false;
+  voice.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  addMeter(state.you, voice.stream);
+  voice.meterTimer = setInterval(updateMeters, 200);
+  // The newcomer starts the connection to everyone already in voice.
+  for (const id of state.voice) if (id !== state.you) createPeer(id, true);
+  sigLoop();
+  voiceSync(state);
+}
+
+async function voiceLeave() {
+  voiceStopLocal();
+  await send({ op: "voiceLeave" });
+  if (state) voiceSync(state);
+}
+
+function stopStream() {
+  if (voice.stream) voice.stream.getTracks().forEach((t) => t.stop());
+  voice.stream = null;
+}
+
+function voiceStopLocal() {
+  clearTimeout(voice.timer);
+  clearInterval(voice.meterTimer);
+  for (const id of [...voice.peers.keys()]) closePeer(id);
+  stopStream();
+  if (voice.ctx) voice.ctx.close().catch(() => {});
+  voice.ctx = null;
+  voice.meters.clear();
+  voice.speaking.clear();
+  voice.active = false;
+  paintSpeaking();
+}
+
+/* ---------- peers ---------- */
+
+function createPeer(id, initiator) {
+  closePeer(id);
+  const pc = new RTCPeerConnection({ iceServers: voice.ice });
+  const peer = { pc, queue: [], audio: null };
+  voice.peers.set(id, peer);
+  voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
+  pc.onicecandidate = (e) => { if (e.candidate) sendSignal(id, "ice", e.candidate.toJSON()); };
+  pc.ontrack = (e) => attachRemote(id, peer, e.streams[0]);
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "failed") { try { pc.restartIce(); } catch (err) { /* ignore */ } }
+  };
+  if (initiator) {
+    (async () => {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      sendSignal(id, "offer", pc.localDescription.toJSON());
+    })().catch(() => {});
+  }
+  return peer;
+}
+
+function closePeer(id) {
+  const peer = voice.peers.get(id);
+  if (!peer) return;
+  try { peer.pc.close(); } catch (e) { /* ignore */ }
+  if (peer.audio) peer.audio.remove();
+  voice.meters.delete(id);
+  voice.speaking.delete(id);
+  voice.peers.delete(id);
+}
+
+function attachRemote(id, peer, stream) {
+  if (!peer.audio) {
+    peer.audio = document.createElement("audio");
+    peer.audio.autoplay = true;
+    peer.audio.playsInline = true;
+    document.body.appendChild(peer.audio);
+  }
+  peer.audio.srcObject = stream;
+  peer.audio.play().catch(() => {});
+  if (voice.ctx) addMeter(id, stream);
+}
+
+async function flushQueue(peer) {
+  const queued = peer.queue.splice(0);
+  for (const c of queued) await peer.pc.addIceCandidate(c).catch(() => {});
+}
+
+async function handleSignal(m) {
+  if (!voice.active) return;
+  if (m.kind === "offer") {
+    const peer = createPeer(m.from, false); // a fresh connection for someone (re)joining
+    await peer.pc.setRemoteDescription(m.data);
+    await flushQueue(peer);
+    const answer = await peer.pc.createAnswer();
+    await peer.pc.setLocalDescription(answer);
+    sendSignal(m.from, "answer", peer.pc.localDescription.toJSON());
+    return;
+  }
+  const peer = voice.peers.get(m.from);
+  if (!peer) return;
+  if (m.kind === "answer") {
+    await peer.pc.setRemoteDescription(m.data);
+    await flushQueue(peer);
+  } else if (m.kind === "ice") {
+    if (peer.pc.remoteDescription) await peer.pc.addIceCandidate(m.data).catch(() => {});
+    else peer.queue.push(m.data);
+  }
+}
+
+/* ---------- signalling through the game server ---------- */
+
+function sendSignal(to, kind, data) {
+  api({ op: "signal", to, kind, data }).catch(() => {});
+}
+
+let sigBusy = false;
+async function sigLoop() {
+  if (!voice.active || sigBusy) return;
+  sigBusy = true;
+  try {
+    const r = await api({ op: "signals" });
+    for (const m of r.signals || []) {
+      try { await handleSignal(m); } catch (e) { /* one bad message must not stop the rest */ }
+    }
+  } catch (e) { /* retry on the next round */ }
+  sigBusy = false;
+  if (!voice.active) return;
+  // poll quickly while connections are being made, slowly once everyone is connected
+  const settled = voice.peers.size > 0 && [...voice.peers.values()].every((p) => p.pc.connectionState === "connected");
+  voice.timer = setTimeout(sigLoop, settled ? 5000 : 1000);
+}
+
+function pollSignals() {
+  clearTimeout(voice.timer);
+  sigLoop();
+}
+
+/* ---------- mute + who is speaking ---------- */
+
+function toggleMute() {
+  if (!voice.active || !voice.stream) return;
+  voice.muted = !voice.muted;
+  voice.stream.getAudioTracks().forEach((t) => { t.enabled = !voice.muted; });
+  if (state) voiceSync(state);
+}
+
+function addMeter(id, stream) {
+  try {
+    const analyser = voice.ctx.createAnalyser();
+    analyser.fftSize = 256;
+    voice.ctx.createMediaStreamSource(stream).connect(analyser);
+    voice.meters.set(id, { analyser, buf: new Uint8Array(analyser.fftSize) });
+  } catch (e) { /* speaking indicator is optional */ }
+}
+
+function updateMeters() {
+  voice.speaking.clear();
+  for (const [id, m] of voice.meters) {
+    if (state && id === state.you && voice.muted) continue;
+    m.analyser.getByteTimeDomainData(m.buf);
+    let sum = 0;
+    for (const v of m.buf) sum += (v - 128) * (v - 128);
+    if (Math.sqrt(sum / m.buf.length) > 6) voice.speaking.add(id);
+  }
+  paintSpeaking();
+}
+
+function paintSpeaking() {
+  document.querySelectorAll("[data-pid]").forEach((el) => el.classList.toggle("speaking", voice.speaking.has(el.dataset.pid)));
+  $("voiceBtn").classList.toggle("speaking", Boolean(state && voice.speaking.has(state.you)));
+}
+
+$("voiceBtn").addEventListener("click", () => (voice.active ? voiceLeave() : voiceJoin()));
+$("muteBtn").addEventListener("click", toggleMute);

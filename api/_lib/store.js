@@ -22,6 +22,31 @@ async function client() {
 
 const mem = new Map();
 const chains = new Map();
+const sigMem = new Map();
+const sigKey = (code, id) => `growx:sig:${code}:${id}`;
+
+/** Voice-chat signalling: a short-lived mailbox per player (kept outside the room object, no lock needed). */
+export async function pushSignal(code, toId, msg) {
+  if (!usingRedis) {
+    const k = sigKey(code, toId);
+    sigMem.set(k, [...(sigMem.get(k) || []), msg].slice(-200));
+    return;
+  }
+  const r = await client();
+  await r.rpush(sigKey(code, toId), JSON.stringify(msg));
+  await r.expire(sigKey(code, toId), 120);
+}
+
+export async function takeSignals(code, id) {
+  if (!usingRedis) {
+    const k = sigKey(code, id);
+    const list = sigMem.get(k) || [];
+    sigMem.delete(k);
+    return list;
+  }
+  const v = await (await client()).lpop(sigKey(code, id), 100);
+  return (v || []).map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
+}
 
 export async function readRoom(code) {
   if (!usingRedis) {

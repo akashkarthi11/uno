@@ -267,6 +267,69 @@ test('switching public/private removes players who no longer qualify (lobby and 
   assert.ok(s.kicked.includes(priv.id) && s.kicked.includes(late.id));
 });
 
+test('lobby chat: trimmed, length-limited, rate-limited, shown in the lobby only', () => {
+  const s = G.newRoom('t');
+  const admin = G.join(s, { name: 'A', admin: true }, 1000);
+  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, 1000);
+  G.act(s, b, { op: 'chat', text: '  hi 👋  ' }, 1000);
+  assert.equal(s.chat[0].text, 'hi 👋');
+  assert.throws(() => G.act(s, b, { op: 'chat', text: 'again' }, 1100), /Slow down/);
+  assert.throws(() => G.act(s, b, { op: 'chat', text: '   ' }, 2000), /Type a message/);
+  G.act(s, b, { op: 'chat', text: 'x'.repeat(500) }, 3000);
+  assert.equal(s.chat[1].text.length, 200);
+  assert.equal(G.view(s, admin, 3000).chat.length, 2);
+  G.act(s, admin, { op: 'start' }, 3000);
+  assert.deepEqual(G.view(s, admin, 3000).chat, [], 'chat is a lobby feature');
+});
+
+test('voice chat: only admin and private players; list drops people who go offline', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const priv = G.join(s, { name: 'P', admin: false, role: 'private' }, now);
+  const pub = G.join(s, { name: 'U', admin: false, role: 'public' }, now);
+  assert.throws(() => G.act(s, pub, { op: 'voiceJoin' }, now), /private players and the admin/);
+  G.act(s, admin, { op: 'voiceJoin' }, now);
+  G.act(s, priv, { op: 'voiceJoin' }, now);
+  assert.deepEqual(G.view(s, admin, now).voice.sort(), [admin.id, priv.id].sort());
+  assert.equal(G.view(s, pub, now).canVoice, false);
+  assert.deepEqual(G.view(s, pub, now).voice, [], 'public players do not even see who is in voice');
+
+  now += 25000; // the private player goes quiet
+  admin.lastSeen = pub.lastSeen = now;
+  assert.equal(G.tick(s, now), true);
+  assert.deepEqual(s.voice, [admin.id]);
+  G.act(s, admin, { op: 'voiceLeave' }, now);
+  assert.deepEqual(s.voice, []);
+});
+
+test('API: voice signals travel only between voice members', async () => {
+  const room = 'vc' + Math.floor(Math.random() * 1e6);
+  const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
+  await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
+  const p1 = await call({ op: 'join', room, name: 'P1', password: '281101' });
+  const A = admin.body.state.you;
+  const P = p1.body.state.you;
+  assert.ok(admin.body.state.canVoice && Array.isArray(p1.body.state.iceServers) && p1.body.state.iceServers.length > 0);
+
+  assert.equal((await call({ op: 'signal', room, playerId: A, to: P, kind: 'offer', data: { sdp: 'x' } })).code, 400, 'not in voice yet');
+  await call({ op: 'voiceJoin', room, playerId: A });
+  await call({ op: 'voiceJoin', room, playerId: P });
+  assert.equal((await call({ op: 'signal', room, playerId: A, to: P, kind: 'offer', data: { sdp: 'x' } })).code, 200);
+  assert.equal((await call({ op: 'signal', room, playerId: A, to: P, kind: 'bogus', data: {} })).code, 400);
+  const got = await call({ op: 'signals', room, playerId: P });
+  assert.equal(got.body.signals.length, 1);
+  assert.deepEqual([got.body.signals[0].from, got.body.signals[0].kind], [A, 'offer']);
+  assert.equal((await call({ op: 'signals', room, playerId: P })).body.signals.length, 0, 'mailbox is emptied once read');
+
+  const pubRoom = 'vp' + Math.floor(Math.random() * 1e6);
+  await call({ op: 'join', room: pubRoom, name: 'Boss', password: '110299' });
+  const pub = await call({ op: 'join', room: pubRoom, name: 'Pub', password: '123456' });
+  assert.equal(pub.body.state.canVoice, false);
+  assert.equal(pub.body.state.iceServers, undefined);
+  assert.equal((await call({ op: 'voiceJoin', room: pubRoom, playerId: pub.body.state.you })).code, 400);
+});
+
 test('API: public games admit public players, private games admit private players only', async () => {
   const room = 'priv' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });

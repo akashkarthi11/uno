@@ -1,9 +1,22 @@
 import * as G from './_lib/game.js';
-import { readRoom, withRoom, usingRedis } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
 const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
+
+// Voice chat connects browsers directly; STUN finds the route. Add a TURN relay for strict networks by setting
+// GAME_TURN_URLS (comma separated), GAME_TURN_USER and GAME_TURN_PASS.
+const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+function iceServers() {
+  const urls = (process.env.GAME_TURN_URLS || '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (!urls.length) return STUN;
+  return [...STUN, { urls, username: process.env.GAME_TURN_USER || '', credential: process.env.GAME_TURN_PASS || '' }];
+}
+const withIce = (state) => {
+  if (state && state.canVoice) state.iceServers = iceServers();
+  return state;
+};
 
 const cleanRoom = (raw) => (/^[A-Za-z0-9_-]{1,24}$/.test(String(raw ?? '').trim()) ? String(raw).trim() : 'main');
 
@@ -44,7 +57,7 @@ export default async function handler(req, res) {
         const me = G.join(s, { name: b.name, admin, role, playerId: b.playerId }, now);
         return G.view(s, me, now);
       });
-      return res.json({ state });
+      return res.json({ state: withIce(state) });
     }
 
     if (b.op === 'state') {
@@ -55,7 +68,7 @@ export default async function handler(req, res) {
       const stale = now - me.lastSeen > G.HEARTBEAT_MS;
       if (!stale && !G.tick(structuredClone(s), now)) {
         if (b.since === s.version) return res.json({ unchanged: true });
-        return res.json({ state: G.view(s, me, now) });
+        return res.json({ state: withIce(G.view(s, me, now)) });
       }
       const result = await withRoom(code, (r) => {
         const self = r.members.find((m) => m.id === b.playerId);
@@ -64,7 +77,27 @@ export default async function handler(req, res) {
         G.tick(r, now);
         return { state: G.view(r, self, now) };
       });
+      if (result.state) withIce(result.state);
       return res.json(result);
+    }
+
+    // Voice-chat signalling: tiny messages passed between two people who are both in the voice list.
+    if (b.op === 'signal') {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      const to = s && s.members.find((m) => m.id === b.to);
+      if (!me || !to) throw new G.GameError('Not in this room.');
+      if (!G.canVoice(me) || !G.canVoice(to)) throw new G.GameError('Voice chat is for private players and the admin.');
+      const live = s.voice || [];
+      if (!live.includes(me.id) || !live.includes(to.id)) throw new G.GameError('Not in voice chat.');
+      if (!['offer', 'answer', 'ice'].includes(b.kind) || JSON.stringify(b.data ?? null).length > 8000) {
+        throw new G.GameError('Bad signal.');
+      }
+      await pushSignal(code, to.id, { from: me.id, kind: b.kind, data: b.data });
+      return res.json({ ok: true });
+    }
+    if (b.op === 'signals') {
+      return res.json({ signals: await takeSignals(code, String(b.playerId ?? '').slice(0, 64)) });
     }
 
     const state = await withRoom(code, (r) => {
@@ -78,7 +111,7 @@ export default async function handler(req, res) {
       G.act(r, me, b, now);
       return G.view(r, me, now);
     });
-    return res.json({ state });
+    return res.json({ state: withIce(state) });
   } catch (e) {
     if (e instanceof G.GameError) return res.status(400).json({ error: e.message });
     console.error(e);

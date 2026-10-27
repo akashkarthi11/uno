@@ -135,8 +135,51 @@ export function join(s, { name, admin, role, playerId }, now) {
   return p;
 }
 
+/* ---------------- lobby chat ---------------- */
+
+/** A short text or emoji message to everyone in the room (shown in the lobby). */
+function chat(s, p, raw, now) {
+  const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
+  if (!text) fail('Type a message first.');
+  if (p.lastChat && now - p.lastChat < 600) fail('Slow down a little.');
+  p.lastChat = now;
+  s.chat = [...(s.chat || []), { from: p.id, name: p.name, text, t: now }].slice(-50);
+}
+
+/* ---------------- voice chat (membership only; audio is browser-to-browser) ---------------- */
+
+/** Voice chat is for the admin and private players. */
+export const canVoice = (p) => Boolean(p.admin || p.role === 'private');
+
+function voiceJoin(s, p) {
+  if (!canVoice(p)) fail('Voice chat is for private players and the admin.');
+  s.voice = s.voice || [];
+  if (!s.voice.includes(p.id)) s.voice.push(p.id);
+}
+
+function voiceLeave(s, p) {
+  s.voice = (s.voice || []).filter((id) => id !== p.id);
+}
+
+/** Drops people from the voice list who left, went offline, were removed, or no longer qualify. */
+function cleanVoice(s, now) {
+  const before = s.voice || [];
+  const keep = before.filter((id) => {
+    const m = byId(s, id);
+    return m && canVoice(m) && online(m, now);
+  });
+  if (keep.length === before.length) return false;
+  s.voice = keep;
+  return true;
+}
+
 /** Housekeeping run at the start of every request. Returns true if it changed the room. */
 export function tick(s, now) {
+  const voiceChanged = cleanVoice(s, now);
+  return tickGame(s, now) || voiceChanged;
+}
+
+function tickGame(s, now) {
   if (!s.started) {
     const before = s.members.length;
     s.members = s.members.filter((m) => now - m.lastSeen < PRUNE_MS);
@@ -176,6 +219,9 @@ export function act(s, me, b, now) {
     case 'uno': return sayUno(s, me);
     case 'lobby': return toLobby(s, me);
     case 'private': return setPrivate(s, me, b.on === true, now);
+    case 'chat': return chat(s, me, b.text, now);
+    case 'voiceJoin': return voiceJoin(s, me);
+    case 'voiceLeave': return voiceLeave(s, me);
     case 'kick': return kick(s, me, String(b.targetId ?? ''), now);
     default: return fail('Unknown action.');
   }
@@ -247,6 +293,7 @@ function kick(s, admin, targetId, now) {
 
 /** Takes a player out of the room, lobby or mid-game. Their cards go back into the draw pile. */
 function removeMember(s, t, now) {
+  s.voice = (s.voice || []).filter((id) => id !== t.id);
   const idx = s.seats.indexOf(t.id);
   if (s.started && !s.over && idx !== -1) {
     s.deck.unshift(...t.hand); // bottom of the pile (cards are drawn from the end)
@@ -458,6 +505,9 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     log: s.log,
+    chat: s.started ? [] : (s.chat || []).slice(-30), // chat is a lobby feature
+    canVoice: canVoice(me),
+    voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };
   if (!s.started) return out;
   const myTurn = !s.over && s.seats[s.cur] === me.id;

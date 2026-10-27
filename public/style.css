@@ -81,6 +81,31 @@ button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 
 main { max-width: 1040px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
 
+/* ---------- lobby chat ---------- */
+#chat { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+#chatLog {
+  height: 180px; overflow-y: auto; background: var(--surface-soft); border: 1px solid var(--line);
+  border-radius: 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 14px;
+}
+#chatLog .empty { color: var(--faint); text-align: center; margin: auto; }
+#chatLog .msg { display: flex; gap: 8px; align-items: flex-start; animation: rise .2s ease; }
+#chatLog .msg .avatar { width: 26px; height: 26px; font-size: 10px; border-width: 2px; flex: 0 0 auto; }
+#chatLog .msg .bubble { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 10px; word-break: break-word; }
+#chatLog .msg.mine { flex-direction: row-reverse; }
+#chatLog .msg.mine .bubble { background: var(--brand-soft); border-color: var(--brand-line); }
+#chatLog .msg .who { display: block; font-size: 11px; color: var(--muted); font-weight: 700; }
+#chatLog .msg.big .bubble { font-size: 26px; line-height: 1.2; padding: 2px 10px; }
+#emojiBar { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; }
+#emojiBar button { padding: 4px 8px; font-size: 20px; background: var(--surface); border: 1px solid var(--line); box-shadow: none; border-radius: 10px; }
+#chatForm { display: flex; gap: 8px; }
+#chatForm input { flex: 1; min-width: 0; }
+
+/* ---------- voice chat ---------- */
+#voiceBtn.on { background: var(--green); color: #fff; border-color: transparent; }
+#voiceBtn.speaking, #muteBtn.speaking { box-shadow: 0 0 0 3px rgba(18,183,106,.45); }
+.opp.speaking { border-color: var(--green); box-shadow: 0 0 0 4px rgba(18,183,106,.25), var(--shadow); }
+#lobbyPlayers li.speaking { border-color: var(--green); box-shadow: 0 0 0 3px rgba(18,183,106,.2); }
+
 /* ---------- turn timer ---------- */
 #turnBar { position: relative; height: 32px; border-radius: 999px; background: var(--line-2); border: 1px solid var(--line); overflow: hidden; margin-top: 4px; display: flex; align-items: center; justify-content: center; }
 #turnFill { position: absolute; inset: 0 auto 0 0; width: 100%; background: var(--brand-grad); transition: width .25s linear, background .25s; }

@@ -60,6 +60,7 @@ function apply(data) {
     playerId = state.you;
     store("uno-id-" + room, playerId);
     render();
+    if (typeof voiceSync === "function") voiceSync(state);
   }
 }
 
@@ -94,6 +95,7 @@ let removed = false;
 
 function removedByAdmin() {
   removed = true;
+  if (typeof voiceStopLocal === "function") voiceStopLocal();
   state = null;
   playerId = null;
   store("uno-id-" + room, "");
@@ -196,6 +198,7 @@ function renderLobby(s) {
   ul.innerHTML = "";
   for (const p of s.players) {
     const li = document.createElement("li");
+    li.dataset.pid = p.id;
     const av = document.createElement("span");
     av.className = "avatar";
     paintAvatar(av, p.name);
@@ -218,6 +221,7 @@ function renderLobby(s) {
     }
     ul.appendChild(li);
   }
+  renderChat(s);
   const isHost = s.you === s.host;
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
@@ -246,6 +250,7 @@ function renderGame(s) {
         p.count + " card" + (p.count === 1 ? "" : "s") + (p.count === 1 ? ' <span class="uno-tag">GrowX!</span>' : "")) +
       (p.connected ? "" : " · offline") + "</div>";
     d.querySelector(".name").textContent = p.name;
+    d.dataset.pid = p.id;
     paintAvatar(d.querySelector(".avatar"), p.name);
     if (s.admin && !s.over) {
       const x = document.createElement("button");
@@ -391,6 +396,64 @@ function setTurnTheme(color, tint) {
   }
 }
 setInterval(updateTimer, 250);
+
+/* ---------- lobby chat ---------- */
+
+const EMOJIS = ["😀", "😂", "😎", "👍", "👏", "🔥", "🎉", "🙌", "❤️", "😮", "😭", "🤝"];
+let chatSig = "";
+
+function isEmojiOnly(text) {
+  return text.length <= 8 && !/[A-Za-z0-9]/.test(text);
+}
+
+function renderChat(s) {
+  const msgs = s.chat || [];
+  const sig = msgs.length + ":" + (msgs.length ? msgs[msgs.length - 1].t : 0);
+  if (sig === chatSig) return; // nothing new: leave the scroll position alone
+  chatSig = sig;
+  const log = $("chatLog");
+  log.innerHTML = "";
+  if (!msgs.length) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = "No messages yet — say hi 👋";
+    log.appendChild(e);
+    return;
+  }
+  for (const m of msgs) {
+    const row = document.createElement("div");
+    row.className = "msg" + (m.from === s.you ? " mine" : "") + (isEmojiOnly(m.text) ? " big" : "");
+    const av = document.createElement("span");
+    av.className = "avatar";
+    paintAvatar(av, m.name);
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = m.from === s.you ? "You" : m.name;
+    bubble.append(who, document.createTextNode(m.text));
+    row.append(av, bubble);
+    log.appendChild(row);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+EMOJIS.forEach((e) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = e;
+  b.title = "Send " + e;
+  b.addEventListener("click", () => send({ op: "chat", text: e }));
+  $("emojiBar").appendChild(b);
+});
+
+$("chatForm").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const text = $("chatInput").value.trim();
+  if (!text) return;
+  $("chatInput").value = "";
+  send({ op: "chat", text });
+});
 
 /* ---------- small visual helpers ---------- */
 
