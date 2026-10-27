@@ -2,7 +2,9 @@
 
 const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4", again: "🔁", sweep: "🧹", blast: "💥", swap: "🔄", gift: "🎁", master: "✨" };
 const SUPER = new Set(["again", "sweep", "blast", "swap", "gift", "master"]); // super cards get a golden look
-const POLL_MS = 1500;
+const POLL_MS = 1500; // lobby / results screen
+const POLL_GAME_MS = 1000; // while a game is running
+const POLL_HIDDEN_MS = 4000; // tab not visible (still well inside the 20 s "online" window)
 const REQUEST_TIMEOUT_MS = 8000;
 const HEARTBEAT_MS = 8000;
 const $ = (id) => document.getElementById(id);
@@ -62,7 +64,8 @@ function apply(data) {
     playerId = state.you;
     store("uno-id-" + room, playerId);
     render();
-    if (typeof voiceSync === "function") voiceSync(state);
+    if (state.canVoice) ensureVoice().then(() => voiceSync(state)).catch(() => {});
+    else if (typeof voiceSync === "function") voiceSync(state); // lets a loaded voice.js hang up if access was lost
   }
 }
 
@@ -134,25 +137,67 @@ function startPolling() {
   polling = true;
   const tick = async () => {
     await pollOnce(); // never throws
-    setTimeout(tick, POLL_MS);
+    setTimeout(tick, pollDelay());
   };
-  setTimeout(tick, POLL_MS);
+  setTimeout(tick, pollDelay());
   // Background tabs throttle timers; catch up the moment the player looks again.
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pollOnce(); });
   window.addEventListener("focus", pollOnce);
   window.addEventListener("online", pollOnce);
 }
 
-async function send(body) {
+/** Poll faster while a game is running (that is when waiting for someone's move is felt), slower in a hidden tab. */
+function pollDelay() {
+  if (document.hidden) return POLL_HIDDEN_MS;
+  return state && state.started && !state.over && !state.paused ? POLL_GAME_MS : POLL_MS;
+}
+
+async function send(body, onFail) {
+  if (busy) return; // ignore a second click while the first action is still on its way
   busy = true;
   try {
     apply(await api(body));
   } catch (e) {
+    if (onFail) onFail(); // undo any instant (optimistic) screen update
     if (/removed by the admin/.test(e.message)) removedByAdmin();
     else toast(e.message);
   } finally {
     busy = false;
   }
+}
+
+/** Playing a plain card: show it on the pile at once; the server's reply (about a third of a second later) replaces it. */
+function playNow(card) {
+  const before = state;
+  state = {
+    ...state,
+    hand: state.hand.filter((c) => c.id !== card.id),
+    top: card,
+    color: card.color,
+    playable: [],
+    pending: true, // cleared when the server's reply arrives
+  };
+  render();
+  send({ op: "play", cardId: card.id }, () => {
+    state = before; // the server refused it: put everything back
+    render();
+  });
+}
+
+/** voice.js is only needed by the admin and private players, so it is fetched on demand. */
+let voiceLoading = null;
+function ensureVoice() {
+  if (typeof voiceSync === "function") return Promise.resolve();
+  if (!voiceLoading) {
+    voiceLoading = new Promise((resolve, reject) => {
+      const el = document.createElement("script");
+      el.src = "voice.js";
+      el.onload = resolve;
+      el.onerror = () => { voiceLoading = null; reject(new Error("voice.js failed to load")); };
+      document.head.appendChild(el);
+    });
+  }
+  return voiceLoading;
 }
 
 function removePlayer(p) {
@@ -308,7 +353,8 @@ function renderGame(s) {
   updateTimer();
 
   let msg;
-  if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
+  if (s.pending) msg = "Playing…";
+  else if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
   else if (s.over) msg = "Game over.";
   else if (s.paused) msg = "⏸ Paused by the admin — hang tight.";
   else if (me && me.finished) msg = "You're out (#" + (s.ranking.indexOf(me.name) + 1) + ")! Watching the rest play…";
@@ -591,7 +637,7 @@ function onCard(card) {
     pendingWild = card;
     $("colorModal").classList.remove("hidden");
   } else {
-    send({ op: "play", cardId: card.id });
+    playNow(card);
   }
 }
 
