@@ -2,6 +2,7 @@
 
 const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4" };
 const POLL_MS = 1500;
+const REQUEST_TIMEOUT_MS = 8000;
 const HEARTBEAT_MS = 8000;
 const $ = (id) => document.getElementById(id);
 
@@ -26,11 +27,21 @@ function store(key, value) {
 /* ---------- server calls ---------- */
 
 async function api(body) {
-  const r = await fetch("/api/game", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ room, playerId, ...body }),
-  });
+  // A request that hangs must not freeze the game, so every call has a timeout.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+  let r;
+  try {
+    r = await fetch("/api/game", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room, playerId, ...body }),
+      cache: "no-store",
+      signal: ctl.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   let data = {};
   try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
   if (!r.ok) {
@@ -43,6 +54,8 @@ async function api(body) {
 
 function apply(data) {
   if (data.state) {
+    // Responses can arrive out of order; never replace newer state with older.
+    if (state && data.state.you === state.you && data.state.version < state.version) return;
     state = data.state;
     playerId = state.you;
     store("uno-id-" + room, playerId);
@@ -74,29 +87,42 @@ async function join() {
   startPolling();
 }
 
+let inFlight = false;
+let lastOk = Date.now();
+
+async function pollOnce() {
+  if (busy || inFlight) return;
+  inFlight = true;
+  try {
+    const data = await api({ op: "state", since: state ? state.version : undefined });
+    if (data.gone) {
+      // The table forgot us (idle too long) — quietly rejoin with the same password.
+      playerId = null;
+      state = null;
+      apply(await api({ op: "join", name: myName, password: myPassword }));
+    } else if (!data.unchanged) {
+      apply(data);
+    }
+    lastOk = Date.now();
+  } catch (e) {
+    if (Date.now() - lastOk > HEARTBEAT_MS) toast("Connection problem — retrying…");
+  } finally {
+    inFlight = false;
+  }
+}
+
 function startPolling() {
   if (polling) return;
   polling = true;
-  let lastBeat = Date.now();
-  const loop = async () => {
-    if (!busy) {
-      try {
-        const data = await api({ op: "state", since: state ? state.version : undefined });
-        if (data.gone) {
-          // The table forgot us (idle too long) — quietly rejoin with the same password.
-          playerId = null;
-          apply(await api({ op: "join", name: myName, password: myPassword }));
-        } else if (!data.unchanged) {
-          apply(data);
-        }
-        lastBeat = Date.now();
-      } catch (e) {
-        if (Date.now() - lastBeat > HEARTBEAT_MS) toast("Connection problem — retrying…");
-      }
-    }
-    setTimeout(loop, POLL_MS);
+  const tick = async () => {
+    await pollOnce(); // never throws
+    setTimeout(tick, POLL_MS);
   };
-  setTimeout(loop, POLL_MS);
+  setTimeout(tick, POLL_MS);
+  // Background tabs throttle timers; catch up the moment the player looks again.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollOnce(); });
+  window.addEventListener("focus", pollOnce);
+  window.addEventListener("online", pollOnce);
 }
 
 async function send(body) {
