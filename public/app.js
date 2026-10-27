@@ -358,52 +358,37 @@ function renderGame(s) {
 
 let turn = null; // { deadline, total, mine, name } while a game is running
 
+// The countdown never relies on colour: the bar shrinks, the number counts down, and the last seconds pulse
+// (plus one short vibration on phones), so it works for colour-blind players and isn't a screen-wide flash.
+const URGENT_SECS = 10;
+const BUZZ_SECS = 5;
+let buzzed = false;
+
 function updateTimer() {
   const bar = $("turnBar");
-  const root = document.documentElement;
   if (!turn) {
-    bar.classList.add("hidden");
-    setTurnTheme(null);
+    bar.classList.add("hidden", "urgent");
+    buzzed = false;
     return;
   }
   const left = turn.paused ? turn.frozen : Math.max(0, turn.deadline - Date.now());
   const frac = Math.min(1, left / turn.total);
   const secs = Math.ceil(left / 1000);
-  const fill = $("turnFill");
   bar.classList.remove("hidden");
-  fill.style.width = frac * 100 + "%";
-  if (turn.paused) {
-    fill.style.background = "#98a2b3"; // frozen: grey, no green-to-red frame
-    setTurnTheme(null);
-    $("turnText").textContent = "⏸ Paused · " + secs + "s left";
-  } else if (turn.mine) {
-    const hue = Math.round(120 * frac); // 120 = green ... 0 = red
-    const color = "hsl(" + hue + ", 78%, 42%)";
-    fill.style.background = color;
-    setTurnTheme(color, "hsla(" + hue + ", 78%, 42%, 0.12)");
-    $("turnText").textContent = "Your turn · " + secs + "s";
-  } else {
-    fill.style.background = "";
-    setTurnTheme(null);
-    $("turnText").textContent = turn.name + "'s turn · " + secs + "s";
-  }
-}
+  $("turnFill").style.width = frac * 100 + "%";
+  $("turnFill").style.background = turn.paused ? "#98a2b3" : ""; // grey while frozen, brand purple otherwise
 
-/** Colours the screen frame, status bar, and the phone's browser bar; null restores the normal theme. */
-function setTurnTheme(color, tint) {
-  const root = document.documentElement;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (color) {
-    root.style.setProperty("--turn-color", color);
-    root.style.setProperty("--turn-tint", tint);
-    $("turnFrame").classList.remove("hidden");
-    if (meta) meta.setAttribute("content", color);
-  } else {
-    root.style.removeProperty("--turn-color");
-    root.style.removeProperty("--turn-tint");
-    $("turnFrame").classList.add("hidden");
-    if (meta) meta.setAttribute("content", "#7c5cff");
+  const urgent = turn.mine && !turn.paused && secs <= URGENT_SECS;
+  bar.classList.toggle("urgent", urgent);
+  if (turn.paused) $("turnText").textContent = "⏸ Paused · " + secs + "s left";
+  else if (turn.mine) $("turnText").textContent = (urgent ? "⏰ Hurry! " : "Your turn · ") + secs + "s";
+  else $("turnText").textContent = turn.name + "'s turn · " + secs + "s";
+
+  if (turn.mine && !turn.paused && secs <= BUZZ_SECS && secs > 0 && !buzzed) {
+    buzzed = true;
+    if (navigator.vibrate) navigator.vibrate(150);
   }
+  if (!turn.mine || secs > URGENT_SECS) buzzed = false;
 }
 setInterval(updateTimer, 250);
 
