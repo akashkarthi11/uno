@@ -8,6 +8,17 @@
   --green: #12b76a; --amber: #f79009; --red: #f04438; --blue: #2f6bff;
   --card-yellow: #f5b800;
   --red-soft: #fdeceb; --red-ink: #b42318;
+  /* ---- theme tokens: the admin picks the theme in the lobby (html[data-theme]); these are the default GrowX values ---- */
+  --card-red: #f04438; --card-green: #12b76a; --card-blue: #2f6bff;
+  --num-red: #f04438; --num-yellow: #a67c00; --num-green: #087443; --num-blue: #2f6bff;
+  --card-back: linear-gradient(135deg, #7c5cff, #2f6bff); --card-back-oval: rgba(255,255,255,.16); --card-back-text: #fff;
+  --card-border: #fff; --card-num-style: normal; --card-num-weight: 800;
+  --stack-1: #5a45c9; --stack-2: #4a38b0; --stack-3: #3b2d94;
+  --page-bg: radial-gradient(900px 500px at 15% -10%, rgba(124,92,255,.14), transparent 60%), radial-gradient(800px 500px at 100% 0%, rgba(47,107,255,.12), transparent 55%), var(--canvas);
+  --header-bg: rgba(255,255,255,.8);
+  --table-bg: radial-gradient(ellipse at center, rgba(124,92,255,.16), rgba(124,92,255,0) 65%), linear-gradient(135deg, #f7f4ff, #eef3ff);
+  --table-border: var(--brand-line); --table-inset: rgba(124,92,255,.08);
+  --label: #344054; --banner-bg: #0f172a;
   --radius: 18px; --radius-sm: 12px;
   --shadow: 0 6px 24px rgba(16, 24, 40, 0.06);
   --shadow-lg: 0 24px 60px rgba(16, 24, 40, 0.18);
@@ -18,10 +29,7 @@
 .hidden { display: none !important; }
 body {
   margin: 0; min-height: 100vh; color: var(--ink); font-family: var(--font); line-height: 1.5; -webkit-font-smoothing: antialiased;
-  background:
-    radial-gradient(900px 500px at 15% -10%, rgba(124,92,255,.14), transparent 60%),
-    radial-gradient(800px 500px at 100% 0%, rgba(47,107,255,.12), transparent 55%),
-    var(--canvas);
+  background: var(--page-bg);
 }
 /* sign-in screen uses the wireframe's dark auth gradient */
 body:has(#joinScreen:not(.hidden)) { background: var(--auth-grad); }
@@ -31,7 +39,7 @@ body:has(#joinScreen:not(.hidden)) h1 { color: #fff; }
 
 header {
   display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
-  padding: 12px 24px; background: rgba(255,255,255,.8); backdrop-filter: blur(10px);
+  padding: 12px 24px; background: var(--header-bg); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5;
 }
 h1 { margin: 0; font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; letter-spacing: -.2px; }
@@ -62,7 +70,7 @@ button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
   display: flex; flex-direction: column; gap: 14px; animation: rise .35s ease;
 }
 .center-box h2 { margin: 0; font-size: 22px; letter-spacing: -.3px; }
-.center-box label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: #344054; }
+.center-box label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--label); }
 .hint { font-size: 13px; color: var(--muted); margin: 0; font-weight: 400; }
 #lobbyPlayers { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 #lobbyPlayers li {
@@ -125,7 +133,7 @@ main { max-width: 1040px; margin: 0 auto; padding: 16px; display: flex; flex-dir
 
 #updateBanner {
   position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 80; display: flex; gap: 10px; align-items: center;
-  background: var(--ink); color: #fff; padding: 8px 8px 8px 16px; border-radius: 999px; box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600;
+  background: var(--banner-bg); color: #fff; padding: 8px 8px 8px 16px; border-radius: 999px; box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600;
 }
 #updateBanner button { padding: 6px 14px; }
 #pausedBanner {
@@ -154,8 +162,8 @@ main { max-width: 1040px; margin: 0 auto; padding: 16px; display: flex; flex-dir
 .opp .name { font-weight: 700; font-size: 14px; }
 .opp .mini { display: flex; justify-content: center; margin-top: 6px; min-height: 40px; }
 .opp .mini span {
-  width: 22px; height: 34px; margin-left: -12px; border-radius: 5px; border: 2px solid #fff;
-  background: var(--brand-grad); box-shadow: 0 2px 5px rgba(16,24,40,.3);
+  width: 22px; height: 34px; margin-left: -12px; border-radius: 5px; border: 2px solid var(--card-border);
+  background: var(--card-back); box-shadow: 0 2px 5px rgba(16,24,40,.3);
 }
 .opp .mini span:nth-child(odd) { transform: rotate(-4deg); } .opp .mini span:nth-child(even) { transform: rotate(4deg); }
 .opp .mini span:first-child { margin-left: 0; }
@@ -172,8 +180,8 @@ button.kick {
 /* ---------- table ---------- */
 #table {
   position: relative; display: flex; justify-content: center; align-items: center; gap: 56px; padding: 26px 18px;
-  background: radial-gradient(ellipse at center, rgba(124,92,255,.16), rgba(124,92,255,0) 65%), linear-gradient(135deg, #f7f4ff, #eef3ff);
-  border: 1px solid var(--brand-line); border-radius: 28px; box-shadow: inset 0 2px 12px rgba(124,92,255,.08), var(--shadow);
+  background: var(--table-bg);
+  border: 1px solid var(--table-border); border-radius: 28px; box-shadow: inset 0 2px 12px var(--table-inset), var(--shadow);
 }
 .pile { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .pile small { color: var(--muted); font-weight: 600; }
@@ -190,7 +198,7 @@ button.kick {
   animation: spin 6s linear infinite;
 }
 #drawPile {
-  box-shadow: 3px 3px 0 -1px #5a45c9, 6px 6px 0 -2px #4a38b0, 9px 9px 0 -3px #3b2d94, 0 12px 20px rgba(16,24,40,.25);
+  box-shadow: 3px 3px 0 -1px var(--stack-1), 6px 6px 0 -2px var(--stack-2), 9px 9px 0 -3px var(--stack-3), 0 12px 20px rgba(16,24,40,.25);
   transition: transform .15s;
 }
 #drawPile:hover { transform: translateY(-3px); }
@@ -199,9 +207,9 @@ button.kick {
 
 /* ---------- cards ---------- */
 .card {
-  width: 86px; height: 128px; border-radius: 14px; border: 5px solid #fff; position: relative; overflow: hidden;
+  width: 86px; height: 128px; border-radius: 14px; border: 5px solid var(--card-border); position: relative; overflow: hidden;
   display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  font-weight: 800; font-size: 36px; color: #fff; user-select: none;
+  font-weight: var(--card-num-weight); font-style: var(--card-num-style); font-size: 36px; color: #fff; user-select: none;
   box-shadow: 0 6px 16px rgba(16,24,40,.28);
 }
 .card::before { content: ""; position: absolute; inset: 14px 5px; background: rgba(255,255,255,.95); border-radius: 50%; transform: rotate(32deg); box-shadow: inset 0 0 0 3px rgba(0,0,0,.06); }
@@ -209,14 +217,14 @@ button.kick {
 .card .v { position: relative; z-index: 1; text-shadow: 0 1px 0 rgba(0,0,0,.12); }
 .card .c { position: absolute; font-size: 14px; z-index: 1; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
 .card .c.tl { top: 5px; left: 7px; } .card .c.br { bottom: 5px; right: 7px; transform: rotate(180deg); }
-.card.red { background: var(--red); } .card.yellow { background: var(--card-yellow); }
-.card.green { background: var(--green); } .card.blue { background: var(--blue); }
-.card.wild { background: conic-gradient(var(--red) 0 25%, var(--blue) 0 50%, var(--green) 0 75%, var(--card-yellow) 0); }
-.card.red .v { color: var(--red); } .card.yellow .v { color: #a67c00; }
-.card.green .v { color: #087443; } .card.blue .v { color: var(--blue); } .card.wild .v { color: var(--ink); }
-.card.back { background: var(--brand-grad); cursor: pointer; }
-.card.back::before { background: rgba(255,255,255,.16); box-shadow: none; }
-.card.back span { position: relative; z-index: 1; font-size: 17px; letter-spacing: .5px; transform: rotate(-20deg); text-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.card.red { background: var(--card-red); } .card.yellow { background: var(--card-yellow); }
+.card.green { background: var(--card-green); } .card.blue { background: var(--card-blue); }
+.card.wild { background: conic-gradient(var(--card-red) 0 25%, var(--card-blue) 0 50%, var(--card-green) 0 75%, var(--card-yellow) 0); }
+.card.red .v { color: var(--num-red); } .card.yellow .v { color: var(--num-yellow); }
+.card.green .v { color: var(--num-green); } .card.blue .v { color: var(--num-blue); } .card.wild .v { color: #0f172a; }
+.card.back { background: var(--card-back); cursor: pointer; }
+.card.back::before { background: var(--card-back-oval); box-shadow: none; }
+.card.back span { position: relative; z-index: 1; font-size: 17px; letter-spacing: .5px; transform: rotate(-20deg); color: var(--card-back-text); font-style: var(--card-num-style); text-shadow: 0 2px 6px rgba(0,0,0,.3); }
 
 /* ---------- hand (fanned) ---------- */
 #hand { display: flex; justify-content: center; flex-wrap: wrap; padding: 22px 10px 6px; min-height: 160px; }
@@ -257,7 +265,7 @@ button.kick {
 .box h2 { margin: 0 0 8px; font-size: 24px; }
 #endText { white-space: pre-line; line-height: 1.7; margin: 8px 0 14px; max-height: 40vh; overflow-y: auto; }
 .box button + button { margin-left: 8px; }
-.box.rules { text-align: left; } .box.rules li { margin-bottom: 6px; color: #344054; }
+.box.rules { text-align: left; } .box.rules li { margin-bottom: 6px; color: var(--label); }
 .swatches { display: flex; gap: 14px; justify-content: center; margin-top: 14px; }
 .swatches button { width: 68px; height: 68px; border-radius: 50%; border: 4px solid #fff; box-shadow: var(--shadow); }
 .swatches button:hover { transform: scale(1.12); }
@@ -361,7 +369,7 @@ button.kick {
     z-index: 20; margin: 0 -8px; min-height: 0;
     flex-wrap: nowrap; overflow-x: auto; justify-content: safe center; -webkit-overflow-scrolling: touch;
     padding: 14px 10px calc(12px + env(safe-area-inset-bottom));
-    background: linear-gradient(to top, var(--canvas) 72%, rgba(246, 247, 251, 0));
+    background: linear-gradient(to top, var(--canvas) 72%, transparent);
   }
   #hand .card { margin-left: -28px; flex: 0 0 auto; }
   #hand .card:first-child { margin-left: 0; }
@@ -445,8 +453,8 @@ button.chip { cursor: pointer; }
 #sheetBody button small { font-weight: 500; color: var(--muted); }
 .swatch-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .swatch { height: 68px; border-radius: 16px; border: 3px solid #fff; box-shadow: var(--shadow); color: #fff; font-size: 17px; font-weight: 800; }
-.swatch.red { background: var(--red); } .swatch.yellow { background: var(--card-yellow); color: #5c4400; }
-.swatch.green { background: var(--green); } .swatch.blue { background: var(--blue); }
+.swatch.red { background: var(--card-red); } .swatch.yellow { background: var(--card-yellow); color: #5c4400; }
+.swatch.green { background: var(--card-green); } .swatch.blue { background: var(--card-blue); }
 #sheetPill {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 75; border-radius: 999px; padding: 10px 20px;
   box-shadow: var(--shadow-lg);
@@ -463,7 +471,7 @@ button.chip { cursor: pointer; }
 #handWrap { position: relative; }
 .hand-arrow {
   position: absolute; top: 50%; transform: translateY(-50%); z-index: 25; width: 40px; height: 40px; min-height: 0; padding: 0 0 4px;
-  border-radius: 50%; font-size: 26px; line-height: 1; background: rgba(255,255,255,.94); color: var(--ink);
+  border-radius: 50%; font-size: 26px; line-height: 1; background: var(--surface); color: var(--ink);
   border: 1px solid var(--line); box-shadow: var(--shadow-lg);
 }
 #handLeft { left: 4px; } #handRight { right: 4px; }
@@ -505,3 +513,70 @@ button.chip { cursor: pointer; }
   .actions button { min-height: 32px; padding: 4px 8px; font-size: 12px; }
   .pile small { display: none; }
 }
+
+/* =====================================================================================================
+   THEMES — the admin picks one in the lobby; it applies to everyone at the table via html[data-theme].
+   GrowX (default) is the :root values above. "Classic" is a bold four-colour card look on a green felt
+   table (no brand logo or name); "Midnight" is a dark mode.
+   ===================================================================================================== */
+
+/* ---------- Classic: bold primary colours, black card backs, green felt ---------- */
+html[data-theme="classic"] {
+  --card-red: #ed1c24; --card-yellow: #ffde16; --card-green: #50aa44; --card-blue: #0072bc;
+  --num-red: #ed1c24; --num-yellow: #d9a600; --num-green: #3b8d30; --num-blue: #0072bc;
+  --card-back: #141414; --card-back-oval: #ed1c24; --card-back-text: #ffde16;
+  --card-border: #fff; --card-num-style: italic; --card-num-weight: 900;
+  --stack-1: #2a2a2a; --stack-2: #1c1c1c; --stack-3: #111;
+  --canvas: #0e3f25; --ink: #1c1b17; --muted: #5d5a50; --faint: #8a8572; --line: #e6d9bd; --line-2: #f2e8d0;
+  --surface: #fffaf0; --surface-soft: #fff4de; --label: #3a372e;
+  --brand: #ed1c24; --brand-2: #ff5a5f; --brand-ink: #b3121a; --brand-soft: #fde8e9; --brand-line: #f4b9bc;
+  --brand-grad: linear-gradient(135deg, #ed1c24, #b3121a);
+  --shadow-brand: 0 6px 16px rgba(237,28,36,.38);
+  --page-bg: radial-gradient(1200px 800px at 50% 25%, #1f7a45 0%, #0e3f25 62%, #08301b 100%);
+  --header-bg: rgba(6,40,22,.88);
+  --table-bg: radial-gradient(ellipse at center, #23874c 0%, #14683a 55%, #0e5030 100%);
+  --table-border: #07301b; --table-inset: rgba(0,0,0,.35);
+  --banner-bg: #1c1b17;
+  --font: "Arial Rounded MT Bold", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+}
+html[data-theme="classic"] header h1, html[data-theme="classic"] #roomInfo { color: #fff; }
+html[data-theme="classic"] #roomInfo b { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.32); }
+html[data-theme="classic"] header button.ghost { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.3); }
+html[data-theme="classic"] .pile small { color: #d7f0df; }
+html[data-theme="classic"] #dirInfo { color: #ffde16; opacity: .8; }
+html[data-theme="classic"] #turnBar { background: rgba(0,0,0,.28); border-color: rgba(255,255,255,.2); }
+html[data-theme="classic"] .card.back::before { box-shadow: inset 0 0 0 3px #fff; }
+html[data-theme="classic"] .card.back span { font-weight: 900; letter-spacing: 1px; text-shadow: 0 2px 0 rgba(0,0,0,.55); }
+html[data-theme="classic"] .opp { border-color: rgba(255,255,255,.55); }
+html[data-theme="classic"] #hand { background-blend-mode: normal; }
+
+/* ---------- Midnight: dark mode ---------- */
+html[data-theme="midnight"] {
+  --ink: #e7eaf3; --muted: #a4adc0; --faint: #8a93a8; --line: #272d42; --line-2: #1f2537; --canvas: #0c0f1c;
+  --surface: #141a2b; --surface-soft: #181e31; --label: #c6ccda;
+  --brand: #9b82ff; --brand-2: #b6a3ff; --brand-ink: #cdc2ff; --brand-soft: #241f45; --brand-line: #3a3170;
+  --red-soft: #3a1d1f; --red-ink: #ff9a92;
+  --shadow: 0 6px 24px rgba(0,0,0,.4); --shadow-lg: 0 24px 60px rgba(0,0,0,.6);
+  --page-bg: radial-gradient(900px 500px at 15% -10%, rgba(155,130,255,.16), transparent 60%), radial-gradient(800px 500px at 100% 0%, rgba(47,107,255,.14), transparent 55%), #0c0f1c;
+  --header-bg: rgba(12,15,28,.85);
+  --table-bg: radial-gradient(ellipse at center, rgba(155,130,255,.2), rgba(155,130,255,0) 65%), linear-gradient(135deg, #171c33, #10142a);
+  --table-border: #2b3262; --table-inset: rgba(0,0,0,.4);
+  --banner-bg: #e7eaf3;
+}
+html[data-theme="midnight"] #updateBanner { color: #0c0f1c; }
+html[data-theme="midnight"] .card { box-shadow: 0 6px 18px rgba(0,0,0,.55); }
+html[data-theme="midnight"] .center-box, html[data-theme="midnight"] .box { border-color: var(--line); }
+html[data-theme="midnight"] #turnText { background: rgba(255,255,255,.16); }
+html[data-theme="midnight"] .opp .avatar, html[data-theme="midnight"] .avatar { border-color: #141a2b; }
+
+/* ---------- the theme picker in the lobby settings ---------- */
+#themeList { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.theme-opt {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 6px; min-height: 0; border-radius: 14px; text-align: center;
+  background: var(--surface); color: var(--ink); border: 2px solid var(--line); box-shadow: none; font-size: 13px; font-weight: 700;
+}
+.theme-opt[aria-pressed="true"] { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.theme-opt:disabled { opacity: 1; cursor: default; }
+.theme-opt .sw { display: flex; width: 100%; height: 34px; border-radius: 9px; overflow: hidden; border: 1px solid rgba(0,0,0,.12); }
+.theme-opt .sw i { flex: 1; }
+.theme-opt small { font-weight: 500; color: var(--muted); font-size: 11px; }

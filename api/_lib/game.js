@@ -57,6 +57,9 @@ function cleanName(raw) {
 
 /** The six super-card kinds the admin can switch on or off in the lobby (all on by default). */
 export const SUPER_KINDS = ['again', 'sweep', 'blast', 'swap', 'gift', 'master'];
+/** Table looks the admin can choose from (the first is the default). The styling itself lives in the page's CSS. */
+export const THEMES = ['growx', 'classic', 'midnight'];
+const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
 const superSettings = (s) => Object.fromEntries(SUPER_KINDS.map((k) => [k, superOn(s, k)]));
 
@@ -266,7 +269,7 @@ function dispatch(s, me, b, now) {
     case 'uno': return sayUno(s, me);
     case 'lobby': return toLobby(s, me);
     case 'private': return setPrivate(s, me, b.on === true, now);
-    case 'config': return setConfig(s, me, b.supers);
+    case 'config': return setConfig(s, me, b);
     case 'chat': return chat(s, me, b.text, now);
     case 'pause': return setPaused(s, me, true, now);
     case 'resume': return setPaused(s, me, false, now);
@@ -318,15 +321,21 @@ function start(s, p, now) {
 }
 
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
-function setConfig(s, p, supers) {
+function setConfig(s, p, b) {
   if (!p.admin) fail('Only the admin can do that.');
-  if (s.started && !s.over) fail('Game settings can only be changed in the lobby.');
-  if (!supers || typeof supers !== 'object') fail('Bad settings.');
+  const { supers, theme } = b || {};
+  const hasSupers = supers && typeof supers === 'object';
+  if (!hasSupers && theme === undefined) fail('Bad settings.');
+  if (theme !== undefined && !THEMES.includes(theme)) fail('Unknown theme.');
+  if (hasSupers && s.started && !s.over) fail('Game settings can only be changed in the lobby.');
   const next = superSettings(s);
-  for (const kind of SUPER_KINDS) {
-    if (typeof supers[kind] === 'boolean') next[kind] = supers[kind];
+  if (hasSupers) {
+    for (const kind of SUPER_KINDS) {
+      if (typeof supers[kind] === 'boolean') next[kind] = supers[kind];
+    }
   }
-  s.settings = { supers: next };
+  // the theme is only cosmetic, so it can be changed at any time, even during a game
+  s.settings = { supers: next, theme: theme !== undefined ? theme : themeOf(s) };
 }
 
 /**
@@ -749,7 +758,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s) },
+    settings: { supers: superSettings(s), theme: themeOf(s) },
     canVoice: canVoice(me),
     voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };

@@ -460,6 +460,32 @@ test('lobby settings: unticked super cards are not in the deck, the picker or th
   assert.ok(admin.hand.some((c) => c.value === 'again'));
 });
 
+test('table theme: GrowX by default, only the admin can change it, everyone sees it, valid names only', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false }, now);
+  assert.equal(G.view(s, b, now).settings.theme, 'growx', 'the default look is GrowX');
+  assert.deepEqual(G.THEMES, ['growx', 'classic', 'midnight']);
+
+  assert.throws(() => G.act(s, b, { op: 'config', theme: 'classic' }, now), /Only the admin/);
+  assert.throws(() => G.act(s, admin, { op: 'config', theme: 'rainbow' }, now), /Unknown theme/);
+  G.act(s, admin, { op: 'config', theme: 'classic' }, now);
+  assert.equal(G.view(s, b, now).settings.theme, 'classic', 'a player sees what the admin chose');
+  assert.equal(G.view(s, admin, now).settings.supers.sweep, true, 'changing the theme leaves the super-card ticks alone');
+
+  G.act(s, admin, { op: 'config', supers: { sweep: false } }, now); // changing ticks must not reset the theme
+  assert.equal(G.view(s, b, now).settings.theme, 'classic');
+  assert.equal(G.view(s, b, now).settings.supers.sweep, false);
+
+  G.act(s, admin, { op: 'start' }, now);
+  G.act(s, admin, { op: 'config', theme: 'midnight' }, now); // cosmetic: allowed during a game
+  assert.equal(G.view(s, b, now).settings.theme, 'midnight');
+  assert.throws(() => G.act(s, admin, { op: 'config', supers: { sweep: true } }, now), /only be changed in the lobby/, 'card ticks are still lobby-only');
+  G.act(s, admin, { op: 'lobby' }, now);
+  assert.equal(G.view(s, b, now).settings.theme, 'midnight', 'the choice is kept for the room');
+});
+
 test('lobby settings: a Master card cannot use the rule of a switched-off super card', () => {
   const { s, p, others, now } = threePlayers([
     { id: 9951, color: 'wild', value: 'master' }, { id: 9952, color: 'red', value: '5' }, { id: 9953, color: 'blue', value: '2' },

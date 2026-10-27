@@ -136,3 +136,17 @@ The server needs only **Node 20+** (no `npm install`, no internet). Rooms are ke
 
 Notes: the game, chat, emoji and all cards work offline. **Voice chat does not** over plain `http://` (browsers only allow the
 microphone on https or localhost). Bluetooth is not supported. Restarting the server clears the rooms.
+
+### Table themes (admin, lobby)
+
+The lobby settings have a **Table theme** picker. The admin's choice is stored for the room and applied to everyone at
+the table, including players who join later. It is cosmetic, so it can be changed at any time, even mid-game.
+
+| Theme | Look |
+|---|---|
+| **GrowX** (default) | the light GrowX wireframe look: purple/blue accents, white panels |
+| **Classic** | bold red / yellow / green / blue cards, black card backs with a red oval, green felt table (no brand logo or name) |
+| **Midnight** | dark mode with the purple glow |
+
+Themes are plain CSS variables (`html[data-theme="…"]` in `public/style.css`), so adding another one is one CSS block, a
+name in `THEMES` (`api/_lib/game.js`) and an entry in `THEME_INFO` (`public/app.js`).

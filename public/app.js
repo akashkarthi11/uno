@@ -163,6 +163,7 @@ let removed = false;
 
 function removedByAdmin() {
   removed = true;
+  applyTheme("growx"); // back on the sign-in screen: default look
   document.body.classList.remove("in-game");
   resetScreenCaches();
   if (typeof voiceStopLocal === "function") voiceStopLocal();
@@ -311,6 +312,7 @@ function render() {
   if (!state) return;
   const s = state;
   $("privateChip").classList.toggle("hidden", !s.private);
+  applyTheme(s.settings && s.settings.theme); // every update carries the room's theme, so a change shows for everyone
   const inGame = s.started;
   // the sheet is only useful while it is still your turn and the card is still in your hand
   if (sheet && !(s.started && !s.over && !s.paused && s.cur === s.you && s.hand.some((c) => c.id === sheet.card.id))) closeSheet();
@@ -748,7 +750,53 @@ function sendSupers(next) {
   send({ op: "config", supers: next });
 }
 
+/* ---------- table themes: the admin chooses, everyone at the table sees it ---------- */
+
+const THEME_INFO = [
+  { k: "growx", name: "GrowX", note: "default", colors: ["#f04438", "#f5b800", "#12b76a", "#2f6bff"], meta: "#7c5cff" },
+  { k: "classic", name: "Classic", note: "felt table", colors: ["#ed1c24", "#ffde16", "#50aa44", "#0072bc"], meta: "#0e3f25" },
+  { k: "midnight", name: "Midnight", note: "dark mode", colors: ["#2b3262", "#9b82ff", "#10142a", "#e7eaf3"], meta: "#0c0f1c" },
+];
+
+/** Puts the room's theme on the page (the CSS does the rest) and tints the phone's browser bar to match. */
+function applyTheme(key) {
+  const info = THEME_INFO.find((t) => t.k === key) || THEME_INFO[0];
+  document.documentElement.dataset.theme = info.k;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", info.meta);
+}
+
+function renderThemePicker(s) {
+  const list = $("themeList");
+  const current = (s.settings && s.settings.theme) || "growx";
+  if (!list.children.length) {
+    for (const t of THEME_INFO) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "theme-opt";
+      b.dataset.k = t.k;
+      b.innerHTML = '<span class="sw">' + t.colors.map((c) => '<i style="background:' + c + '"></i>').join("") + "</span><span></span><small></small>";
+      b.children[1].textContent = t.name;
+      b.querySelector("small").textContent = t.note;
+      b.addEventListener("click", () => {
+        if (busy || !state || !state.admin || ((state.settings && state.settings.theme) || "growx") === t.k) return;
+        const before = state;
+        state = { ...state, settings: { ...state.settings, theme: t.k } }; // the new look appears at once
+        applyTheme(t.k);
+        render();
+        send({ op: "config", theme: t.k }, () => { state = before; applyTheme((before.settings && before.settings.theme) || "growx"); render(); });
+      });
+      list.appendChild(b);
+    }
+  }
+  for (const b of list.children) {
+    b.setAttribute("aria-pressed", String(b.dataset.k === current));
+    b.disabled = !s.admin; // only the admin can change it; everyone else sees what is in use
+  }
+}
+
 function renderSettings(s) {
+  renderThemePicker(s);
   const list = $("superList");
   if (!list.children.length) {
     for (const info of SUPER_INFO) {
