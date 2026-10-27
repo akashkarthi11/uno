@@ -748,7 +748,6 @@ export function view(s, me, now) {
       id: p.id, name: p.name, count: p.hand.length, finished: s.started && p.finished, connected: online(p, now),
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
-    log: s.log,
     chat: (s.chat || []).slice(-30),
     settings: { supers: superSettings(s) },
     canVoice: canVoice(me),

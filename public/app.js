@@ -412,14 +412,6 @@ function renderGame(s) {
   $("unoBtn").textContent = s.saidUno && me && me.count <= 2 ? "GrowX! ✓" : "GrowX!";
   $("unoBtn").classList.toggle("pulse", canUno && myTurn);
 
-  const log = $("log");
-  log.innerHTML = "";
-  for (const line of s.log.slice().reverse()) {
-    const d = document.createElement("div");
-    d.textContent = line;
-    log.appendChild(d);
-  }
-
   const end = $("endModal");
   if (s.over) {
     const mine = me && me.name;

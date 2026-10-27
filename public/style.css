@@ -240,12 +240,6 @@ button.kick {
 #unoBtn { background: linear-gradient(135deg, #f04438, #f79009); box-shadow: 0 6px 16px rgba(240,68,56,.35); }
 #unoBtn.pulse:not(:disabled) { animation: pulse .6s infinite alternate; }
 
-#log {
-  font-size: 13px; max-height: 120px; overflow-y: auto; background: var(--surface);
-  border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; color: var(--muted);
-}
-#log div { padding: 2px 0; border-bottom: 1px dashed var(--line-2); }
-#log div:first-child { color: var(--ink); font-weight: 600; }
 
 #toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 90;
@@ -359,7 +353,6 @@ button.kick {
   .actions button { flex: 1 1 auto; padding: 6px 10px; font-size: 13px; min-height: 36px; }
 
   /* the hand: one row you can swipe, always visible at the bottom of the screen */
-  #log { order: 4; max-height: 64px; font-size: 12px; padding: 6px 10px; }
   #hand {
     order: 5; position: sticky; bottom: 0; z-index: 20; margin: 0 -8px; min-height: 0;
     flex-wrap: nowrap; overflow-x: auto; justify-content: safe center; -webkit-overflow-scrolling: touch;
@@ -412,7 +405,6 @@ button.kick {
   .card { width: 66px; height: 99px; font-size: 28px; }
   #hand .card { margin-left: -30px; }
   #table { padding: 18px 10px; gap: 28px; }
-  #log { max-height: 88px; }
   #hand { padding-top: 18px; }
 }
 @media (max-width: 640px) and (min-height: 820px) {
