@@ -48,6 +48,7 @@
 
 <!-- game -->
 <main id="game" class="hidden">
+  <div id="pausedBanner" class="hidden">⏸ Game paused by the admin</div>
   <div id="turnBar" class="hidden"><div id="turnFill"></div><span id="turnText"></span></div>
   <section id="opponents"></section>
 
@@ -66,6 +67,7 @@
   <section id="status">
     <div id="message"></div>
     <div class="actions">
+      <button id="pauseBtn" class="ghost hidden">⏸ Pause</button>
       <button id="restartBtn" class="ghost hidden">Restart</button>
       <button id="passBtn" disabled>Pass</button>
       <button id="unoBtn" disabled>GrowX!</button>

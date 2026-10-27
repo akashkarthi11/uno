@@ -294,12 +294,16 @@ function renderGame(s) {
   }
 
   seenCards = nowSeen;
-  turn = s.over ? null : { deadline: Date.now() + s.turnLeft, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
+  turn = s.over ? null : { deadline: Date.now() + s.turnLeft, frozen: s.turnLeft, paused: s.paused, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
+  $("pausedBanner").classList.toggle("hidden", !(s.paused && !s.over));
+  $("pauseBtn").classList.toggle("hidden", !(s.admin && !s.over));
+  $("pauseBtn").textContent = s.paused ? "▶ Resume" : "⏸ Pause";
   updateTimer();
 
   let msg;
   if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
   else if (s.over) msg = "Game over.";
+  else if (s.paused) msg = "⏸ Paused by the admin — hang tight.";
   else if (me && me.finished) msg = "You're out (#" + (s.ranking.indexOf(me.name) + 1) + ")! Watching the rest play…";
   else if (myTurn && me && me.count === 2 && !s.saidUno) msg = "⚠ Press GrowX! before you play your second-to-last card — or you draw 1 extra card!";
   else if (myTurn) msg = s.drawn != null ? "You drew a playable card — play it or press Pass." : (s.playable.length ? "Your turn — play a highlighted card or draw." : "Your turn — no playable card, draw from the pile.");
@@ -311,7 +315,7 @@ function renderGame(s) {
   $("hand").classList.toggle("hidden", !s.seated);
   $("drawPile").style.cursor = s.seated ? "pointer" : "default";
   $("restartBtn").classList.toggle("hidden", !s.admin);
-  $("passBtn").disabled = !(myTurn && s.drawn != null);
+  $("passBtn").disabled = !(myTurn && s.drawn != null) || s.paused;
   // GrowX! must be pressed while you hold 2 cards, i.e. before playing the second-to-last one.
   const canUno = s.seated && !s.over && me && me.count > 0 && me.count <= 2 && !s.saidUno;
   $("unoBtn").disabled = !canUno;
@@ -362,13 +366,17 @@ function updateTimer() {
     setTurnTheme(null);
     return;
   }
-  const left = Math.max(0, turn.deadline - Date.now());
+  const left = turn.paused ? turn.frozen : Math.max(0, turn.deadline - Date.now());
   const frac = Math.min(1, left / turn.total);
   const secs = Math.ceil(left / 1000);
   const fill = $("turnFill");
   bar.classList.remove("hidden");
   fill.style.width = frac * 100 + "%";
-  if (turn.mine) {
+  if (turn.paused) {
+    fill.style.background = "#98a2b3"; // frozen: grey, no green-to-red frame
+    setTurnTheme(null);
+    $("turnText").textContent = "⏸ Paused · " + secs + "s left";
+  } else if (turn.mine) {
     const hue = Math.round(120 * frac); // 120 = green ... 0 = red
     const color = "hsl(" + hue + ", 78%, 42%)";
     fill.style.background = color;
@@ -618,6 +626,7 @@ $("drawPile").addEventListener("click", () => {
   if (state && !state.seated) return; // spectators can't draw
   send({ op: "draw" });
 });
+$("pauseBtn").addEventListener("click", () => send({ op: state && state.paused ? "resume" : "pause" }));
 $("restartBtn").addEventListener("click", () => {
   if (confirm("End this game and send everyone back to the lobby?")) send({ op: "lobby" });
 });

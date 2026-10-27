@@ -47,3 +47,8 @@ Free-tier note: each connected player costs about 1 Redis command per second, so
   directly between browsers (WebRTC); the server only passes the set-up messages, and enforces who may use it.
   It uses free Google STUN servers. Players on very strict networks may not connect; to fix that add a TURN relay
   with `GAME_TURN_URLS`, `GAME_TURN_USER` and `GAME_TURN_PASS`. Each person must allow the microphone in their browser.
+
+## Pause
+
+The admin has a **⏸ Pause / ▶ Resume** button during a game. While paused nobody can play or draw, the turn timer is
+frozen (and nothing times out), and a banner tells everyone. Resuming gives the player back the time they had left.

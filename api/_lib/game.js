@@ -189,6 +189,7 @@ function tickGame(s, now) {
     return s.members.length !== before;
   }
   if (s.over) return false;
+  if (s.paused) return false; // nothing times out or auto-plays while the admin has the game paused
   if (active(s).filter((p) => online(p, now)).length < 2) {
     s.over = true;
     s.winner = null;
@@ -238,6 +239,8 @@ function dispatch(s, me, b, now) {
     case 'lobby': return toLobby(s, me);
     case 'private': return setPrivate(s, me, b.on === true, now);
     case 'chat': return chat(s, me, b.text, now);
+    case 'pause': return setPaused(s, me, true, now);
+    case 'resume': return setPaused(s, me, false, now);
     case 'voiceJoin': return voiceJoin(s, me);
     case 'voiceLeave': return voiceLeave(s, me);
     case 'kick': return kick(s, me, String(b.targetId ?? ''), now);
@@ -279,6 +282,7 @@ function start(s, p, now) {
   s.turnAt = now;
   s.log = [];
   s.chat = []; // a new game starts with a clean chat
+  s.paused = false;
   addLog(s, `Game started with ${s.seats.length} players. First card: ${first.color} ${first.value}`);
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
 }
@@ -363,11 +367,29 @@ function toLobby(s, p) {
   s.drawnId = null;
   s.log = [];
   s.chat = []; // restart clears the chat
+  s.paused = false;
   addLog(s, 'Back in the lobby.');
+}
+
+/** Admin freezes the game (no plays, draws or timeouts); resuming gives the player back the time they had left. */
+function setPaused(s, p, on, now) {
+  if (!p.admin) fail('Only the admin can do that.');
+  if (!s.started || s.over) fail('No game running.');
+  if (on === Boolean(s.paused)) return;
+  if (on) {
+    s.paused = true;
+    s.pausedAt = now;
+    addLog(s, 'The admin paused the game.');
+  } else {
+    s.turnAt = Math.min(now, s.turnAt + (now - s.pausedAt));
+    s.paused = false;
+    addLog(s, 'The admin resumed the game.');
+  }
 }
 
 function requireTurn(s, p) {
   if (!s.started || s.over) fail('No game running.');
+  if (s.paused) fail('The game is paused by the admin.');
   if (s.seats[s.cur] !== p.id) fail('It is not your turn.');
 }
 
@@ -534,9 +556,10 @@ export function view(s, me, now) {
   return {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
-    turnMs: TURN_MS, turnLeft: s.over ? 0 : Math.max(0, TURN_MS - (now - s.turnAt)),
+    paused: Boolean(s.paused),
+    turnMs: TURN_MS, turnLeft: s.over ? 0 : Math.max(0, TURN_MS - ((s.paused ? s.pausedAt : now) - s.turnAt)),
     hand: [...me.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)),
-    playable: myTurn
+    playable: myTurn && !s.paused
       ? me.hand.filter((c) => (s.drawnId == null || c.id === s.drawnId) && playable(s, c, me)).map((c) => c.id)
       : [],
     saidUno: me.saidUno,

@@ -314,6 +314,36 @@ test('chat works during a game and is cleared when the game finishes or restarts
   assert.deepEqual(G.view(s, b, now).chat, [], 'restart clears the chat');
 });
 
+test('admin can pause and resume: no plays, no timeouts, time left is kept', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  const cur = s.members.find((m) => m.id === s.seats[s.cur]);
+
+  now += 10000; // 20s left on the clock
+  admin.lastSeen = b.lastSeen = now;
+  assert.throws(() => G.act(s, b, { op: 'pause' }, now), /Only the admin/);
+  G.act(s, admin, { op: 'pause' }, now);
+  assert.equal(G.view(s, cur, now).paused, true);
+  assert.deepEqual(G.view(s, cur, now).playable, []);
+  assert.throws(() => G.act(s, cur, { op: 'draw' }, now), /paused/);
+
+  now += 120000; // two minutes later nothing has timed out or been played
+  admin.lastSeen = b.lastSeen = now;
+  assert.equal(G.tick(s, now), false);
+  assert.equal(s.seats[s.cur], cur.id);
+  assert.ok(Math.abs(G.view(s, cur, now).turnLeft - 20000) < 50, 'the clock is frozen at 20s');
+
+  G.act(s, admin, { op: 'resume' }, now);
+  assert.equal(G.view(s, cur, now).paused, false);
+  assert.ok(Math.abs(G.view(s, cur, now).turnLeft - 20000) < 50, 'player still has 20s after resuming');
+  G.act(s, cur, { op: 'draw' }, now); // play carries on
+  G.act(s, admin, { op: 'resume' }, now); // resuming a game that is not paused is harmless
+  assert.equal(G.view(s, admin, now).paused, false);
+});
+
 test('voice chat: only admin and private players; list drops people who go offline', () => {
   const s = G.newRoom('t');
   let now = 1000;
