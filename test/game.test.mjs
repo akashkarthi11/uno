@@ -251,7 +251,10 @@ test('API: private game needs the private password; members can reconnect', asyn
   const set = await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
   assert.equal(set.body.state.private, true);
 
-  assert.equal((await call({ op: 'join', room, name: 'New', password: '123456' })).code, 401, 'player password no longer enough');
+  const refused = await call({ op: 'join', room, name: 'New', password: '123456' });
+  assert.equal(refused.code, 401, 'player password no longer enough');
+  assert.match(refused.body.error, /private.*ask the admin/i);
+  assert.equal((await call({ op: 'join', room, name: 'New', password: 'nope' })).body.error, 'Wrong password.');
   const joined = await call({ op: 'join', room, name: 'New', password: '281101' });
   assert.equal(joined.code, 200);
   const back = await call({ op: 'join', room, name: 'Early', password: '123456', playerId: early.body.state.you });

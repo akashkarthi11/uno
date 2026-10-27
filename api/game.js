@@ -33,7 +33,12 @@ export default async function handler(req, res) {
         const isPrivate = Boolean(existing && existing.private);
         const isMember = Boolean(existing && b.playerId && existing.members.some((m) => m.id === b.playerId));
         const ok = isMember ? pw === PLAYER_PASSWORD || pw === PRIVATE_PASSWORD : pw === (isPrivate ? PRIVATE_PASSWORD : PLAYER_PASSWORD);
-        if (!ok) return res.status(401).json({ error: 'Wrong password.', denied: true });
+        if (!ok) {
+          const msg = isPrivate && !isMember && pw === PLAYER_PASSWORD
+            ? 'This game is private — ask the admin to start the game and share the private password.'
+            : 'Wrong password.';
+          return res.status(401).json({ error: msg, denied: true });
+        }
       }
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
