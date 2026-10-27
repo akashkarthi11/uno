@@ -1,5 +1,13 @@
 {
   "functions": {
     "api/game.js": { "maxDuration": 10 }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "growx-cards.vercel.app" }],
+      "destination": "https://growx-mindrelax.vercel.app/$1",
+      "permanent": false
+    }
+  ]
 }
