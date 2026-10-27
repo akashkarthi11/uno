@@ -100,6 +100,23 @@ main { max-width: 1040px; margin: 0 auto; padding: 16px; display: flex; flex-dir
 #chatForm { display: flex; gap: 8px; }
 #chatForm input { flex: 1; min-width: 0; }
 
+/* chat panel during a game: a button bottom-right opens a small floating panel */
+#chatToggle {
+  position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 54px; height: 54px; padding: 0; border-radius: 50%;
+  font-size: 24px; display: flex; align-items: center; justify-content: center;
+}
+#chatBadge {
+  position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  background: var(--red); color: #fff; font-size: 12px; line-height: 20px; border: 2px solid #fff;
+}
+#chatDock {
+  position: fixed; right: 16px; bottom: 80px; z-index: 60; width: min(360px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 12px; box-shadow: var(--shadow-lg);
+  animation: rise .2s ease;
+}
+#chatDock #chatLog { height: 220px; }
+#chatDock #chat { border-top: 0; padding-top: 0; }
+
 /* ---------- voice chat ---------- */
 #voiceBtn.on { background: var(--green); color: #fff; border-color: transparent; }
 #voiceBtn.speaking, #muteBtn.speaking { box-shadow: 0 0 0 3px rgba(18,183,106,.45); }

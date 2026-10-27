@@ -42,7 +42,7 @@ Free-tier note: each connected player costs about 1 Redis command per second, so
 
 ## Lobby chat and voice chat
 
-- **Lobby chat:** everyone in the lobby can send short messages (200 characters) and one-tap emoji reactions.
+- **Chat:** everyone can send short messages (200 characters) and one-tap emoji reactions, in the lobby and during a game (💬 button). The chat is cleared when a game finishes or is restarted.
 - **Voice chat:** only the admin and private players (password `281101`) see the **🎤 Join voice** button. Audio goes
   directly between browsers (WebRTC); the server only passes the set-up messages, and enforces who may use it.
   It uses free Google STUN servers. Players on very strict networks may not connect; to fix that add a TURN relay

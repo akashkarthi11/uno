@@ -267,7 +267,7 @@ test('switching public/private removes players who no longer qualify (lobby and 
   assert.ok(s.kicked.includes(priv.id) && s.kicked.includes(late.id));
 });
 
-test('lobby chat: trimmed, length-limited, rate-limited, shown in the lobby only', () => {
+test('chat: trimmed, length-limited, rate-limited', () => {
   const s = G.newRoom('t');
   const admin = G.join(s, { name: 'A', admin: true }, 1000);
   const b = G.join(s, { name: 'B', admin: false, role: 'public' }, 1000);
@@ -278,8 +278,40 @@ test('lobby chat: trimmed, length-limited, rate-limited, shown in the lobby only
   G.act(s, b, { op: 'chat', text: 'x'.repeat(500) }, 3000);
   assert.equal(s.chat[1].text.length, 200);
   assert.equal(G.view(s, admin, 3000).chat.length, 2);
-  G.act(s, admin, { op: 'start' }, 3000);
-  assert.deepEqual(G.view(s, admin, 3000).chat, [], 'chat is a lobby feature');
+});
+
+test('chat works during a game and is cleared when the game finishes or restarts', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
+  G.act(s, admin, { op: 'chat', text: 'lobby hello' }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  assert.deepEqual(G.view(s, b, now).chat, [], 'a new game starts with a clean chat');
+
+  now += 1000;
+  G.act(s, b, { op: 'chat', text: 'gg 👍' }, now); // chatting mid-game works
+  assert.equal(G.view(s, admin, now).chat.length, 1);
+  assert.equal(G.view(s, admin, now).chat[0].text, 'gg 👍');
+
+  // finish the game: the player on turn plays their last card
+  const p = s.members.find((m) => m.id === s.seats[s.cur]);
+  s.color = 'red';
+  s.discard.push({ id: 9000, color: 'red', value: '3' });
+  p.hand = [{ id: 9001, color: 'red', value: '9' }];
+  G.act(s, p, { op: 'play', cardId: 9001 }, now);
+  assert.equal(s.over, true);
+  assert.deepEqual(G.view(s, b, now).chat, [], 'chat is reset when the game finishes');
+  now += 1000;
+  assert.throws(() => G.act(s, b, { op: 'chat', text: 'late' }, now), /finished/);
+
+  // restart: start again, chat, then send everyone back to the lobby
+  G.act(s, admin, { op: 'start' }, now);
+  now += 1000;
+  G.act(s, admin, { op: 'chat', text: 'round two' }, now);
+  assert.equal(G.view(s, b, now).chat.length, 1);
+  G.act(s, admin, { op: 'lobby' }, now);
+  assert.deepEqual(G.view(s, b, now).chat, [], 'restart clears the chat');
 });
 
 test('voice chat: only admin and private players; list drops people who go offline', () => {

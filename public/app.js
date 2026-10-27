@@ -99,7 +99,7 @@ function removedByAdmin() {
   state = null;
   playerId = null;
   store("uno-id-" + room, "");
-  ["game", "lobby", "roomInfo", "endModal", "colorModal", "cheatModal"].forEach((id) => $(id).classList.add("hidden"));
+  ["game", "lobby", "roomInfo", "endModal", "colorModal", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
   $("joinScreen").classList.remove("hidden");
   toast("You were removed by the admin.");
 }
@@ -180,6 +180,9 @@ function render() {
   const s = state;
   $("privateChip").classList.toggle("hidden", !s.private);
   const inGame = s.started;
+  placeChat(inGame);
+  renderChat(s);
+  updateChatUi(s);
   $("lobby").classList.toggle("hidden", inGame);
   $("game").classList.toggle("hidden", !inGame);
   if (!inGame) {
@@ -221,7 +224,6 @@ function renderLobby(s) {
     }
     ul.appendChild(li);
   }
-  renderChat(s);
   const isHost = s.you === s.host;
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
@@ -401,6 +403,47 @@ setInterval(updateTimer, 250);
 
 const EMOJIS = ["😀", "😂", "😎", "👍", "👏", "🔥", "🎉", "🙌", "❤️", "😮", "😭", "🤝"];
 let chatSig = "";
+let chatOpen = false; // the floating panel during a game
+let chatSeenT = 0; // newest message the player has had a chance to read
+let chatInGame = false;
+
+/** The chat sits in the lobby card; during a game it moves into a floating panel opened by the 💬 button. */
+function placeChat(inGame) {
+  chatInGame = inGame;
+  const chat = $("chat");
+  if (inGame) {
+    if (chat.parentElement !== $("chatDock")) $("chatDock").appendChild(chat);
+  } else {
+    if (chat.parentElement !== $("lobby")) $("lobby").appendChild(chat);
+    chatOpen = false;
+  }
+  $("chatToggle").classList.toggle("hidden", !inGame);
+  $("chatDock").classList.toggle("hidden", !(inGame && chatOpen));
+}
+
+function updateChatUi(s) {
+  const msgs = s.chat || [];
+  const newest = msgs.length ? msgs[msgs.length - 1].t : 0;
+  if (!chatInGame || chatOpen) chatSeenT = Math.max(chatSeenT, newest);
+  const unread = msgs.filter((m) => m.t > chatSeenT && m.from !== s.you).length;
+  const badge = $("chatBadge");
+  badge.textContent = unread > 9 ? "9+" : String(unread);
+  badge.classList.toggle("hidden", unread === 0);
+  // chat belongs to one game: once it has finished, writing waits for the next one
+  $("chatInput").disabled = s.over;
+  $("chatInput").placeholder = s.over ? "Chat starts fresh with the next game" : "Say something…";
+}
+
+$("chatToggle").addEventListener("click", () => {
+  chatOpen = !chatOpen;
+  $("chatDock").classList.toggle("hidden", !chatOpen);
+  if (chatOpen) {
+    const log = $("chatLog");
+    log.scrollTop = log.scrollHeight;
+    $("chatInput").focus();
+  }
+  if (state) updateChatUi(state);
+});
 
 function isEmojiOnly(text) {
   return text.length <= 8 && !/[A-Za-z0-9]/.test(text);

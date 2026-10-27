@@ -139,6 +139,7 @@ export function join(s, { name, admin, role, playerId }, now) {
 
 /** A short text or emoji message to everyone in the room (shown in the lobby). */
 function chat(s, p, raw, now) {
+  if (s.over) fail('The game has finished — the chat starts fresh with the next game.');
   const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
   if (!text) fail('Type a message first.');
   if (p.lastChat && now - p.lastChat < 600) fail('Slow down a little.');
@@ -176,7 +177,9 @@ function cleanVoice(s, now) {
 /** Housekeeping run at the start of every request. Returns true if it changed the room. */
 export function tick(s, now) {
   const voiceChanged = cleanVoice(s, now);
-  return tickGame(s, now) || voiceChanged;
+  const gameChanged = tickGame(s, now);
+  const chatCleared = settle(s);
+  return gameChanged || voiceChanged || chatCleared;
 }
 
 function tickGame(s, now) {
@@ -211,6 +214,21 @@ function tickGame(s, now) {
 /* ---------------- actions ---------------- */
 
 export function act(s, me, b, now) {
+  const result = dispatch(s, me, b, now);
+  settle(s);
+  return result;
+}
+
+/** The chat belongs to one game: once a game has finished it is cleared. Returns true if it changed anything. */
+function settle(s) {
+  if (s.over && s.chat && s.chat.length) {
+    s.chat = [];
+    return true;
+  }
+  return false;
+}
+
+function dispatch(s, me, b, now) {
   switch (b.op) {
     case 'start': return start(s, me, now);
     case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now);
@@ -260,6 +278,7 @@ function start(s, p, now) {
   s.over = false;
   s.turnAt = now;
   s.log = [];
+  s.chat = []; // a new game starts with a clean chat
   addLog(s, `Game started with ${s.seats.length} players. First card: ${first.color} ${first.value}`);
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
 }
@@ -343,6 +362,7 @@ function toLobby(s, p) {
   s.notice = null;
   s.drawnId = null;
   s.log = [];
+  s.chat = []; // restart clears the chat
   addLog(s, 'Back in the lobby.');
 }
 
@@ -505,7 +525,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     log: s.log,
-    chat: s.started ? [] : (s.chat || []).slice(-30), // chat is a lobby feature
+    chat: (s.chat || []).slice(-30),
     canVoice: canVoice(me),
     voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };
