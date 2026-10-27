@@ -63,6 +63,16 @@ function noteBuild(build) {
 }
 $("reloadBtn").addEventListener("click", () => location.reload());
 
+/** The real visible height of the screen (browser bars excluded), kept in a CSS variable the phone layout uses. */
+function setAppHeight() {
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
+}
+setAppHeight();
+window.addEventListener("resize", setAppHeight);
+window.addEventListener("orientationchange", setAppHeight);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", setAppHeight);
+
 /** Forget everything remembered about the previous table (used when joining again or after being removed). */
 function resetScreenCaches() {
   chatSig = "";
@@ -383,6 +393,15 @@ function renderGame(s) {
     el.addEventListener("click", () => onCard(card));
     hand.appendChild(el);
   }
+  if (!s.hand.length) {
+    // never leave the hand area silently empty: say why
+    const note = document.createElement("div");
+    note.className = "hand-note";
+    note.textContent = !s.seated
+      ? "👀 You joined while a game was running — you'll get your cards in the next game."
+      : "✔ You're out of cards.";
+    hand.appendChild(note);
+  }
 
   seenCards = nowSeen;
   turn = s.over ? null : { deadline: Date.now() + s.turnLeft, frozen: s.turnLeft, paused: s.paused, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
@@ -404,7 +423,7 @@ function renderGame(s) {
 
   // Spectators (joined mid-game) see the table and card counts only: no hand, no play buttons.
   ["passBtn", "unoBtn"].forEach((id) => $(id).classList.toggle("hidden", !s.seated));
-  $("hand").classList.toggle("hidden", !s.seated);
+  $("hand").classList.remove("hidden"); // the hand area is always there; it explains itself when it has no cards
   $("drawPile").style.cursor = s.seated ? "pointer" : "default";
   $("restartBtn").classList.toggle("hidden", !s.admin);
   $("passBtn").disabled = !(myTurn && s.drawn != null) || s.paused;
