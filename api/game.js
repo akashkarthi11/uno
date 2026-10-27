@@ -3,6 +3,7 @@ import { readRoom, withRoom, usingRedis } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
+const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
 
 const cleanRoom = (raw) => (/^[A-Za-z0-9_-]{1,24}$/.test(String(raw ?? '').trim()) ? String(raw).trim() : 'main');
 
@@ -25,7 +26,15 @@ export default async function handler(req, res) {
     if (b.op === 'join') {
       const pw = String(b.password ?? '');
       const admin = pw === ADMIN_PASSWORD;
-      if (!admin && pw !== PLAYER_PASSWORD) return res.status(401).json({ error: 'Wrong password.', denied: true });
+      if (!admin) {
+        // A private game only lets new players in with the private password; people already seated may reconnect
+        // with either player password.
+        const existing = await readRoom(code);
+        const isPrivate = Boolean(existing && existing.private);
+        const isMember = Boolean(existing && b.playerId && existing.members.some((m) => m.id === b.playerId));
+        const ok = isMember ? pw === PLAYER_PASSWORD || pw === PRIVATE_PASSWORD : pw === (isPrivate ? PRIVATE_PASSWORD : PLAYER_PASSWORD);
+        if (!ok) return res.status(401).json({ error: 'Wrong password.', denied: true });
+      }
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
         const me = G.join(s, { name: b.name, admin, playerId: b.playerId }, now);

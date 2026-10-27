@@ -176,6 +176,7 @@ function cardEl(card) {
 function render() {
   if (!state) return;
   const s = state;
+  $("privateChip").classList.toggle("hidden", !s.private);
   const inGame = s.started;
   $("lobby").classList.toggle("hidden", inGame);
   $("game").classList.toggle("hidden", !inGame);
@@ -218,6 +219,8 @@ function renderLobby(s) {
     ul.appendChild(li);
   }
   const isHost = s.you === s.host;
+  $("privateBtn").classList.toggle("hidden", !s.admin);
+  $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
   $("startBtn").classList.toggle("hidden", !isHost);
   $("startBtn").disabled = s.players.length < 2;
   $("lobbyHint").textContent = isHost
@@ -291,20 +294,22 @@ function renderGame(s) {
   if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
   else if (s.over) msg = "Game over.";
   else if (me && me.finished) msg = "You're out (#" + (s.ranking.indexOf(me.name) + 1) + ")! Watching the rest play…";
+  else if (myTurn && me && me.count === 2 && !s.saidUno) msg = "⚠ Press GrowX! before you play your second-to-last card — or you draw 1 extra card!";
   else if (myTurn) msg = s.drawn != null ? "You drew a playable card — play it or press Pass." : (s.playable.length ? "Your turn — play a highlighted card or draw." : "Your turn — no playable card, draw from the pile.");
   else msg = (curPlayer ? curPlayer.name : "?") + "'s turn…";
   $("message").textContent = msg;
 
   // Spectators (joined mid-game) see the table and card counts only: no hand, no play buttons.
-  ["passBtn", "unoBtn", "catchBtn"].forEach((id) => { if (!s.seated) $(id).classList.add("hidden"); else if (id !== "catchBtn") $(id).classList.remove("hidden"); });
+  ["passBtn", "unoBtn"].forEach((id) => $(id).classList.toggle("hidden", !s.seated));
   $("hand").classList.toggle("hidden", !s.seated);
   $("drawPile").style.cursor = s.seated ? "pointer" : "default";
   $("restartBtn").classList.toggle("hidden", !s.admin);
   $("passBtn").disabled = !(myTurn && s.drawn != null);
-  const canUno = s.seated && !s.over && me && me.count > 0 && me.count <= 2;
+  // GrowX! must be pressed while you hold 2 cards, i.e. before playing the second-to-last one.
+  const canUno = s.seated && !s.over && me && me.count > 0 && me.count <= 2 && !s.saidUno;
   $("unoBtn").disabled = !canUno;
-  $("unoBtn").classList.toggle("pulse", canUno && me.count === 1);
-  $("catchBtn").classList.toggle("hidden", !s.canCatch);
+  $("unoBtn").textContent = s.saidUno && me && me.count <= 2 ? "GrowX! ✓" : "GrowX!";
+  $("unoBtn").classList.toggle("pulse", canUno && myTurn);
 
   const log = $("log");
   log.innerHTML = "";
@@ -491,6 +496,7 @@ $("joinBtn").addEventListener("click", join);
 $("nameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
 $("pwInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
 $("startBtn").addEventListener("click", () => send({ op: "start" }));
+$("privateBtn").addEventListener("click", () => send({ op: "private", on: !(state && state.private) }));
 $("playAgain").addEventListener("click", () => send({ op: "start" }));
 attachLongPress($("drawPile"));
 $("drawPile").addEventListener("click", () => {
@@ -504,7 +510,6 @@ $("restartBtn").addEventListener("click", () => {
 $("toLobby").addEventListener("click", () => send({ op: "lobby" }));
 $("passBtn").addEventListener("click", () => send({ op: "pass" }));
 $("unoBtn").addEventListener("click", () => send({ op: "uno" }));
-$("catchBtn").addEventListener("click", () => send({ op: "catch" }));
 $("rulesBtn").addEventListener("click", () => $("rulesModal").classList.remove("hidden"));
 $("closeRules").addEventListener("click", () => $("rulesModal").classList.add("hidden"));
 $("copyLink").addEventListener("click", () => {

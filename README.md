@@ -1,4 +1,4 @@
-# GrowX Cards (Node.js on Vercel)
+# GrowX Mindrelax (Node.js on Vercel)
 
 Multiplayer card game. Static page in `public/`, game rules in a Vercel serverless function
 (`api/game.js` + `api/_lib/game.js`). Browsers poll the function about every 1.5 s. Shared state lives
@@ -7,11 +7,14 @@ in Upstash Redis.
 ## Rules in this build
 
 - 2–8 players, 108-card deck, **5 cards each**, classic rules (match colour/number/symbol, Skip, Reverse,
-  Draw Two, Wild, Wild Draw Four only when you hold no card of the current colour, call **GrowX!** at one
-  card or draw 2).
+  Draw Two, Wild, Wild Draw Four only when you hold no card of the current colour). With 2 cards in hand, press
+  **GrowX!** before playing the second-to-last card or draw 1 extra card.
 - Play continues after someone empties their hand. **The last player still holding cards loses.**
+- A turn left idle for 30 s passes to the next player.
 - Password `123456` joins as a player, `110299` joins as admin. Only the admin can start a game.
-  Override with the environment variables `GAME_PLAYER_PASSWORD` and `GAME_ADMIN_PASSWORD`.
+- The admin can make a game **private** from the lobby: new players then need the private password `281101`
+  instead of `123456`. Players already seated can reconnect.
+  Override all three with `GAME_PLAYER_PASSWORD`, `GAME_ADMIN_PASSWORD` and `GAME_PRIVATE_PASSWORD`.
 - A player who goes quiet for 20 s is treated as offline and their turns are played automatically.
 
 ## Run locally (Docker, in-memory state)

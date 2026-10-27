@@ -32,7 +32,7 @@ export function newRoom(code) {
   return {
     code, version: 0, members: [], seats: [], started: false, over: false,
     winner: null, loser: null, ranking: [], notice: null,
-    deck: [], discard: [], color: null, dir: 1, cur: 0, drawnId: null, unoId: null,
+    deck: [], discard: [], color: null, dir: 1, cur: 0, drawnId: null,
     log: [], turnAt: 0,
   };
 }
@@ -157,7 +157,6 @@ export function tick(s, now) {
   }
   if (idle > TURN_MS) {
     // time is up: nothing is played or drawn for them, the turn just moves to the next player
-    beforeAction(s, p);
     addLog(s, p.name + ' ran out of time — turn passes.');
     advance(s, 1, now);
     return true;
@@ -174,8 +173,8 @@ export function act(s, me, b, now) {
     case 'draw': return draw(s, me, now, b);
     case 'pass': return pass(s, me, now);
     case 'uno': return sayUno(s, me);
-    case 'catch': return catchUno(s, me);
     case 'lobby': return toLobby(s, me);
+    case 'private': return setPrivate(s, me, b.on === true);
     case 'kick': return kick(s, me, String(b.targetId ?? ''), now);
     default: return fail('Unknown action.');
   }
@@ -206,7 +205,6 @@ function start(s, p, now) {
   s.dir = 1;
   s.cur = rnd(s.seats.length);
   s.drawnId = null;
-  s.unoId = null;
   s.winner = null;
   s.loser = null;
   s.ranking = [];
@@ -217,6 +215,13 @@ function start(s, p, now) {
   s.log = [];
   addLog(s, `Game started with ${s.seats.length} players. First card: ${first.color} ${first.value}`);
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
+}
+
+/** Admin makes the game private (new players need the private password) or public again. */
+function setPrivate(s, p, on) {
+  if (!p.admin) fail('Only the admin can do that.');
+  s.private = on;
+  addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
 }
 
 /** Admin removes a player (lobby or mid-game). Their cards go back into the draw pile. */
@@ -233,7 +238,6 @@ function kick(s, admin, targetId, now) {
     const wasCurrent = idx === s.cur;
     s.seats.splice(idx, 1);
     const n = s.seats.length;
-    if (s.unoId === t.id) s.unoId = null;
     s.members = s.members.filter((m) => m.id !== t.id);
     const left = active(s);
     if (left.length <= 1) {
@@ -275,7 +279,6 @@ function toLobby(s, p) {
   s.loser = null;
   s.ranking = [];
   s.notice = null;
-  s.unoId = null;
   s.drawnId = null;
   s.log = [];
   addLog(s, 'Back in the lobby.');
@@ -297,7 +300,6 @@ function play(s, p, cardId, chosen, now) {
       : "You can't play that card.");
   }
   if (c.color === 'wild' && !COLORS.includes(chosen)) fail('Choose a colour.');
-  beforeAction(s, p);
   doPlay(s, p, c, chosen, now);
 }
 
@@ -305,7 +307,6 @@ function draw(s, p, now, b = {}) {
   requireTurn(s, p);
   if (s.drawnId != null) fail('You already drew a card this turn.');
   const chosen = b.value ? chosenCard(s, p, b) : null; // validates before anything changes
-  beforeAction(s, p);
   drawOne(s, p, now, chosen);
 }
 
@@ -320,7 +321,6 @@ function drawOne(s, p, now, card = null) {
 function pass(s, p, now) {
   requireTurn(s, p);
   if (s.drawnId == null) fail('Draw a card before passing.');
-  beforeAction(s, p);
   addLog(s, p.name + ' passes.');
   advance(s, 1, now);
 }
@@ -329,16 +329,7 @@ function sayUno(s, p) {
   if (!s.started || s.over || !s.seats.includes(p.id)) fail('No game running.');
   if (p.hand.length > 2) fail('You can call GrowX when you have 2 or fewer cards.');
   p.saidUno = true;
-  if (s.unoId === p.id) s.unoId = null;
   addLog(s, p.name + ' says GrowX!');
-}
-
-function catchUno(s, p) {
-  const target = s.unoId ? byId(s, s.unoId) : null;
-  if (!target || target === p || target.hand.length !== 1) fail('Nobody to catch.');
-  give(s, target, 2);
-  s.unoId = null;
-  addLog(s, `${p.name} caught ${target.name} without calling GrowX — draws 2.`);
 }
 
 const SPECIALS = ['skip', 'reverse', 'draw2', 'wild', 'wild4'];
@@ -355,18 +346,8 @@ function chosenCard(s, p, b) {
   return { id: s.nextId, color, value };
 }
 
-/** Anyone acting after a player dropped to one card without calling it makes that player draw 2. */
-function beforeAction(s, actor) {
-  if (!s.unoId) return;
-  const u = byId(s, s.unoId);
-  if (u && u !== actor && u.hand.length === 1 && !u.saidUno) {
-    give(s, u, 2);
-    addLog(s, u.name + ' forgot to call GrowX — draws 2.');
-  }
-  s.unoId = null;
-}
-
 function doPlay(s, p, c, chosen, now) {
+  const hadTwo = p.hand.length === 2; // playing from two cards is the moment GrowX! must already have been pressed
   p.hand = p.hand.filter((h) => h !== c && h.id !== c.id);
   s.discard.push(c);
   s.color = c.color === 'wild' ? chosen : c.color;
@@ -387,8 +368,12 @@ function doPlay(s, p, c, chosen, now) {
       return;
     }
   } else if (p.hand.length === 1) {
-    if (p.saidUno) addLog(s, p.name + ' has one card left!');
-    else s.unoId = p.id;
+    if (hadTwo && !p.saidUno) {
+      give(s, p, 1);
+      addLog(s, p.name + ' forgot to press GrowX! — draws 1 extra card.');
+    } else {
+      addLog(s, p.name + ' has one card left!');
+    }
   } else if (p.hand.length > 2) {
     p.saidUno = false;
   }
@@ -432,7 +417,7 @@ function commonColor(p) {
 
 /** An offline player's turn is played automatically so the table never stalls. */
 function autoPlay(s, p, now) {
-  beforeAction(s, p);
+  if (p.hand.length <= 2) p.saidUno = true; // automatic turns never earn the GrowX! penalty
   if (s.drawnId != null) {
     // already drew this turn: the only legal card is the one just drawn
     return doPlay(s, p, p.hand.find((c) => c.id === s.drawnId), commonColor(p), now);
@@ -449,7 +434,7 @@ function autoPlay(s, p, now) {
 /** What one player is allowed to see (own hand only). */
 export function view(s, me, now) {
   const out = {
-    room: s.code, version: s.version, you: me.id, admin: me.admin,
+    room: s.code, version: s.version, you: me.id, admin: me.admin, private: !!s.private,
     host: me.admin ? me.id : (s.members.find((m) => m.admin && online(m, now)) || {}).id || null,
     started: s.started, over: s.over, winner: s.winner, loser: s.loser, ranking: s.ranking, notice: s.notice,
     seated: s.started && s.seats.includes(me.id),
@@ -460,7 +445,6 @@ export function view(s, me, now) {
   };
   if (!s.started) return out;
   const myTurn = !s.over && s.seats[s.cur] === me.id;
-  const u = s.unoId ? byId(s, s.unoId) : null;
   return {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
@@ -469,6 +453,6 @@ export function view(s, me, now) {
     playable: myTurn
       ? me.hand.filter((c) => (s.drawnId == null || c.id === s.drawnId) && playable(s, c, me)).map((c) => c.id)
       : [],
-    canCatch: !s.over && !!u && u !== me && s.seats.includes(me.id) && u.hand.length === 1,
+    saidUno: me.saidUno,
   };
 }

@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#7c5cff">
-<title>GrowX</title>
+<title>GrowX Mindrelax</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
-  <h1><span class="logo">G</span>GrowX</h1>
+  <h1><span class="logo">G</span>GrowX Mindrelax</h1>
   <div id="roomInfo" class="hidden">
-    Room <b id="roomName"></b>
+    Room <b id="roomName"></b><span id="privateChip" class="badge hidden">🔒 Private</span>
     <button id="copyLink" class="ghost">Copy invite link</button>
     <button id="rulesBtn" class="ghost">Rules</button>
   </div>
@@ -31,6 +31,7 @@
 <section id="lobby" class="center-box hidden">
   <h2>Lobby</h2>
   <ul id="lobbyPlayers"></ul>
+  <button id="privateBtn" class="ghost hidden">🔒 Make private</button>
   <button id="startBtn">Start game</button>
   <p id="lobbyHint" class="hint"></p>
 </section>
@@ -58,7 +59,6 @@
       <button id="restartBtn" class="ghost hidden">Restart</button>
       <button id="passBtn" disabled>Pass</button>
       <button id="unoBtn" disabled>GrowX!</button>
-      <button id="catchBtn" class="hidden">Catch!</button>
     </div>
   </section>
 
@@ -107,7 +107,7 @@
       <li>Play a card that matches the top card by colour, number or symbol. Wilds can be played any time, except <b>Wild Draw Four</b>, which needs a hand with no card of the current colour.</li>
       <li><b>Skip</b> skips the next player. <b>Reverse</b> flips direction (acts as Skip with 2 players). <b>Draw Two</b> / <b>Wild Draw Four</b> make the next player draw 2 / 4 and lose the turn.</li>
       <li>No playable card? Click the draw pile. If the drawn card fits you may play it, otherwise press Pass.</li>
-      <li><b>GrowX call:</b> press GrowX! when you have 2 cards or fewer. If you reach one card without calling it, the next action by anyone — or a click on <b>Catch!</b> — makes you draw 2.</li>
+      <li><b>GrowX! button:</b> when you hold 2 cards, press <b>GrowX!</b> before you play your second-to-last card. If you play it without pressing, you draw 1 extra card.</li>
       <li>If a player's connection drops, their turns are played automatically; they can rejoin by reopening the link.</li>
       <li><b>Losing:</b> play continues after someone empties their hand — they are out and ranked. The last player still holding cards loses.</li>
     </ul>

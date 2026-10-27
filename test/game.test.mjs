@@ -192,6 +192,34 @@ test('a turn left idle for 30s passes to the next player without playing or draw
   assert.ok(p.hand.some((c) => c.id === 7001) && p.hand.some((c) => c.id === 7002), 'both cards stay in hand');
 });
 
+function twoCardSetup() {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const a = G.join(s, { name: 'A', admin: true }, now);
+  G.join(s, { name: 'B', admin: false }, now);
+  G.act(s, a, { op: 'start' }, now);
+  const p = s.members.find((m) => m.id === s.seats[s.cur]);
+  s.color = 'red';
+  s.discard.push({ id: 8000, color: 'red', value: '3' });
+  p.hand = [{ id: 8001, color: 'red', value: '9' }, { id: 8002, color: 'blue', value: '2' }];
+  p.saidUno = false;
+  return { s, p, now };
+}
+
+test('GrowX! button: playing the second-to-last card without pressing it costs 1 extra card', () => {
+  const { s, p, now } = twoCardSetup();
+  G.act(s, p, { op: 'play', cardId: 8001 }, now);
+  assert.equal(p.hand.length, 2, 'one card left + 1 penalty card');
+  assert.ok(s.log.some((l) => /forgot to press GrowX/.test(l)));
+});
+
+test('GrowX! button: pressing it before the second-to-last card avoids the penalty', () => {
+  const { s, p, now } = twoCardSetup();
+  G.act(s, p, { op: 'uno' }, now);
+  G.act(s, p, { op: 'play', cardId: 8001 }, now);
+  assert.equal(p.hand.length, 1);
+});
+
 test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {
   const s = G.newRoom('t');
   const now = 1000;
@@ -213,6 +241,26 @@ function call(body) {
     handler({ method: 'POST', body }, res);
   });
 }
+
+test('API: private game needs the private password; members can reconnect', async () => {
+  const room = 'priv' + Math.floor(Math.random() * 1e6);
+  const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
+  const early = await call({ op: 'join', room, name: 'Early', password: '123456' });
+  assert.equal(early.code, 200);
+  assert.equal((await call({ op: 'private', room, playerId: early.body.state.you, on: true })).code, 400, 'players cannot');
+  const set = await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
+  assert.equal(set.body.state.private, true);
+
+  assert.equal((await call({ op: 'join', room, name: 'New', password: '123456' })).code, 401, 'player password no longer enough');
+  const joined = await call({ op: 'join', room, name: 'New', password: '281101' });
+  assert.equal(joined.code, 200);
+  const back = await call({ op: 'join', room, name: 'Early', password: '123456', playerId: early.body.state.you });
+  assert.equal(back.code, 200, 'already-seated player can reconnect');
+
+  assert.equal((await call({ op: 'join', room: room + 'x', name: 'N', password: '281101' })).code, 401, 'private password only works for private games');
+  await call({ op: 'private', room, playerId: admin.body.state.you, on: false });
+  assert.equal((await call({ op: 'join', room, name: 'Late', password: '123456' })).code, 200, 'public again');
+});
 
 test('API: password gate and admin start', async () => {
   const bad = await call({ op: 'join', room: 'api1', name: 'X', password: 'nope' });

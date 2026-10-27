@@ -190,7 +190,6 @@ button.kick {
 .actions { display: flex; gap: 8px; }
 #unoBtn { background: linear-gradient(135deg, #f04438, #f79009); box-shadow: 0 6px 16px rgba(240,68,56,.35); }
 #unoBtn.pulse:not(:disabled) { animation: pulse .6s infinite alternate; }
-#catchBtn { background: var(--surface); color: var(--red-ink); border: 1px solid var(--red); box-shadow: none; }
 
 #log {
   font-size: 13px; max-height: 120px; overflow-y: auto; background: var(--surface);
