@@ -248,13 +248,13 @@ button.kick {
 #log div:first-child { color: var(--ink); font-weight: 600; }
 
 #toast {
-  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 30;
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 90;
   background: var(--red-soft); color: var(--red-ink); border: 1px solid #f7c9c5; padding: 10px 18px;
   border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); animation: rise .25s ease;
 }
 
 /* ---------- modals ---------- */
-.modal { position: fixed; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+.modal { position: fixed; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 70; padding: 16px; }
 .box { background: var(--surface); padding: 28px 34px; border-radius: 22px; text-align: center; max-width: 540px; box-shadow: var(--shadow-lg); animation: rise .3s cubic-bezier(.2,1.2,.4,1); }
 .box h2 { margin: 0 0 8px; font-size: 24px; }
 .box button + button { margin-left: 8px; }
@@ -307,21 +307,101 @@ button.kick {
 @keyframes fall { to { transform: translateY(110vh) rotate(720deg); opacity: .9; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
-/* ---------- small screens ---------- */
+/* ---------- touch screens: no hover, so don't leave a tapped card "lifted" ---------- */
+@media (hover: none) {
+  #hand .card.playable:hover { transform: translateY(-8px); }
+  #drawPile:hover { transform: none; }
+  button:hover:not(:disabled) { transform: none; filter: none; }
+}
+
+/* ---------- phones: the whole table fits on one screen and the hand is pinned to the bottom ---------- */
 @media (max-width: 640px) {
   html, body { overflow-x: hidden; }
-  header { padding: 8px 12px; flex-direction: column; align-items: flex-start; gap: 6px; }
-  #roomInfo { width: 100%; flex-wrap: wrap; gap: 6px; font-size: 13px; }
-  #roomInfo button { padding: 6px 12px; font-size: 13px; }
-  #opponents { gap: 8px; }
-  .opp { flex: 1 1 88px; max-width: 130px; min-width: 0 !important; padding: 12px 6px 8px !important; }
-  .opp .count { font-size: 12px; }
-  .actions { flex-wrap: wrap; }
-  #status { padding: 10px 12px; }
-  main { padding: 10px; gap: 12px; }
-  #table { gap: 28px; padding: 22px 10px; }
-  .card { width: 68px; height: 102px; font-size: 28px; border-width: 4px; }
-  #hand .card { margin-left: -30px; }
-  .center-box { margin: 24px 14px; padding: 24px 20px; }
-  .opp { min-width: 104px; padding: 12px 10px 8px; }
+  body { -webkit-tap-highlight-color: transparent; }
+  button, .card { touch-action: manipulation; }
+  button { min-height: 40px; }
+
+  /* header: compact, and it scrolls away so the game gets the height */
+  header { position: static; padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top)); flex-direction: column; align-items: flex-start; gap: 4px; }
+  h1 { font-size: 16px; }
+  .logo { width: 28px; height: 28px; border-radius: 9px; }
+  #roomInfo { width: 100%; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+  #roomInfo button { padding: 4px 10px; font-size: 12px; min-height: 30px; }
+
+  main { padding: 6px 8px 0; gap: 8px; }
+  #turnBar { height: 26px; margin-top: 0; }
+  #turnText { font-size: 12px; padding: 1px 12px; }
+  #pausedBanner { padding: 6px; font-size: 13px; }
+
+  /* opponents: one compact row you can swipe sideways, no card fans */
+  #opponents { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; gap: 6px; padding: 2px; -webkit-overflow-scrolling: touch; }
+  .opp { flex: 0 0 auto; min-width: 76px !important; max-width: none; padding: 8px 8px 6px !important; border-radius: 14px; }
+  .opp .avatar { margin: 0 auto 2px; width: 34px; height: 34px; font-size: 12px; }
+  .opp .name { font-size: 12px; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 auto; }
+  .opp .mini { display: none; }
+  .opp .count { font-size: 11px; white-space: nowrap; }
+  button.kick { width: 24px; height: 24px; top: 2px; right: 2px; min-height: 0; }
+
+  /* table: smaller cards */
+  #table { gap: 22px; padding: 12px 8px; border-radius: 20px; }
+  .card { width: 58px; height: 87px; font-size: 24px; border-width: 3px; border-radius: 10px; }
+  .card .c { font-size: 10px; }
+  .card.back span { font-size: 12px; }
+  #colorDot { width: 20px; height: 20px; }
+  #dirInfo { font-size: 16px; top: 4px; }
+  .pile small { font-size: 11px; }
+
+  /* status line: message on top, buttons in a row underneath */
+  #status { padding: 8px 10px; gap: 6px; border-radius: 14px; }
+  #message { font-size: 13px; flex: 1 1 100%; }
+  .actions { flex-wrap: wrap; gap: 6px; width: 100%; }
+  .actions button { flex: 1 1 auto; padding: 6px 10px; font-size: 13px; min-height: 36px; }
+
+  /* the hand: one row you can swipe, always visible at the bottom of the screen */
+  #log { order: 4; max-height: 64px; font-size: 12px; padding: 6px 10px; }
+  #hand {
+    order: 5; position: sticky; bottom: 0; z-index: 20; margin: 0 -8px; min-height: 0;
+    flex-wrap: nowrap; overflow-x: auto; justify-content: safe center; -webkit-overflow-scrolling: touch;
+    padding: 14px 10px calc(8px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--canvas) 72%, rgba(246, 247, 251, 0));
+  }
+  #hand .card { margin-left: -28px; flex: 0 0 auto; }
+  #hand .card:first-child { margin-left: 0; }
+  #hand .card.playable { transform: translateY(-8px); }
+
+  /* chat: the button floats above the hand and the panel spans the screen */
+  #chatToggle { right: 12px; bottom: calc(118px + env(safe-area-inset-bottom)); width: 46px; height: 46px; font-size: 20px; }
+  #chatDock { left: 8px; right: 8px; width: auto; bottom: calc(172px + env(safe-area-inset-bottom)); }
+  #chatDock #chatLog { height: 150px; }
+  #chatLog { height: 150px; }
+  #emojiBar button { padding: 6px 10px; font-size: 22px; min-height: 40px; }
+
+  /* popups slide up from the bottom, within thumb reach */
+  .modal { padding: 8px; align-items: flex-end; }
+  .box { width: 100%; max-width: none; max-height: 92vh; overflow-y: auto; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); border-radius: 22px 22px 14px 14px; }
+  .box h2 { font-size: 20px; }
+  .swatches { gap: 10px; }
+  .swatches button { width: 56px; height: 56px; min-height: 0; }
+  #cheatOptions { grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 6px; }
+  #cheatOptions .card { width: 54px; height: 80px; font-size: 22px; }
+  #ruleList button.target, #targetList button.target { padding: 10px 14px; }
+
+  /* sign-in and lobby */
+  .center-box { margin: 14px 10px; padding: 18px 16px; gap: 12px; max-width: none; }
+  #lobbyPlayers li { padding: 6px 10px; }
+  button.remove { min-height: 32px; }
+  #superList label { font-size: 13px; padding: 4px 0; }
+  #superList input { width: 22px; height: 22px; min-height: 0; }
+
+  #updateBanner { top: calc(8px + env(safe-area-inset-top)); width: calc(100% - 16px); justify-content: space-between; border-radius: 16px; }
+  #toast { bottom: calc(130px + env(safe-area-inset-bottom)); max-width: calc(100% - 24px); }
 }
+
+@media (max-width: 640px) {
+  /* in a game the page is at least one screen tall, so the hand sits at the bottom edge on tall phones too */
+  #game { min-height: calc(100vh - 96px); min-height: calc(100dvh - 96px); }
+  #hand { margin-top: auto; }
+}
+
+/* stacked buttons in the pickers line up (the generic ".box button + button" spacing is for side-by-side buttons) */
+#ruleList button, #targetList button { margin-left: 0 !important; }
