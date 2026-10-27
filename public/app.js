@@ -795,7 +795,28 @@ function renderThemePicker(s) {
   }
 }
 
+/** How many cards each player is dealt: a − / + stepper (admin only, lobby only). */
+function setHandSize(n) {
+  if (busy || !state || !state.admin) return;
+  const cur = (state.settings && state.settings.handSize) || 5;
+  const next = Math.max(3, Math.min(10, n));
+  if (next === cur) return;
+  const before = state;
+  state = { ...state, settings: { ...state.settings, handSize: next } };
+  render();
+  send({ op: "config", handSize: next }, () => { state = before; render(); });
+}
+$("handMinus").addEventListener("click", () => setHandSize(((state && state.settings && state.settings.handSize) || 5) - 1));
+$("handPlus").addEventListener("click", () => setHandSize(((state && state.settings && state.settings.handSize) || 5) + 1));
+
 function renderSettings(s) {
+  // these are the admin's controls: public and private players don't see the panel at all (the theme still applies to them)
+  $("settings").classList.toggle("hidden", !s.admin);
+  if (!s.admin) return;
+  const hs = (s.settings && s.settings.handSize) || 5;
+  $("handSizeVal").textContent = hs;
+  $("handMinus").disabled = hs <= 3;
+  $("handPlus").disabled = hs >= 10;
   renderThemePicker(s);
   const list = $("superList");
   if (!list.children.length) {

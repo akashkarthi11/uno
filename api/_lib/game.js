@@ -6,7 +6,9 @@ export class GameError extends Error {}
 
 export const COLORS = ['red', 'yellow', 'green', 'blue'];
 const MAX_SEATS = 8;
-const INITIAL_HAND = 5;
+const DEFAULT_HAND = 5;
+export const HAND_MIN = 3;
+export const HAND_MAX = 10;
 const MAX_LOG = 40;
 export const ONLINE_MS = 20000; // a player not heard from for this long counts as offline
 export const HEARTBEAT_MS = 8000; // how often an idle client refreshes its presence
@@ -59,6 +61,8 @@ function cleanName(raw) {
 export const SUPER_KINDS = ['again', 'sweep', 'blast', 'swap', 'gift', 'master'];
 /** Table looks the admin can choose from (the first is the default). The styling itself lives in the page's CSS. */
 export const THEMES = ['growx', 'classic', 'midnight'];
+/** How many cards each player is dealt (the admin sets it in the lobby; 5 unless changed). */
+const handSizeOf = (s) => (s.settings && Number.isInteger(s.settings.handSize) ? s.settings.handSize : DEFAULT_HAND);
 const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
 const superSettings = (s) => Object.fromEntries(SUPER_KINDS.map((k) => [k, superOn(s, k)]));
@@ -294,7 +298,9 @@ function start(s, p, now) {
   s.seats = s.members.slice(0, MAX_SEATS).map((m) => m.id);
   s.deck = shuffle(buildDeck((kind) => superOn(s, kind))); // only the super cards the admin left ticked
   s.discard = [];
-  seated(s).forEach((m) => give(s, m, INITIAL_HAND));
+  const handSize = handSizeOf(s);
+  if (s.seats.length * handSize + 1 > s.deck.length) fail('Not enough cards for that many players — lower the cards per player.');
+  seated(s).forEach((m) => give(s, m, handSize));
   let first = s.deck.pop();
   while (first.color === 'wild' || ['skip', 'reverse', 'draw2', 'again', 'sweep'].includes(first.value)) {
     s.deck.unshift(first);
@@ -323,11 +329,14 @@ function start(s, p, now) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin) fail('Only the admin can do that.');
-  const { supers, theme } = b || {};
+  const { supers, theme, handSize } = b || {};
   const hasSupers = supers && typeof supers === 'object';
-  if (!hasSupers && theme === undefined) fail('Bad settings.');
+  if (!hasSupers && theme === undefined && handSize === undefined) fail('Bad settings.');
   if (theme !== undefined && !THEMES.includes(theme)) fail('Unknown theme.');
-  if (hasSupers && s.started && !s.over) fail('Game settings can only be changed in the lobby.');
+  if (handSize !== undefined && !(Number.isInteger(handSize) && handSize >= HAND_MIN && handSize <= HAND_MAX)) {
+    fail(`Cards per player must be a whole number from ${HAND_MIN} to ${HAND_MAX}.`);
+  }
+  if ((hasSupers || handSize !== undefined) && s.started && !s.over) fail('Game settings can only be changed in the lobby.');
   const next = superSettings(s);
   if (hasSupers) {
     for (const kind of SUPER_KINDS) {
@@ -335,7 +344,11 @@ function setConfig(s, p, b) {
     }
   }
   // the theme is only cosmetic, so it can be changed at any time, even during a game
-  s.settings = { supers: next, theme: theme !== undefined ? theme : themeOf(s) };
+  s.settings = {
+    supers: next,
+    theme: theme !== undefined ? theme : themeOf(s),
+    handSize: handSize !== undefined ? handSize : handSizeOf(s),
+  };
 }
 
 /**
@@ -758,7 +771,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s) },
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s) },
     canVoice: canVoice(me),
     voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };

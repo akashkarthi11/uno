@@ -6,7 +6,7 @@ in Upstash Redis.
 
 ## Rules in this build
 
-- 2–8 players, 123-card deck (108 classic + 15 super cards, see below), **5 cards each**, classic rules (match colour/number/symbol, Skip, Reverse,
+- 2–8 players, 123-card deck (108 classic + 15 super cards, see below), **5 cards each by default (the admin can choose 3–10)**, classic rules (match colour/number/symbol, Skip, Reverse,
   Draw Two, Wild, Wild Draw Four only when you hold no card of the current colour). With 2 cards in hand, press
   **GrowX!** before playing the second-to-last card or draw 1 extra card.
 - Play continues after someone empties their hand. **The last player still holding cards loses.**
@@ -150,3 +150,9 @@ the table, including players who join later. It is cosmetic, so it can be change
 
 Themes are plain CSS variables (`html[data-theme="…"]` in `public/style.css`), so adding another one is one CSS block, a
 name in `THEMES` (`api/_lib/game.js`) and an entry in `THEME_INFO` (`public/app.js`).
+
+### Admin-only settings
+
+The lobby's **Admin settings** panel is shown to the admin only (public and private players never see it, though the chosen
+theme and card choices apply to them). It controls: the **table theme**, the **cards dealt to each player** (3–10, default 5,
+lobby only) and which **super cards** are in the deck (lobby only). The server refuses these changes from anyone else.

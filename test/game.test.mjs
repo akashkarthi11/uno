@@ -486,6 +486,50 @@ test('table theme: GrowX by default, only the admin can change it, everyone sees
   assert.equal(G.view(s, b, now).settings.theme, 'midnight', 'the choice is kept for the room');
 });
 
+test('cards per player: 5 by default, admin sets 3-10 in the lobby, dealt that many', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false }, now);
+  const c = G.join(s, { name: 'C', admin: false }, now);
+  assert.equal(G.view(s, b, now).settings.handSize, 5, 'default is 5');
+  assert.equal(G.HAND_MIN, 3);
+  assert.equal(G.HAND_MAX, 10);
+
+  assert.throws(() => G.act(s, b, { op: 'config', handSize: 7 }, now), /Only the admin/);
+  for (const bad of [2, 11, 5.5, '7', null, NaN]) {
+    assert.throws(() => G.act(s, admin, { op: 'config', handSize: bad }, now), /whole number from 3 to 10/, 'rejects ' + String(bad));
+  }
+  G.act(s, admin, { op: 'config', handSize: 8 }, now);
+  assert.equal(G.view(s, c, now).settings.handSize, 8);
+  G.act(s, admin, { op: 'config', theme: 'classic' }, now); // other settings leave it alone
+  G.act(s, admin, { op: 'config', supers: { sweep: false } }, now);
+  assert.equal(G.view(s, c, now).settings.handSize, 8);
+
+  G.act(s, admin, { op: 'start' }, now);
+  for (const p of [admin, b, c]) assert.equal(p.hand.length, 8, 'everyone is dealt 8');
+  const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
+  assert.equal(all.length, DECK_SIZE - 4, 'card count is still conserved (the 4 Sweep cards were ticked off)');
+  assert.throws(() => G.act(s, admin, { op: 'config', handSize: 4 }, now), /only be changed in the lobby/);
+
+  G.act(s, admin, { op: 'lobby' }, now);
+  G.act(s, admin, { op: 'config', handSize: 3 }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  for (const p of [admin, b, c]) assert.equal(p.hand.length, 3, 'the minimum works too');
+});
+
+test('cards per player: the largest hand still deals fully with 8 players', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'P0', admin: true }, now);
+  for (let i = 1; i < 8; i++) G.join(s, { name: 'P' + i, admin: false }, now);
+  G.act(s, admin, { op: 'config', handSize: G.HAND_MAX, supers: { again: false, sweep: false, blast: false, swap: false, gift: false, master: false } }, now);
+  G.act(s, admin, { op: 'start' }, now); // 8 x 10 + 1 = 81 cards needed from a plain 108-card deck
+  assert.equal(s.seats.length, 8);
+  assert.ok(s.members.every((m) => m.hand.length === 10));
+  assert.ok(s.deck.length >= 20, 'plenty left to draw from');
+});
+
 test('lobby settings: a Master card cannot use the rule of a switched-off super card', () => {
   const { s, p, others, now } = threePlayers([
     { id: 9951, color: 'wild', value: 'master' }, { id: 9952, color: 'red', value: '5' }, { id: 9953, color: 'blue', value: '2' },
