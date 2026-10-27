@@ -224,6 +224,7 @@ function renderGame(s) {
     const el = cardEl(card);
     if (ok.has(card.id)) el.classList.add("playable");
     el.addEventListener("click", () => onCard(card));
+    if (s.admin && s.seated && !s.over) attachLongPress(el, card);
     hand.appendChild(el);
   }
 
@@ -269,7 +270,57 @@ function renderGame(s) {
 
 /* ---------- actions ---------- */
 
+/* ---------- admin long-press: swap a card for a special one ---------- */
+
+const LONG_PRESS_MS = 600;
+let pressTimer = null;
+let suppressClick = false;
+let cheatTarget = null;
+
+function cancelPress() {
+  clearTimeout(pressTimer);
+  pressTimer = null;
+}
+
+function attachLongPress(el, card) {
+  el.addEventListener("pointerdown", () => {
+    suppressClick = false;
+    cancelPress();
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      suppressClick = true; // the release after a long press must not also play the card
+      openCheat(card);
+    }, LONG_PRESS_MS);
+  });
+  ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => el.addEventListener(ev, cancelPress));
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
+function openCheat(card) {
+  cheatTarget = card;
+  const box = $("cheatOptions");
+  box.innerHTML = "";
+  const options = [];
+  for (const c of ["red", "yellow", "green", "blue"]) {
+    for (const v of ["skip", "reverse", "draw2"]) options.push({ color: c, value: v });
+  }
+  options.push({ color: "wild", value: "wild" }, { color: "wild", value: "wild4" });
+  for (const o of options) {
+    const el = cardEl(o);
+    el.addEventListener("click", () => {
+      $("cheatModal").classList.add("hidden");
+      send({ op: "swap", cardId: cheatTarget.id, value: o.value, color: o.color });
+    });
+    box.appendChild(el);
+  }
+  $("cheatModal").classList.remove("hidden");
+}
+
+document.addEventListener("pointerup", cancelPress);
+$("cheatCancel").addEventListener("click", () => $("cheatModal").classList.add("hidden"));
+
 function onCard(card) {
+  if (suppressClick) { suppressClick = false; return; }
   if (!state || state.over || state.cur !== state.you) return;
   if (!state.playable.includes(card.id)) {
     toast(card.value === "wild4" ? "Wild Draw Four needs a hand with no card of the current colour." : "You can't play that card.");

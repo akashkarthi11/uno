@@ -81,6 +81,22 @@ test('offline player is auto-played so the table never stalls', () => {
   assert.notEqual(s.seats[s.cur], b.id);
 });
 
+test('admin can swap a card for a special one; players cannot', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'A', admin: true }, now);
+  const player = G.join(s, { name: 'B', admin: false }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  const target = admin.hand[0];
+  G.act(s, admin, { op: 'swap', cardId: target.id, value: 'wild4', color: 'wild' }, now);
+  assert.equal(admin.hand.length, 5);
+  assert.ok(admin.hand.some((c) => c.value === 'wild4'));
+  assert.ok(!admin.hand.some((c) => c.id === target.id));
+  assert.ok(s.deck.some((c) => c.id === target.id), 'old card returns to the draw pile');
+  assert.throws(() => G.act(s, player, { op: 'swap', cardId: player.hand[0].id, value: 'skip', color: 'red' }, now), /Admin only/);
+  assert.throws(() => G.act(s, admin, { op: 'swap', cardId: admin.hand[0].id, value: '7', color: 'red' }, now), /special/);
+});
+
 function call(body) {
   return new Promise((resolve) => {
     const res = { code: 200, status(c) { this.code = c; return this; }, json(o) { resolve({ code: this.code, body: o }); } };

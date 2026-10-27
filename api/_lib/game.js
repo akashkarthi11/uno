@@ -166,6 +166,7 @@ export function act(s, me, b, now) {
     case 'pass': return pass(s, me, now);
     case 'uno': return sayUno(s, me);
     case 'catch': return catchUno(s, me);
+    case 'swap': return swapSpecial(s, me, b);
     default: return fail('Unknown action.');
   }
 }
@@ -267,6 +268,26 @@ function catchUno(s, p) {
   addLog(s, `${p.name} caught ${target.name} without calling GrowX — draws 2.`);
 }
 
+const SPECIALS = ['skip', 'reverse', 'draw2', 'wild', 'wild4'];
+
+/** Admin-only: replace one of the admin's own cards with a special card. Silent — nothing is logged. */
+function swapSpecial(s, p, b) {
+  if (!p.admin) fail('Admin only.');
+  if (!s.started || s.over || !s.seats.includes(p.id)) fail('No game running.');
+  const old = p.hand.find((h) => h.id === b.cardId);
+  if (!old) fail('That card is not in your hand.');
+  const value = String(b.value ?? '');
+  if (!SPECIALS.includes(value)) fail('Not a special card.');
+  let color = String(b.color ?? '');
+  if (value === 'wild' || value === 'wild4') color = 'wild';
+  else if (!COLORS.includes(color)) fail('Choose a colour.');
+  s.nextId = (s.nextId ?? 1000) + 1;
+  const fresh = { id: s.nextId, color, value };
+  p.hand = p.hand.map((h) => (h === old ? fresh : h));
+  s.deck.splice(rnd(s.deck.length + 1), 0, old); // the replaced card goes back into the draw pile
+  if (s.drawnId === old.id) s.drawnId = fresh.id;
+}
+
 /** Anyone acting after a player dropped to one card without calling it makes that player draw 2. */
 function beforeAction(s, actor) {
   if (!s.unoId) return;
@@ -357,7 +378,7 @@ function autoPlay(s, p, now) {
 /** What one player is allowed to see (own hand only). */
 export function view(s, me, now) {
   const out = {
-    room: s.code, version: s.version, you: me.id,
+    room: s.code, version: s.version, you: me.id, admin: me.admin,
     host: me.admin ? me.id : (s.members.find((m) => m.admin && online(m, now)) || {}).id || null,
     started: s.started, over: s.over, winner: s.winner, loser: s.loser, ranking: s.ranking, notice: s.notice,
     seated: s.started && s.seats.includes(me.id),
