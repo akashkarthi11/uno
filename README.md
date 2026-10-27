@@ -6,7 +6,7 @@ in Upstash Redis.
 
 ## Rules in this build
 
-- 2–8 players, 122-card deck (108 classic + 14 super cards, see below), **5 cards each**, classic rules (match colour/number/symbol, Skip, Reverse,
+- 2–8 players, 123-card deck (108 classic + 15 super cards, see below), **5 cards each**, classic rules (match colour/number/symbol, Skip, Reverse,
   Draw Two, Wild, Wild Draw Four only when you hold no card of the current colour). With 2 cards in hand, press
   **GrowX!** before playing the second-to-last card or draw 1 extra card.
 - Play continues after someone empties their hand. **The last player still holding cards loses.**
@@ -63,3 +63,20 @@ frozen (and nothing times out), and a banner tells everyone. Resuming gives the 
 | 💥 Blast | 2 | any time (choose the next colour) | every other player draws 1 card |
 | 🔄 Swap Hands | 2 | any time (choose colour + a player) | you and that player swap hands |
 | 🎁 Gift | 2 | any time (choose the next colour) | give 1 random card to every other player; you always keep at least 1 |
+
+### ✨ Master card (1 in the deck, plain blank face)
+
+Playable any time. You pick a colour, then a player, then one super rule that is applied to that player:
+
+| Rule | Effect on the chosen player |
+|---|---|
+| 🔁 Play Again | the turn jumps to them — they play next |
+| 🧹 Sweep | all their cards of the new colour are put down |
+| 💥 Blast | they draw 2 cards |
+| 🔄 Swap Hands | you swap hands with them |
+| 🎁 Gift | you give them 2 random cards (you keep at least 1) |
+| +2 Draw Two | they draw 2 cards and lose their next turn |
+| +4 Draw Four | they draw 4 cards and lose their next turn |
+
+You can choose yourself for Play Again or Sweep; the other rules need another player.
+(💥 Blast only makes them draw 2 — nobody loses a turn — whereas +2 also costs them their next turn.)

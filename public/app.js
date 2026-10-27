@@ -1,7 +1,7 @@
 "use strict";
 
-const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4", again: "🔁", sweep: "🧹", blast: "💥", swap: "🔄", gift: "🎁" };
-const SUPER = new Set(["again", "sweep", "blast", "swap", "gift"]); // super cards get a golden look
+const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4", again: "🔁", sweep: "🧹", blast: "💥", swap: "🔄", gift: "🎁", master: "✨" };
+const SUPER = new Set(["again", "sweep", "blast", "swap", "gift", "master"]); // super cards get a golden look
 const POLL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 8000;
 const HEARTBEAT_MS = 8000;
@@ -101,7 +101,7 @@ function removedByAdmin() {
   state = null;
   playerId = null;
   store("uno-id-" + room, "");
-  ["game", "lobby", "roomInfo", "endModal", "colorModal", "targetModal", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
+  ["game", "lobby", "roomInfo", "endModal", "colorModal", "targetModal", "ruleModal", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
   $("joinScreen").classList.remove("hidden");
   toast("You were removed by the admin.");
 }
@@ -175,6 +175,7 @@ function cardEl(card) {
   const sym = LABEL[card.value] || card.value;
   const isSuper = SUPER.has(card.value);
   if (isSuper) el.classList.add("super");
+  if (card.value === "master") el.classList.add("master"); // the plain blank-faced card
   el.innerHTML = (isSuper ? '<span class="star">★</span>' : "") +
     '<span class="c tl">' + sym + '</span><span class="v">' + sym + '</span><span class="c br">' + sym + "</span>";
   return el;
@@ -560,7 +561,7 @@ function openCheat() {
   for (const c of ["red", "yellow", "green", "blue"]) {
     for (const v of ["skip", "reverse", "draw2", "again", "sweep"]) options.push({ color: c, value: v });
   }
-  for (const v of ["wild", "wild4", "blast", "swap", "gift"]) options.push({ color: "wild", value: v });
+  for (const v of ["wild", "wild4", "blast", "swap", "gift", "master"]) options.push({ color: "wild", value: v });
   for (const o of options) {
     const el = cardEl(o);
     el.addEventListener("click", () => {
@@ -589,17 +590,23 @@ function onCard(card) {
   }
 }
 
-/** Swap Hands: pick who to swap with. */
-function openTargetPicker() {
+/** Swap Hands: pick who to swap with. Master card: pick the player first (you may pick yourself), then a rule. */
+function openTargetPicker(kind) {
+  const master = kind === "master";
+  $("targetTitle").textContent = master ? "✨ Choose a player" : "🔄 Swap hands with…";
   const list = $("targetList");
   list.innerHTML = "";
-  const rivals = state.players.filter((p) => p.id !== state.you && !p.finished);
-  for (const p of rivals) {
+  const players = state.players.filter((p) => !p.finished && (master || p.id !== state.you));
+  for (const p of players) {
     const btn = document.createElement("button");
     btn.className = "ghost target";
-    btn.textContent = p.name + " · " + p.count + " card" + (p.count === 1 ? "" : "s");
+    btn.textContent = (p.id === state.you ? "You" : p.name) + " · " + p.count + " card" + (p.count === 1 ? "" : "s");
     btn.addEventListener("click", () => {
       $("targetModal").classList.add("hidden");
+      if (master) {
+        openRulePicker(p);
+        return;
+      }
       send({ op: "play", cardId: pendingWild.id, color: pendingColor, target: p.id });
       pendingWild = null;
     });
@@ -607,8 +614,46 @@ function openTargetPicker() {
   }
   $("targetModal").classList.remove("hidden");
 }
+
+/** Master card, step 3: choose which super rule is applied to the chosen player. */
+function openRulePicker(target) {
+  const self = target.id === state.you;
+  const who = self ? "you" : target.name;
+  const rules = [
+    { id: "again", label: "🔁 Play Again", text: self ? "you play again" : target.name + " plays next", needsOther: false },
+    { id: "sweep", label: "🧹 Sweep", text: who + " put" + (self ? "" : "s") + " down all " + (self ? "your" : "their") + " " + pendingColor + " cards", needsOther: false },
+    { id: "blast", label: "💥 Blast", text: target.name + " draws 2 cards", needsOther: true },
+    { id: "swap", label: "🔄 Swap Hands", text: "you swap hands with " + target.name, needsOther: true },
+    { id: "gift", label: "🎁 Gift", text: "you give " + target.name + " 2 random cards", needsOther: true },
+    { id: "draw2", label: "+2 Draw Two", text: target.name + " draws 2 cards and loses their next turn", needsOther: true },
+    { id: "wild4", label: "+4 Draw Four", text: target.name + " draws 4 cards and loses their next turn", needsOther: true },
+  ];
+  $("ruleTitle").textContent = "Rule for " + (self ? "yourself" : target.name);
+  const list = $("ruleList");
+  list.innerHTML = "";
+  for (const r of rules) {
+    const btn = document.createElement("button");
+    btn.className = "ghost target";
+    btn.disabled = self && r.needsOther; // those rules need another player
+    btn.innerHTML = "<b></b><small></small>";
+    btn.querySelector("b").textContent = r.label;
+    btn.querySelector("small").textContent = r.text;
+    btn.addEventListener("click", () => {
+      $("ruleModal").classList.add("hidden");
+      send({ op: "play", cardId: pendingWild.id, color: pendingColor, target: target.id, rule: r.id });
+      pendingWild = null;
+    });
+    list.appendChild(btn);
+  }
+  $("ruleModal").classList.remove("hidden");
+}
+
 $("targetCancel").addEventListener("click", () => {
   $("targetModal").classList.add("hidden");
+  pendingWild = null;
+});
+$("ruleCancel").addEventListener("click", () => {
+  $("ruleModal").classList.add("hidden");
   pendingWild = null;
 });
 
@@ -616,9 +661,9 @@ document.querySelectorAll("#colorModal button").forEach((b) =>
   b.addEventListener("click", () => {
     $("colorModal").classList.add("hidden");
     if (!pendingWild) return;
-    if (pendingWild.value === "swap") {
+    if (pendingWild.value === "swap" || pendingWild.value === "master") {
       pendingColor = b.dataset.color;
-      openTargetPicker(); // Swap Hands also needs a player
+      openTargetPicker(pendingWild.value); // these cards also need a player (the Master card then a rule)
       return;
     }
     send({ op: "play", cardId: pendingWild.id, color: b.dataset.color });

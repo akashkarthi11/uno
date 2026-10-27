@@ -82,6 +82,7 @@ function buildDeck() {
     add('wild', 'swap');
     add('wild', 'gift');
   }
+  add('wild', 'master'); // the one plain Master card: pick a player, then pick a super rule for them
   return d;
 }
 
@@ -122,6 +123,14 @@ function playable(s, c, p) {
 
 function advance(s, steps, now) {
   s.cur = index(s, s.cur, steps);
+  // a player marked to lose a turn (Master card +2 / +4) is skipped when the turn reaches them
+  for (let guard = 0; guard < s.seats.length; guard++) {
+    const next = byId(s, s.seats[s.cur]);
+    if (!next.skipNext) break;
+    next.skipNext = false;
+    addLog(s, `${next.name} loses their turn.`);
+    s.cur = index(s, s.cur, 1);
+  }
   s.drawnId = null;
   s.turnAt = now;
 }
@@ -246,7 +255,7 @@ function settle(s) {
 function dispatch(s, me, b, now) {
   switch (b.op) {
     case 'start': return start(s, me, now);
-    case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now, String(b.target ?? ''));
+    case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now, String(b.target ?? ''), String(b.rule ?? ''));
     case 'draw': return draw(s, me, now, b);
     case 'pass': return pass(s, me, now);
     case 'uno': return sayUno(s, me);
@@ -271,6 +280,7 @@ function start(s, p, now) {
     m.hand = [];
     m.saidUno = false;
     m.finished = false;
+    m.skipNext = false;
   });
   s.seats = s.members.slice(0, MAX_SEATS).map((m) => m.id);
   s.deck = shuffle(buildDeck());
@@ -371,6 +381,7 @@ function toLobby(s, p) {
     m.hand = [];
     m.finished = false;
     m.saidUno = false;
+    m.skipNext = false;
   });
   s.deck = [];
   s.discard = [];
@@ -407,7 +418,7 @@ function requireTurn(s, p) {
   if (s.seats[s.cur] !== p.id) fail('It is not your turn.');
 }
 
-function play(s, p, cardId, chosen, now, targetId = '') {
+function play(s, p, cardId, chosen, now, targetId = '', ruleId = '') {
   requireTurn(s, p);
   const c = p.hand.find((h) => h.id === cardId);
   if (!c) fail('That card is not in your hand.');
@@ -425,7 +436,16 @@ function play(s, p, cardId, chosen, now, targetId = '') {
       fail('Choose a player to swap hands with.');
     }
   }
-  doPlay(s, p, c, chosen, now, swapWith);
+  let rule = '';
+  if (c.value === 'master') {
+    // the Master card names a player (swapWith holds the chosen player) and one super rule to apply to them
+    rule = ruleId;
+    if (!MASTER_RULES.includes(rule)) fail('Choose a super rule for the Master card.');
+    swapWith = byId(s, targetId);
+    if (!swapWith || !s.seats.includes(swapWith.id) || swapWith.finished) fail('Choose a player for the Master card.');
+    if (swapWith === p && !['again', 'sweep'].includes(rule)) fail('That rule needs another player — choose someone else.');
+  }
+  doPlay(s, p, c, chosen, now, swapWith, rule);
 }
 
 function draw(s, p, now, b = {}) {
@@ -457,9 +477,13 @@ function sayUno(s, p) {
   addLog(s, p.name + ' says GrowX!');
 }
 
-const SPECIALS = ['skip', 'reverse', 'draw2', 'again', 'sweep', 'wild', 'wild4', 'blast', 'swap', 'gift'];
-const WILD_KINDS = ['wild', 'wild4', 'blast', 'swap', 'gift']; // cards with no colour of their own
-const SUPER_NAMES = { again: '🔁 Play Again', sweep: '🧹 Sweep', blast: '💥 Blast', swap: '🔄 Swap Hands', gift: '🎁 Gift' };
+const SPECIALS = ['skip', 'reverse', 'draw2', 'again', 'sweep', 'wild', 'wild4', 'blast', 'swap', 'gift', 'master'];
+const WILD_KINDS = ['wild', 'wild4', 'blast', 'swap', 'gift', 'master']; // cards with no colour of their own
+const SUPER_NAMES = {
+  again: '🔁 Play Again', sweep: '🧹 Sweep', blast: '💥 Blast', swap: '🔄 Swap Hands', gift: '🎁 Gift', master: '✨ Master Card',
+};
+// the rules a Master card can apply to a chosen player ('draw2' = +2, 'wild4' = +4)
+const MASTER_RULES = ['again', 'sweep', 'blast', 'swap', 'gift', 'draw2', 'wild4'];
 
 /** Admin-only: the card picked up is the special card the admin chose instead of the top of the pile. */
 function chosenCard(s, p, b) {
@@ -473,7 +497,86 @@ function chosenCard(s, p, b) {
   return { id: s.nextId, color, value };
 }
 
-function doPlay(s, p, c, chosen, now, swapWith = null) {
+/** Marks a player as out of cards. Returns true if that ended the game. */
+function finishPlayer(s, t) {
+  t.finished = true;
+  t.saidUno = false;
+  s.ranking.push(t.name);
+  addLog(s, `${t.name} is out of cards — #${s.ranking.length}!`);
+  const left = active(s);
+  if (left.length > 1) return false;
+  s.over = true;
+  s.winner = s.ranking[0];
+  s.loser = left.length ? left[0].name : null;
+  s.notice = null;
+  addLog(s, s.loser ? `${s.loser} is left holding cards and loses!` : 'Game over.');
+  return true;
+}
+
+/**
+ * ✨ Master card: apply the chosen super rule to the chosen player t (t may be p for Play Again / Sweep).
+ * Returns 'again' (p plays again), 'jump' (the turn went to t), 'over' (the game ended) or null.
+ */
+function masterEffect(s, p, t, rule, now) {
+  switch (rule) {
+    case 'again':
+      if (t === p) return 'again';
+      t.skipNext = false; // they are about to play, so any pending lost turn is cancelled
+      s.cur = s.seats.indexOf(t.id);
+      s.drawnId = null;
+      s.turnAt = now;
+      addLog(s, `🔁 ${t.name} plays next.`);
+      return 'jump';
+    case 'sweep': {
+      const swept = t.hand.filter((h) => h.color === s.color);
+      if (!swept.length) {
+        addLog(s, `🧹 ${t.name} has no ${s.color} cards to put down.`);
+        return null;
+      }
+      t.hand = t.hand.filter((h) => h.color !== s.color);
+      s.discard.splice(s.discard.length - 1, 0, ...swept); // under the Master card on top
+      addLog(s, `🧹 ${t.name} put down ${swept.length} ${s.color} card${swept.length === 1 ? '' : 's'}.`);
+      return t.hand.length === 0 && !t.finished && finishPlayer(s, t) ? 'over' : null;
+    }
+    case 'blast':
+      give(s, t, 2);
+      addLog(s, `💥 ${t.name} draws 2 cards.`);
+      return null;
+    case 'draw2':
+    case 'wild4': {
+      // +2 / +4 like the classic cards: the player draws and also loses their next turn
+      const n = rule === 'wild4' ? 4 : 2;
+      give(s, t, n);
+      t.skipNext = true;
+      addLog(s, `+${n} ${t.name} draws ${n} cards and loses their next turn.`);
+      return null;
+    }
+    case 'swap':
+      if (!p.finished && !t.finished) {
+        [p.hand, t.hand] = [t.hand, p.hand];
+        p.saidUno = false;
+        t.saidUno = false;
+        addLog(s, `🔄 ${p.name} swapped hands with ${t.name}.`);
+      }
+      return null;
+    case 'gift': {
+      const n = p.finished ? 0 : Math.min(2, p.hand.length - 1); // you always keep at least 1 card
+      if (n > 0) {
+        const given = shuffle([...p.hand]).slice(0, n);
+        const ids = new Set(given.map((x) => x.id));
+        p.hand = p.hand.filter((x) => !ids.has(x.id));
+        t.hand.push(...given);
+        t.saidUno = false;
+        addLog(s, `🎁 ${p.name} gave ${t.name} ${n} card${n === 1 ? '' : 's'}.`);
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
   const hadTwo = p.hand.length === 2; // playing from two cards is the moment GrowX! must already have been pressed
   p.hand = p.hand.filter((h) => h !== c && h.id !== c.id);
   let swept = [];
@@ -491,18 +594,7 @@ function doPlay(s, p, c, chosen, now, swapWith = null) {
   if (swept.length) addLog(s, `🧹 ${p.name} swept ${swept.length} more ${c.color} card${swept.length === 1 ? '' : 's'}.`);
 
   if (p.hand.length === 0) {
-    p.finished = true;
-    s.ranking.push(p.name);
-    addLog(s, `${p.name} is out of cards — #${s.ranking.length}!`);
-    const left = active(s);
-    if (left.length <= 1) {
-      s.over = true;
-      s.winner = s.ranking[0];
-      s.loser = left.length ? left[0].name : null;
-      s.notice = null;
-      addLog(s, s.loser ? `${s.loser} is left holding cards and loses!` : 'Game over.');
-      return;
-    }
+    if (finishPlayer(s, p)) return;
   } else if (p.hand.length === 1) {
     if (hadTwo && !p.saidUno) {
       give(s, p, 1);
@@ -517,7 +609,15 @@ function doPlay(s, p, c, chosen, now, swapWith = null) {
   const target = byId(s, s.seats[index(s, s.cur, 1)]);
   let skip = false;
   let again = false;
+  let jumped = false;
   switch (c.value) {
+    case 'master': {
+      const result = masterEffect(s, p, swapWith, rule, now);
+      if (result === 'over') return;
+      again = result === 'again';
+      jumped = result === 'jump';
+      break;
+    }
     case 'again':
       again = true;
       break;
@@ -572,6 +672,7 @@ function doPlay(s, p, c, chosen, now, swapWith = null) {
       break;
     default:
   }
+  if (jumped) return; // the Master card already handed the turn to the chosen player
   if (again && !p.finished) {
     // Play Again: the same player goes again with a fresh clock
     s.drawnId = null;
@@ -595,6 +696,7 @@ function commonColor(p) {
 /** Plays a card for an automatic turn; Swap Hands needs someone to swap with, so pick a random opponent. */
 function autoCard(s, p, c, now) {
   const opponents = active(s).filter((o) => o !== p);
+  if (c.value === 'master') return doPlay(s, p, c, commonColor(p), now, p, 'sweep'); // harmless: sweeps their own colour
   const swapWith = c.value === 'swap' && opponents.length ? opponents[rnd(opponents.length)] : null;
   return doPlay(s, p, c, commonColor(p), now, swapWith);
 }

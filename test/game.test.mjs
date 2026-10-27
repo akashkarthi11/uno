@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';
-const DECK_SIZE = 122; // 108 classic cards + 14 super cards
+const DECK_SIZE = 123; // 108 classic cards + 15 super cards
 import handler from '../api/game.js';
 
 function playOut(n) {
@@ -22,7 +22,7 @@ function playOut(n) {
     if (v.playable.length) {
       const c = v.hand.find((h) => h.id === v.playable[0]);
       const other = ps.find((p) => p !== cur && !p.finished);
-      G.act(s, cur, { op: 'play', cardId: c.id, color: c.color === 'wild' ? 'blue' : undefined, target: other.id }, now);
+      G.act(s, cur, { op: 'play', cardId: c.id, color: c.color === 'wild' ? 'blue' : undefined, target: other.id, rule: 'blast' }, now);
     } else if (s.drawnId != null) {
       G.act(s, cur, { op: 'pass' }, now);
     } else {
@@ -239,7 +239,7 @@ function threePlayers(handFor) {
   return { s, p, others, now };
 }
 
-test('super cards: the deck has 122 cards including the 14 super cards', () => {
+test('super cards: the deck has 123 cards including the 15 super cards', () => {
   const s = G.newRoom('t');
   const a = G.join(s, { name: 'A', admin: true }, 1000);
   G.join(s, { name: 'B', admin: false }, 1000);
@@ -247,8 +247,8 @@ test('super cards: the deck has 122 cards including the 14 super cards', () => {
   const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
   assert.equal(all.length, DECK_SIZE);
   const count = (v) => all.filter((c) => c.value === v).length;
-  assert.deepEqual([count('again'), count('sweep'), count('blast'), count('swap'), count('gift')], [4, 4, 2, 2, 2]);
-  assert.ok(!['again', 'sweep', 'blast', 'swap', 'gift'].includes(s.discard[0].value), 'the first card is never a super card');
+  assert.deepEqual([count('again'), count('sweep'), count('blast'), count('swap'), count('gift'), count('master')], [4, 4, 2, 2, 2, 1]);
+  assert.ok(!['again', 'sweep', 'blast', 'swap', 'gift', 'master'].includes(s.discard[0].value), 'the first card is never a super card');
 });
 
 test('super card 🔁 Play Again: the same player takes another turn', () => {
@@ -288,6 +288,100 @@ test('super card 🧹 Sweep: every other card of its colour goes down with it; w
   // a Sweep can only be played on its colour (or another Sweep)
   const wrong = threePlayers([{ id: 9801, color: 'blue', value: 'sweep' }, { id: 9802, color: 'blue', value: '4' }, { id: 9803, color: 'green', value: '1' }]);
   assert.throws(() => G.act(wrong.s, wrong.p, { op: 'play', cardId: 9801 }, wrong.now), /can't play/);
+});
+
+const masterHand = () => [
+  { id: 9901, color: 'wild', value: 'master' }, { id: 9902, color: 'red', value: '5' }, { id: 9903, color: 'blue', value: '2' },
+];
+
+test('✨ Master card: validates the player and the rule', () => {
+  const { s, p, others, now } = threePlayers(masterHand());
+  const play = (extra) => () => G.act(s, p, { op: 'play', cardId: 9901, color: 'red', ...extra }, now);
+  assert.throws(play({}), /Choose a super rule/);
+  assert.throws(play({ rule: 'sweep' }), /Choose a player/);
+  assert.throws(play({ rule: 'nonsense', target: others[0].id }), /Choose a super rule/);
+  for (const rule of ['blast', 'swap', 'gift', 'draw2', 'wild4']) {
+    assert.throws(play({ rule, target: p.id }), /another player/, rule + ' cannot target yourself');
+  }
+  assert.equal(p.hand.length, 3, 'nothing was played by the refused attempts');
+});
+
+test('✨ Master card: 🔁 Play Again sends the turn to the chosen player (or back to you)', () => {
+  const a = threePlayers(masterHand());
+  const far = a.others[1];
+  G.act(a.s, a.p, { op: 'play', cardId: 9901, color: 'red', target: far.id, rule: 'again' }, a.now);
+  assert.equal(a.s.seats[a.s.cur], far.id, 'the turn jumped to the chosen player');
+
+  const b = threePlayers(masterHand());
+  G.act(b.s, b.p, { op: 'play', cardId: 9901, color: 'red', target: b.p.id, rule: 'again' }, b.now);
+  assert.equal(b.s.seats[b.s.cur], b.p.id, 'choosing yourself means you go again');
+});
+
+test('✨ Master card: 🧹 Sweep puts down the chosen player\'s cards of the new colour', () => {
+  const { s, p, others, now } = threePlayers(masterHand());
+  const t = others[0];
+  t.hand = [{ id: 9911, color: 'red', value: '1' }, { id: 9912, color: 'red', value: '7' }, { id: 9913, color: 'blue', value: '4' }];
+  G.act(s, p, { op: 'play', cardId: 9901, color: 'red', target: t.id, rule: 'sweep' }, now);
+  assert.deepEqual(t.hand.map((c) => c.id), [9913]);
+  assert.equal(s.discard.at(-1).id, 9901, 'the Master card stays on top');
+
+  const own = threePlayers(masterHand()); // sweeping yourself: your red 5 goes down
+  G.act(own.s, own.p, { op: 'play', cardId: 9901, color: 'red', target: own.p.id, rule: 'sweep' }, own.now);
+  assert.deepEqual(own.p.hand.map((c) => c.id), [9903]);
+
+  const out = threePlayers(masterHand()); // sweeping away someone's whole hand takes them out of the game
+  out.others[0].hand = [{ id: 9921, color: 'red', value: '1' }];
+  G.act(out.s, out.p, { op: 'play', cardId: 9901, color: 'red', target: out.others[0].id, rule: 'sweep' }, out.now);
+  assert.equal(out.others[0].finished, true);
+  assert.deepEqual(out.s.ranking, [out.others[0].name]);
+});
+
+test('✨ Master card: 💥 draw 2, 🔄 swap, 🎁 gift 2 aimed at the chosen player', () => {
+  const blast = threePlayers(masterHand());
+  G.act(blast.s, blast.p, { op: 'play', cardId: 9901, color: 'red', target: blast.others[0].id, rule: 'blast' }, blast.now);
+  assert.deepEqual(blast.others.map((o) => o.hand.length), [7, 5]);
+
+  const swap = threePlayers(masterHand());
+  const before = swap.others[1].hand.map((c) => c.id).sort();
+  G.act(swap.s, swap.p, { op: 'play', cardId: 9901, color: 'red', target: swap.others[1].id, rule: 'swap' }, swap.now);
+  assert.deepEqual(swap.p.hand.map((c) => c.id).sort(), before);
+  assert.deepEqual(swap.others[1].hand.map((c) => c.id).sort(), [9902, 9903]);
+
+  const gift = threePlayers([...masterHand(), { id: 9904, color: 'green', value: '1' }, { id: 9905, color: 'yellow', value: '3' }]);
+  G.act(gift.s, gift.p, { op: 'play', cardId: 9901, color: 'red', target: gift.others[0].id, rule: 'gift' }, gift.now);
+  assert.equal(gift.others[0].hand.length, 7, 'received 2 cards');
+  assert.equal(gift.others[1].hand.length, 5, 'nobody else got anything');
+  assert.equal(gift.p.hand.length, 2, '4 cards left after playing, 2 given away');
+
+  const small = threePlayers(masterHand()); // only 2 cards left after playing: gives 1 and keeps at least 1
+  G.act(small.s, small.p, { op: 'play', cardId: 9901, color: 'red', target: small.others[0].id, rule: 'gift' }, small.now);
+  assert.equal(small.others[0].hand.length, 6);
+  assert.equal(small.p.hand.length, 1);
+});
+
+test('✨ Master card: ➕2 / ➕4 make the chosen player draw and lose their next turn', () => {
+  // chosen player is NOT next in line: they draw now and are skipped when the turn reaches them
+  const far = threePlayers(masterHand());
+  const nextP = far.s.members.find((m) => m.id === far.s.seats[(far.s.cur + 1) % 3]);
+  const third = far.others.find((o) => o !== nextP);
+  G.act(far.s, far.p, { op: 'play', cardId: 9901, color: 'red', target: third.id, rule: 'wild4' }, far.now);
+  assert.equal(third.hand.length, 9, 'drew 4');
+  assert.equal(third.skipNext, true);
+  assert.equal(far.s.seats[far.s.cur], nextP.id, 'the next player in line still plays now');
+  nextP.hand = [{ id: 9931, color: 'red', value: '9' }, { id: 9932, color: 'blue', value: '1' }];
+  nextP.saidUno = true;
+  G.act(far.s, nextP, { op: 'play', cardId: 9931 }, far.now + 1000);
+  assert.equal(far.s.seats[far.s.cur], far.p.id, 'the chosen player was skipped, so it is back to the first player');
+  assert.equal(third.skipNext, false);
+  assert.ok(far.s.log.some((l) => /loses their turn/.test(l)));
+
+  // chosen player IS next in line: same result as a classic +2
+  const near = threePlayers(masterHand());
+  const nextN = near.s.members.find((m) => m.id === near.s.seats[(near.s.cur + 1) % 3]);
+  const after = near.others.find((o) => o !== nextN);
+  G.act(near.s, near.p, { op: 'play', cardId: 9901, color: 'red', target: nextN.id, rule: 'draw2' }, near.now);
+  assert.equal(nextN.hand.length, 7);
+  assert.equal(near.s.seats[near.s.cur], after.id, 'next player skipped, turn goes to the one after');
 });
 
 test('super card 💥 Blast: every other player draws 1, then the turn moves on', () => {
