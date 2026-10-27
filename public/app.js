@@ -1,6 +1,7 @@
 "use strict";
 
-const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4" };
+const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4", again: "🔁", blast: "💥", swap: "🔄", gift: "🎁" };
+const SUPER = new Set(["again", "blast", "swap", "gift"]); // super cards get a golden look
 const POLL_MS = 1500;
 const REQUEST_TIMEOUT_MS = 8000;
 const HEARTBEAT_MS = 8000;
@@ -12,6 +13,7 @@ let myName = "";
 let myPassword = "";
 let playerId = null;
 let pendingWild = null;
+let pendingColor = null;
 let polling = false;
 let busy = false;
 let toastTimer = null;
@@ -99,7 +101,7 @@ function removedByAdmin() {
   state = null;
   playerId = null;
   store("uno-id-" + room, "");
-  ["game", "lobby", "roomInfo", "endModal", "colorModal", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
+  ["game", "lobby", "roomInfo", "endModal", "colorModal", "targetModal", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
   $("joinScreen").classList.remove("hidden");
   toast("You were removed by the admin.");
 }
@@ -171,7 +173,10 @@ function cardEl(card) {
   const el = document.createElement("div");
   el.className = "card " + card.color;
   const sym = LABEL[card.value] || card.value;
-  el.innerHTML = '<span class="c tl">' + sym + '</span><span class="v">' + sym + '</span><span class="c br">' + sym + "</span>";
+  const isSuper = SUPER.has(card.value);
+  if (isSuper) el.classList.add("super");
+  el.innerHTML = (isSuper ? '<span class="star">★</span>' : "") +
+    '<span class="c tl">' + sym + '</span><span class="v">' + sym + '</span><span class="c br">' + sym + "</span>";
   return el;
 }
 
@@ -553,9 +558,9 @@ function openCheat() {
   box.innerHTML = "";
   const options = [];
   for (const c of ["red", "yellow", "green", "blue"]) {
-    for (const v of ["skip", "reverse", "draw2"]) options.push({ color: c, value: v });
+    for (const v of ["skip", "reverse", "draw2", "again"]) options.push({ color: c, value: v });
   }
-  options.push({ color: "wild", value: "wild" }, { color: "wild", value: "wild4" });
+  for (const v of ["wild", "wild4", "blast", "swap", "gift"]) options.push({ color: "wild", value: v });
   for (const o of options) {
     const el = cardEl(o);
     el.addEventListener("click", () => {
@@ -584,10 +589,39 @@ function onCard(card) {
   }
 }
 
+/** Swap Hands: pick who to swap with. */
+function openTargetPicker() {
+  const list = $("targetList");
+  list.innerHTML = "";
+  const rivals = state.players.filter((p) => p.id !== state.you && !p.finished);
+  for (const p of rivals) {
+    const btn = document.createElement("button");
+    btn.className = "ghost target";
+    btn.textContent = p.name + " · " + p.count + " card" + (p.count === 1 ? "" : "s");
+    btn.addEventListener("click", () => {
+      $("targetModal").classList.add("hidden");
+      send({ op: "play", cardId: pendingWild.id, color: pendingColor, target: p.id });
+      pendingWild = null;
+    });
+    list.appendChild(btn);
+  }
+  $("targetModal").classList.remove("hidden");
+}
+$("targetCancel").addEventListener("click", () => {
+  $("targetModal").classList.add("hidden");
+  pendingWild = null;
+});
+
 document.querySelectorAll("#colorModal button").forEach((b) =>
   b.addEventListener("click", () => {
     $("colorModal").classList.add("hidden");
-    if (pendingWild) send({ op: "play", cardId: pendingWild.id, color: b.dataset.color });
+    if (!pendingWild) return;
+    if (pendingWild.value === "swap") {
+      pendingColor = b.dataset.color;
+      openTargetPicker(); // Swap Hands also needs a player
+      return;
+    }
+    send({ op: "play", cardId: pendingWild.id, color: b.dataset.color });
     pendingWild = null;
   }));
 

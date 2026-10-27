@@ -259,7 +259,12 @@ button.kick {
 .swatches button:hover { transform: scale(1.12); }
 .swatches .red { background: var(--red); } .swatches .yellow { background: var(--card-yellow); }
 .swatches .green { background: var(--green); } .swatches .blue { background: var(--blue); }
-#cheatOptions { display: grid; grid-template-columns: repeat(4, auto); gap: 8px; justify-content: center; margin: 12px 0 16px; }
+/* super cards: golden border + star */
+.card.super { border-color: #ffd54a; box-shadow: 0 0 0 2px #ffb300, 0 6px 18px rgba(255,179,0,.45); }
+.card .star { position: absolute; top: 3px; left: 50%; transform: translateX(-50%); font-size: 12px; z-index: 2; color: #ffd54a; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
+#targetList { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 16px; }
+#targetList button.target { padding: 12px 18px; }
+#cheatOptions { display: grid; grid-template-columns: repeat(5, auto); gap: 8px; justify-content: center; margin: 12px 0 16px; }
 #cheatOptions .card { width: 64px; height: 96px; font-size: 26px; cursor: pointer; }
 #cheatOptions .card:hover { transform: translateY(-4px); }
 

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';
+const DECK_SIZE = 118; // 108 classic cards + 10 super cards
 import handler from '../api/game.js';
 
 function playOut(n) {
@@ -20,14 +21,15 @@ function playOut(n) {
     const v = G.view(s, cur, now);
     if (v.playable.length) {
       const c = v.hand.find((h) => h.id === v.playable[0]);
-      G.act(s, cur, { op: 'play', cardId: c.id, color: c.color === 'wild' ? 'blue' : undefined }, now);
+      const other = ps.find((p) => p !== cur && !p.finished);
+      G.act(s, cur, { op: 'play', cardId: c.id, color: c.color === 'wild' ? 'blue' : undefined, target: other.id }, now);
     } else if (s.drawnId != null) {
       G.act(s, cur, { op: 'pass' }, now);
     } else {
       G.act(s, cur, { op: 'draw' }, now);
     }
     const total = s.deck.length + s.discard.length + s.members.reduce((a, m) => a + m.hand.length, 0);
-    assert.equal(total, 108, 'card count must stay 108');
+    assert.equal(total, DECK_SIZE, 'card count must stay constant');
   }
   return s;
 }
@@ -143,13 +145,13 @@ test('admin can remove players in the lobby and mid-game; the game stays consist
 
   G.act(s, admin, { op: 'start' }, now);
   const total = () => s.deck.length + s.discard.length + s.members.reduce((a, m) => a + m.hand.length, 0);
-  assert.equal(total(), 108);
+  assert.equal(total(), DECK_SIZE);
   s.cur = s.seats.indexOf(b.id); // remove the player whose turn it is
   G.act(s, admin, { op: 'kick', targetId: b.id }, now);
   assert.equal(s.seats.length, 2);
   assert.ok(!s.members.some((m) => m.id === b.id));
   assert.ok(s.seats[s.cur] !== undefined && !s.over);
-  assert.equal(total(), 108, 'removed player\'s cards return to the pile');
+  assert.equal(total(), DECK_SIZE, 'removed player\'s cards return to the pile');
 
   G.act(s, admin, { op: 'kick', targetId: c.id }, now); // leaves only the admin
   assert.equal(s.over, true);
@@ -222,6 +224,99 @@ test('GrowX! button: pressing it before the second-to-last card avoids the penal
   assert.equal(p.hand.length, 1);
 });
 
+function threePlayers(handFor) {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const a = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false }, now);
+  const c = G.join(s, { name: 'C', admin: false }, now);
+  G.act(s, a, { op: 'start' }, now);
+  const p = s.members.find((m) => m.id === s.seats[s.cur]);
+  s.color = 'red';
+  s.discard.push({ id: 9000, color: 'red', value: '3' });
+  p.hand = handFor;
+  const others = [a, b, c].filter((m) => m !== p);
+  return { s, p, others, now };
+}
+
+test('super cards: the deck has 118 cards including the 10 new ones', () => {
+  const s = G.newRoom('t');
+  const a = G.join(s, { name: 'A', admin: true }, 1000);
+  G.join(s, { name: 'B', admin: false }, 1000);
+  G.act(s, a, { op: 'start' }, 1000);
+  const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
+  assert.equal(all.length, DECK_SIZE);
+  const count = (v) => all.filter((c) => c.value === v).length;
+  assert.deepEqual([count('again'), count('blast'), count('swap'), count('gift')], [4, 2, 2, 2]);
+  assert.ok(!['again', 'blast', 'swap', 'gift'].includes(s.discard[0].value), 'the first card is never a super card');
+});
+
+test('super card 🔁 Play Again: the same player takes another turn', () => {
+  const { s, p, now } = threePlayers([
+    { id: 9101, color: 'red', value: 'again' }, { id: 9102, color: 'blue', value: '2' }, { id: 9103, color: 'green', value: '5' },
+  ]);
+  G.act(s, p, { op: 'play', cardId: 9101 }, now);
+  assert.equal(s.seats[s.cur], p.id, 'still their turn');
+  assert.equal(p.hand.length, 2);
+  assert.equal(s.color, 'red');
+});
+
+test('super card 💥 Blast: every other player draws 1, then the turn moves on', () => {
+  const { s, p, others, now } = threePlayers([
+    { id: 9201, color: 'wild', value: 'blast' }, { id: 9202, color: 'blue', value: '2' }, { id: 9203, color: 'green', value: '5' },
+  ]);
+  assert.throws(() => G.act(s, p, { op: 'play', cardId: 9201 }, now), /Choose a colour/);
+  G.act(s, p, { op: 'play', cardId: 9201, color: 'blue' }, now);
+  assert.deepEqual(others.map((o) => o.hand.length), [6, 6]);
+  assert.equal(p.hand.length, 2);
+  assert.equal(s.color, 'blue');
+  assert.notEqual(s.seats[s.cur], p.id);
+});
+
+test('super card 🔄 Swap Hands: needs a target, then the two hands trade places', () => {
+  const { s, p, others, now } = threePlayers([
+    { id: 9301, color: 'wild', value: 'swap' }, { id: 9302, color: 'blue', value: '2' }, { id: 9303, color: 'green', value: '5' },
+  ]);
+  const target = others[0];
+  const targetCards = target.hand.map((c) => c.id).sort();
+  assert.throws(() => G.act(s, p, { op: 'play', cardId: 9301, color: 'blue' }, now), /Choose a player/);
+  assert.throws(() => G.act(s, p, { op: 'play', cardId: 9301, color: 'blue', target: p.id }, now), /Choose a player/);
+  G.act(s, p, { op: 'play', cardId: 9301, color: 'blue', target: target.id }, now);
+  assert.deepEqual(p.hand.map((c) => c.id).sort(), targetCards, 'got the other player\'s hand');
+  assert.deepEqual(target.hand.map((c) => c.id).sort(), [9302, 9303], 'the other player got the leftover cards');
+});
+
+test('super card 🎁 Gift: one random card to each other player, always keeping at least 1', () => {
+  const four = [9401, 9402, 9403, 9404];
+  const { s, p, others, now } = threePlayers([
+    { id: 9401, color: 'wild', value: 'gift' }, { id: 9402, color: 'blue', value: '2' }, { id: 9403, color: 'green', value: '5' },
+    { id: 9404, color: 'yellow', value: '7' },
+  ]);
+  G.act(s, p, { op: 'play', cardId: 9401, color: 'green' }, now);
+  assert.equal(p.hand.length, 1, '3 cards left, 2 given away');
+  assert.deepEqual(others.map((o) => o.hand.length), [6, 6]);
+  const allIds = [...p.hand, ...others.flatMap((o) => o.hand)].map((c) => c.id);
+  assert.ok([9402, 9403, 9404].every((id) => allIds.includes(id)), 'no card was lost');
+  assert.ok(four.length === 4);
+
+  // with only 1 card left after playing, nothing can be given and the player keeps it
+  const t = threePlayers([{ id: 9501, color: 'wild', value: 'gift' }, { id: 9502, color: 'blue', value: '2' }]);
+  t.p.saidUno = true;
+  G.act(t.s, t.p, { op: 'play', cardId: 9501, color: 'blue' }, t.now);
+  assert.equal(t.p.hand.length, 1);
+  assert.deepEqual(t.others.map((o) => o.hand.length), [5, 5]);
+});
+
+test('admin card picker offers the super cards too', () => {
+  const s = G.newRoom('t');
+  const a = G.join(s, { name: 'A', admin: true }, 1000);
+  G.join(s, { name: 'B', admin: false }, 1000);
+  G.act(s, a, { op: 'start' }, 1000);
+  s.cur = s.seats.indexOf(a.id);
+  G.act(s, a, { op: 'draw', value: 'swap', color: 'wild' }, 1000);
+  assert.ok(a.hand.some((c) => c.value === 'swap' && c.color === 'wild'));
+});
+
 test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {
   const s = G.newRoom('t');
   const now = 1000;
@@ -261,11 +356,11 @@ test('switching public/private removes players who no longer qualify (lobby and 
   const late = G.join(s, { name: 'Priv2', admin: false, role: 'private' }, now);
   G.act(s, admin, { op: 'start' }, now);
   const total = () => s.deck.length + s.discard.length + s.members.reduce((a, m) => a + m.hand.length, 0);
-  assert.equal(total(), 108);
+  assert.equal(total(), DECK_SIZE);
   G.act(s, admin, { op: 'private', on: false }, now); // mid-game: private players are removed, game ends
   assert.deepEqual(s.members.map((m) => m.name), ['Boss']);
   assert.equal(s.over, true);
-  assert.equal(total(), 108, 'removed players\' cards return to the pile');
+  assert.equal(total(), DECK_SIZE, 'removed players\' cards return to the pile');
   assert.ok(s.kicked.includes(priv.id) && s.kicked.includes(late.id));
 });
 

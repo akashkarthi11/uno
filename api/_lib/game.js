@@ -69,10 +69,17 @@ function buildDeck() {
       add(c, v);
       add(c, v);
     }
+    add(c, 'again'); // super card: one per colour
   }
   for (let i = 0; i < 4; i++) {
     add('wild', 'wild');
     add('wild', 'wild4');
+  }
+  for (let i = 0; i < 2; i++) {
+    // super cards played like a Wild (you also choose the next colour)
+    add('wild', 'blast');
+    add('wild', 'swap');
+    add('wild', 'gift');
   }
   return d;
 }
@@ -238,7 +245,7 @@ function settle(s) {
 function dispatch(s, me, b, now) {
   switch (b.op) {
     case 'start': return start(s, me, now);
-    case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now);
+    case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now, String(b.target ?? ''));
     case 'draw': return draw(s, me, now, b);
     case 'pass': return pass(s, me, now);
     case 'uno': return sayUno(s, me);
@@ -269,7 +276,7 @@ function start(s, p, now) {
   s.discard = [];
   seated(s).forEach((m) => give(s, m, INITIAL_HAND));
   let first = s.deck.pop();
-  while (first.color === 'wild' || ['skip', 'reverse', 'draw2'].includes(first.value)) {
+  while (first.color === 'wild' || ['skip', 'reverse', 'draw2', 'again'].includes(first.value)) {
     s.deck.unshift(first);
     shuffle(s.deck);
     first = s.deck.pop();
@@ -399,7 +406,7 @@ function requireTurn(s, p) {
   if (s.seats[s.cur] !== p.id) fail('It is not your turn.');
 }
 
-function play(s, p, cardId, chosen, now) {
+function play(s, p, cardId, chosen, now, targetId = '') {
   requireTurn(s, p);
   const c = p.hand.find((h) => h.id === cardId);
   if (!c) fail('That card is not in your hand.');
@@ -410,7 +417,14 @@ function play(s, p, cardId, chosen, now) {
       : "You can't play that card.");
   }
   if (c.color === 'wild' && !COLORS.includes(chosen)) fail('Choose a colour.');
-  doPlay(s, p, c, chosen, now);
+  let swapWith = null;
+  if (c.value === 'swap') {
+    swapWith = byId(s, targetId);
+    if (!swapWith || swapWith === p || !s.seats.includes(swapWith.id) || swapWith.finished) {
+      fail('Choose a player to swap hands with.');
+    }
+  }
+  doPlay(s, p, c, chosen, now, swapWith);
 }
 
 function draw(s, p, now, b = {}) {
@@ -442,7 +456,9 @@ function sayUno(s, p) {
   addLog(s, p.name + ' says GrowX!');
 }
 
-const SPECIALS = ['skip', 'reverse', 'draw2', 'wild', 'wild4'];
+const SPECIALS = ['skip', 'reverse', 'draw2', 'again', 'wild', 'wild4', 'blast', 'swap', 'gift'];
+const WILD_KINDS = ['wild', 'wild4', 'blast', 'swap', 'gift']; // cards with no colour of their own
+const SUPER_NAMES = { again: '🔁 Play Again', blast: '💥 Blast', swap: '🔄 Swap Hands', gift: '🎁 Gift' };
 
 /** Admin-only: the card picked up is the special card the admin chose instead of the top of the pile. */
 function chosenCard(s, p, b) {
@@ -450,19 +466,20 @@ function chosenCard(s, p, b) {
   const value = String(b.value ?? '');
   if (!SPECIALS.includes(value)) fail('Not a special card.');
   let color = String(b.color ?? '');
-  if (value === 'wild' || value === 'wild4') color = 'wild';
+  if (WILD_KINDS.includes(value)) color = 'wild';
   else if (!COLORS.includes(color)) fail('Choose a colour.');
   s.nextId = (s.nextId ?? 1000) + 1;
   return { id: s.nextId, color, value };
 }
 
-function doPlay(s, p, c, chosen, now) {
+function doPlay(s, p, c, chosen, now, swapWith = null) {
   const hadTwo = p.hand.length === 2; // playing from two cards is the moment GrowX! must already have been pressed
   p.hand = p.hand.filter((h) => h !== c && h.id !== c.id);
   s.discard.push(c);
   s.color = c.color === 'wild' ? chosen : c.color;
   s.drawnId = null;
-  addLog(s, `${p.name} played ${c.color === 'wild' ? '' : c.color + ' '}${c.value}${c.color === 'wild' ? ' → ' + s.color : ''}`);
+  const label = SUPER_NAMES[c.value] || c.value;
+  addLog(s, `${p.name} played ${c.color === 'wild' ? '' : c.color + ' '}${label}${c.color === 'wild' ? ' → ' + s.color : ''}`);
 
   if (p.hand.length === 0) {
     p.finished = true;
@@ -490,7 +507,41 @@ function doPlay(s, p, c, chosen, now) {
 
   const target = byId(s, s.seats[index(s, s.cur, 1)]);
   let skip = false;
+  let again = false;
   switch (c.value) {
+    case 'again':
+      again = true;
+      break;
+    case 'blast':
+      for (const o of active(s)) {
+        if (o !== p) give(s, o, 1);
+      }
+      addLog(s, '💥 Everyone else draws 1 card.');
+      break;
+    case 'swap':
+      if (!p.finished && swapWith && !swapWith.finished) {
+        [p.hand, swapWith.hand] = [swapWith.hand, p.hand];
+        p.saidUno = false;
+        swapWith.saidUno = false;
+        addLog(s, `🔄 ${p.name} swapped hands with ${swapWith.name}.`);
+      }
+      break;
+    case 'gift': {
+      // give 1 random card to every other player, but always keep at least 1 card
+      const others = active(s).filter((o) => o !== p);
+      const n = Math.min(others.length, p.hand.length - 1);
+      if (!p.finished && n > 0) {
+        const pool = shuffle([...p.hand]);
+        shuffle(others).slice(0, n).forEach((o, i) => {
+          o.hand.push(pool[i]);
+          o.saidUno = false;
+        });
+        const given = new Set(pool.slice(0, n).map((x) => x.id));
+        p.hand = p.hand.filter((x) => !given.has(x.id));
+        addLog(s, `🎁 ${p.name} gave ${n} card${n === 1 ? '' : 's'} away.`);
+      }
+      break;
+    }
     case 'skip':
       skip = true;
       addLog(s, target.name + ' is skipped.');
@@ -512,6 +563,13 @@ function doPlay(s, p, c, chosen, now) {
       break;
     default:
   }
+  if (again && !p.finished) {
+    // Play Again: the same player goes again with a fresh clock
+    s.drawnId = null;
+    s.turnAt = now;
+    addLog(s, `🔁 ${p.name} plays again.`);
+    return;
+  }
   advance(s, skip ? 2 : 1, now);
 }
 
@@ -525,17 +583,24 @@ function commonColor(p) {
   return COLORS.reduce((a, b) => (count[b] > count[a] ? b : a), COLORS[0]);
 }
 
+/** Plays a card for an automatic turn; Swap Hands needs someone to swap with, so pick a random opponent. */
+function autoCard(s, p, c, now) {
+  const opponents = active(s).filter((o) => o !== p);
+  const swapWith = c.value === 'swap' && opponents.length ? opponents[rnd(opponents.length)] : null;
+  return doPlay(s, p, c, commonColor(p), now, swapWith);
+}
+
 /** An offline player's turn is played automatically so the table never stalls. */
 function autoPlay(s, p, now) {
   if (p.hand.length <= 2) p.saidUno = true; // automatic turns never earn the GrowX! penalty
   if (s.drawnId != null) {
     // already drew this turn: the only legal card is the one just drawn
-    return doPlay(s, p, p.hand.find((c) => c.id === s.drawnId), commonColor(p), now);
+    return autoCard(s, p, p.hand.find((c) => c.id === s.drawnId), now);
   }
   const options = p.hand.filter((c) => playable(s, c, p)).sort((a, b) => (a.color === 'wild') - (b.color === 'wild'));
-  if (options.length) return doPlay(s, p, options[0], commonColor(p), now);
+  if (options.length) return autoCard(s, p, options[0], now);
   drawOne(s, p, now);
-  if (s.drawnId != null) doPlay(s, p, p.hand.find((c) => c.id === s.drawnId), commonColor(p), now);
+  if (s.drawnId != null) autoCard(s, p, p.hand.find((c) => c.id === s.drawnId), now);
   return undefined;
 }
 
