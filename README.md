@@ -110,3 +110,10 @@ Requests enter Vercel at Mumbai, but the function and database are in the US, wh
 
 The code already prefers `MUM_KV_REST_API_URL` / `MUM_KV_REST_API_TOKEN` when they exist. Move the function **and** the
 database together: either one alone is slower than today. Rooms live in the database, so games in progress are lost at the switch.
+
+### Choosing for a wild-type card (colour / player / rule)
+
+One sheet handles every step. It has **←** Back, **👁** Peek (hides the sheet so you can look at the table; a
+"▲ Continue choosing" pill brings it back at the same step) and **✕** Close (also a tap outside, or Escape). Chips show
+what you've chosen so far and are tappable to jump back. Closing leaves the card in your hand; tap it again to start
+over. The sheet also closes by itself if your turn ends. The admin's draw-pile card picker has the same ✕ / tap-outside.

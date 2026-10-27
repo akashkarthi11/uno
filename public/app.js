@@ -14,8 +14,6 @@ let room = "main";
 let myName = "";
 let myPassword = "";
 let playerId = null;
-let pendingWild = null;
-let pendingColor = null;
 let polling = false;
 let busy = false;
 let toastTimer = null;
@@ -125,7 +123,7 @@ function removedByAdmin() {
   state = null;
   playerId = null;
   store("uno-id-" + room, "");
-  ["game", "lobby", "roomInfo", "endModal", "colorModal", "targetModal", "ruleModal", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
+  ["game", "lobby", "roomInfo", "endModal", "playSheet", "sheetPill", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
   $("joinScreen").classList.remove("hidden");
   toast("You were removed by the admin.");
 }
@@ -268,6 +266,8 @@ function render() {
   const s = state;
   $("privateChip").classList.toggle("hidden", !s.private);
   const inGame = s.started;
+  // the sheet is only useful while it is still your turn and the card is still in your hand
+  if (sheet && !(s.started && !s.over && !s.paused && s.cur === s.you && s.hand.some((c) => c.id === sheet.card.id))) closeSheet();
   placeChat(inGame);
   renderChat(s);
   updateChatUi(s);
@@ -665,7 +665,6 @@ function openCheat() {
 }
 
 document.addEventListener("pointerup", cancelPress);
-$("cheatCancel").addEventListener("click", () => $("cheatModal").classList.add("hidden"));
 
 function onCard(card) {
   if (!state || state.over || state.cur !== state.you) return;
@@ -673,9 +672,9 @@ function onCard(card) {
     toast(card.value === "wild4" ? "Wild Draw Four needs a hand with no card of the current colour." : "You can't play that card.");
     return;
   }
+  if (sheet) closeSheet(); // tapping a card while peeking starts over with that card
   if (card.color === "wild") {
-    pendingWild = card;
-    $("colorModal").classList.remove("hidden");
+    openSheet(card);
   } else {
     playNow(card);
   }
@@ -735,86 +734,143 @@ function renderSettings(s) {
 $("supersAll").addEventListener("click", () => sendSupers(Object.fromEntries(SUPER_INFO.map((i) => [i.k, true]))));
 $("supersNone").addEventListener("click", () => sendSupers(Object.fromEntries(SUPER_INFO.map((i) => [i.k, false]))));
 
-/** Swap Hands: pick who to swap with. Master card: pick the player first (you may pick yourself), then a rule. */
-function openTargetPicker(kind) {
-  const master = kind === "master";
-  $("targetTitle").textContent = master ? "✨ Choose a player" : "🔄 Swap hands with…";
-  const list = $("targetList");
-  list.innerHTML = "";
-  const players = state.players.filter((p) => !p.finished && (master || p.id !== state.you));
-  for (const p of players) {
-    const btn = document.createElement("button");
-    btn.className = "ghost target";
-    btn.textContent = (p.id === state.you ? "You" : p.name) + " · " + p.count + " card" + (p.count === 1 ? "" : "s");
-    btn.addEventListener("click", () => {
-      $("targetModal").classList.add("hidden");
-      if (master) {
-        openRulePicker(p);
-        return;
-      }
-      send({ op: "play", cardId: pendingWild.id, color: pendingColor, target: p.id });
-      pendingWild = null;
-    });
-    list.appendChild(btn);
-  }
-  $("targetModal").classList.remove("hidden");
+/* ---------- choosing for a wild-type card: ONE sheet with Back / Peek / Close ---------- */
+/* Wild, +4, Blast, Gift: colour. Swap Hands: colour, player. Master card: colour, player, then a rule.
+   ✕ (or a tap outside, or Escape) closes it and shows the card screen; tap the card again to choose once more.
+   👁 hides the sheet for a moment so you can look at the table, and a pill brings it back at the same step. */
+
+const STEPS = { wild: ["colour"], wild4: ["colour"], blast: ["colour"], gift: ["colour"], swap: ["colour", "player"], master: ["colour", "player", "rule"] };
+const COLOUR_NAMES = { red: "Red", yellow: "Yellow", green: "Green", blue: "Blue" };
+let sheet = null; // { card, steps, i, color, target, rule }
+
+function openSheet(card) {
+  sheet = { card, steps: STEPS[card.value] || ["colour"], i: 0, color: null, target: null };
+  $("sheetPill").classList.add("hidden");
+  $("playSheet").classList.remove("hidden");
+  renderSheet();
 }
 
-/** Master card, step 3: choose which super rule is applied to the chosen player. */
-function openRulePicker(target) {
-  const self = target.id === state.you;
-  const who = self ? "you" : target.name;
-  const rules = [
-    { id: "again", label: "🔁 Play Again", text: self ? "you play again" : target.name + " plays next", needsOther: false },
-    { id: "sweep", label: "🧹 Sweep", text: who + " put" + (self ? "" : "s") + " down all " + (self ? "your" : "their") + " " + pendingColor + " cards", needsOther: false },
-    { id: "blast", label: "💥 Blast", text: target.name + " draws 2 cards", needsOther: true },
-    { id: "swap", label: "🔄 Swap Hands", text: "you swap hands with " + target.name, needsOther: true },
-    { id: "gift", label: "🎁 Gift", text: "you give " + target.name + " 2 random cards", needsOther: true },
-    { id: "draw2", label: "+2 Draw Two", text: target.name + " draws 2 cards and loses their next turn", needsOther: true },
-    { id: "wild4", label: "+4 Draw Four", text: target.name + " draws 4 cards and loses their next turn", needsOther: true },
-  ];
-  $("ruleTitle").textContent = "Rule for " + (self ? "yourself" : target.name);
-  const list = $("ruleList");
-  list.innerHTML = "";
-  // rules that belong to a switched-off super card are not offered (+2 / +4 are always available)
-  for (const r of rules.filter((x) => x.id === "draw2" || x.id === "wild4" || superOn(x.id))) {
-    const btn = document.createElement("button");
-    btn.className = "ghost target";
-    btn.disabled = self && r.needsOther; // those rules need another player
-    btn.innerHTML = "<b></b><small></small>";
-    btn.querySelector("b").textContent = r.label;
-    btn.querySelector("small").textContent = r.text;
-    btn.addEventListener("click", () => {
-      $("ruleModal").classList.add("hidden");
-      send({ op: "play", cardId: pendingWild.id, color: pendingColor, target: target.id, rule: r.id });
-      pendingWild = null;
-    });
-    list.appendChild(btn);
-  }
-  $("ruleModal").classList.remove("hidden");
+function closeSheet() {
+  sheet = null;
+  $("playSheet").classList.add("hidden");
+  $("sheetPill").classList.add("hidden");
 }
 
-$("targetCancel").addEventListener("click", () => {
-  $("targetModal").classList.add("hidden");
-  pendingWild = null;
-});
-$("ruleCancel").addEventListener("click", () => {
-  $("ruleModal").classList.add("hidden");
-  pendingWild = null;
-});
+function peekSheet(on) {
+  if (!sheet) return;
+  $("playSheet").classList.toggle("hidden", on);
+  $("sheetPill").classList.toggle("hidden", !on);
+}
 
-document.querySelectorAll("#colorModal button").forEach((b) =>
-  b.addEventListener("click", () => {
-    $("colorModal").classList.add("hidden");
-    if (!pendingWild) return;
-    if (pendingWild.value === "swap" || pendingWild.value === "master") {
-      pendingColor = b.dataset.color;
-      openTargetPicker(pendingWild.value); // these cards also need a player (the Master card then a rule)
-      return;
+function sheetBackTo(i) {
+  if (!sheet) return;
+  sheet.i = i;
+  if (i <= 0) sheet.color = null;
+  if (i <= 1) sheet.target = null;
+  renderSheet();
+}
+
+function sheetNext() {
+  if (sheet.i < sheet.steps.length - 1) {
+    sheet.i += 1;
+    renderSheet();
+    return;
+  }
+  const { card, color, target, rule } = sheet;
+  closeSheet();
+  const body = { op: "play", cardId: card.id, color };
+  if (target) body.target = target.id;
+  if (rule) body.rule = rule;
+  send(body);
+}
+
+function renderSheet() {
+  const step = sheet.steps[sheet.i];
+  const card = sheet.card;
+  const self = sheet.target && sheet.target.id === state.you;
+  $("sheetBack").classList.toggle("invisible", sheet.i === 0);
+  $("sheetTitle").textContent =
+    step === "colour" ? "Choose a colour" :
+    step === "player" ? (card.value === "master" ? "✨ Choose a player" : "🔄 Swap hands with…") :
+    "Rule for " + (self ? "yourself" : sheet.target.name);
+
+  // chips: what is chosen so far; tap one to go back to that step
+  const chips = $("sheetChips");
+  chips.innerHTML = "";
+  const addChip = (text, stepIndex) => {
+    const c = document.createElement(stepIndex === undefined ? "span" : "button");
+    c.className = "chip" + (stepIndex === undefined ? " fixed" : "");
+    c.textContent = text;
+    if (stepIndex !== undefined) { c.type = "button"; c.addEventListener("click", () => sheetBackTo(stepIndex)); }
+    chips.appendChild(c);
+  };
+  addChip((LABEL[card.value] || card.value) + " " + (SUPER.has(card.value) ? "" : "card"));
+  if (sheet.color) addChip("● " + COLOUR_NAMES[sheet.color] + " ✎", 0);
+  if (sheet.target) addChip((self ? "You" : sheet.target.name) + " ✎", 1);
+
+  const body = $("sheetBody");
+  body.innerHTML = "";
+  if (step === "colour") {
+    const grid = document.createElement("div");
+    grid.className = "swatch-grid";
+    for (const c of ["red", "yellow", "green", "blue"]) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "swatch " + c;
+      b.textContent = COLOUR_NAMES[c];
+      b.addEventListener("click", () => { sheet.color = c; sheetNext(); });
+      grid.appendChild(b);
     }
-    send({ op: "play", cardId: pendingWild.id, color: b.dataset.color });
-    pendingWild = null;
-  }));
+    body.appendChild(grid);
+  } else if (step === "player") {
+    const master = card.value === "master";
+    for (const p of state.players.filter((x) => !x.finished && (master || x.id !== state.you))) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ghost target";
+      b.textContent = (p.id === state.you ? "You" : p.name) + " · " + p.count + " card" + (p.count === 1 ? "" : "s");
+      b.addEventListener("click", () => { sheet.target = { id: p.id, name: p.name }; sheetNext(); });
+      body.appendChild(b);
+    }
+  } else {
+    const who = self ? "you" : sheet.target.name;
+    const name = sheet.target.name;
+    const rules = [
+      { id: "again", label: "🔁 Play Again", text: self ? "you play again" : name + " plays next", needsOther: false },
+      { id: "sweep", label: "🧹 Sweep", text: who + " put" + (self ? "" : "s") + " down all " + (self ? "your" : "their") + " " + sheet.color + " cards", needsOther: false },
+      { id: "blast", label: "💥 Blast", text: name + " draws 2 cards", needsOther: true },
+      { id: "swap", label: "🔄 Swap Hands", text: "you swap hands with " + name, needsOther: true },
+      { id: "gift", label: "🎁 Gift", text: "you give " + name + " 2 random cards", needsOther: true },
+      { id: "draw2", label: "+2 Draw Two", text: name + " draws 2 cards and loses their next turn", needsOther: true },
+      { id: "wild4", label: "+4 Draw Four", text: name + " draws 4 cards and loses their next turn", needsOther: true },
+    ];
+    // rules that belong to a switched-off super card are not offered (+2 / +4 are always available)
+    for (const r of rules.filter((x) => x.id === "draw2" || x.id === "wild4" || superOn(x.id))) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ghost target";
+      b.disabled = self && r.needsOther; // those rules need another player
+      b.innerHTML = "<b></b><small></small>";
+      b.querySelector("b").textContent = r.label;
+      b.querySelector("small").textContent = r.text;
+      b.addEventListener("click", () => { sheet.rule = r.id; sheetNext(); });
+      body.appendChild(b);
+    }
+  }
+}
+
+$("sheetClose").addEventListener("click", closeSheet);
+$("sheetBack").addEventListener("click", () => sheetBackTo(sheet.i - 1));
+$("sheetPeek").addEventListener("click", () => peekSheet(true));
+$("sheetPill").addEventListener("click", () => peekSheet(false));
+$("playSheet").addEventListener("click", (e) => { if (e.target === $("playSheet")) closeSheet(); }); // tap outside
+$("cheatModal").addEventListener("click", (e) => { if (e.target === $("cheatModal")) $("cheatModal").classList.add("hidden"); });
+$("cheatX").addEventListener("click", () => $("cheatModal").classList.add("hidden"));
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  closeSheet();
+  $("cheatModal").classList.add("hidden");
+});
 
 $("joinBtn").addEventListener("click", join);
 $("nameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });

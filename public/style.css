@@ -422,3 +422,29 @@ button.kick {
   #hand { padding-top: 22px; }
   .opp { min-width: 84px !important; padding: 10px 10px 8px !important; }
 }
+
+/* ---------- the card-choice sheet (colour -> player -> rule): Back / Peek / Close ---------- */
+.box.sheet { text-align: left; width: min(520px, 100%); }
+.sheet-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sheet-head h2 { flex: 1; margin: 0; font-size: 20px; text-align: left; }
+button.icon { width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 50%; font-size: 18px; flex: 0 0 auto; }
+.invisible { visibility: hidden; }
+#sheetChips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+.chip { padding: 3px 12px; min-height: 0; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--brand-soft); color: var(--brand-ink); border: 1px solid var(--brand-line); box-shadow: none; }
+button.chip { cursor: pointer; }
+.chip.fixed { background: var(--surface-soft); color: var(--ink); border-color: var(--line); }
+#sheetBody { display: flex; flex-direction: column; gap: 8px; }
+#sheetBody button.target { margin-left: 0 !important; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; align-items: center; }
+#sheetBody button small { font-weight: 500; color: var(--muted); }
+.swatch-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.swatch { height: 68px; border-radius: 16px; border: 3px solid #fff; box-shadow: var(--shadow); color: #fff; font-size: 17px; font-weight: 800; }
+.swatch.red { background: var(--red); } .swatch.yellow { background: var(--card-yellow); color: #5c4400; }
+.swatch.green { background: var(--green); } .swatch.blue { background: var(--blue); }
+#sheetPill {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 75; border-radius: 999px; padding: 10px 20px;
+  box-shadow: var(--shadow-lg);
+}
+@media (max-width: 640px) {
+  #sheetPill { bottom: calc(140px + env(safe-area-inset-bottom)); }
+  .swatch { height: 60px; }
+}

@@ -95,39 +95,28 @@
 <div id="chatDock" class="hidden"></div>
 <div id="toast" class="hidden"></div>
 
-<div id="colorModal" class="modal hidden">
-  <div class="box">
-    <h2>Choose a colour</h2>
-    <div class="swatches">
-      <button data-color="red" class="red"></button>
-      <button data-color="yellow" class="yellow"></button>
-      <button data-color="green" class="green"></button>
-      <button data-color="blue" class="blue"></button>
+<div id="playSheet" class="modal hidden">
+  <div class="box sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head">
+      <button id="sheetBack" class="icon ghost invisible" type="button" title="Back" aria-label="Back">←</button>
+      <h2 id="sheetTitle">Choose a colour</h2>
+      <button id="sheetPeek" class="icon ghost" type="button" title="Look at the table, then come back" aria-label="Look at the table">👁</button>
+      <button id="sheetClose" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
     </div>
+    <div id="sheetChips"></div>
+    <div id="sheetBody"></div>
+    <p class="hint">✕ or a tap outside closes this · 👁 lets you look at the table first</p>
   </div>
 </div>
-
-<div id="targetModal" class="modal hidden">
-  <div class="box">
-    <h2 id="targetTitle">🔄 Swap hands with…</h2>
-    <div id="targetList"></div>
-    <button id="targetCancel" class="ghost">Cancel</button>
-  </div>
-</div>
-
-<div id="ruleModal" class="modal hidden">
-  <div class="box">
-    <h2 id="ruleTitle">Pick a rule</h2>
-    <div id="ruleList"></div>
-    <button id="ruleCancel" class="ghost">Cancel</button>
-  </div>
-</div>
+<button id="sheetPill" class="hidden" type="button">▲ Continue choosing</button>
 
 <div id="cheatModal" class="modal hidden">
-  <div class="box">
-    <h2>Pick your card</h2>
+  <div class="box sheet">
+    <div class="sheet-head">
+      <h2>Pick your card</h2>
+      <button id="cheatX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
+    </div>
     <div id="cheatOptions"></div>
-    <button id="cheatCancel" class="ghost">Cancel</button>
   </div>
 </div>
 
