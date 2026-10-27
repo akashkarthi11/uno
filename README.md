@@ -117,3 +117,22 @@ One sheet handles every step. It has **←** Back, **👁** Peek (hides the shee
 "▲ Continue choosing" pill brings it back at the same step) and **✕** Close (also a tap outside, or Escape). Chips show
 what you've chosen so far and are tappable to jump back. Closing leaves the card in your hand; tap it again to start
 over. The sheet also closes by itself if your turn ends. The admin's draw-pile card picker has the same ✕ / tap-outside.
+
+## Play offline on a hotspot (no internet, no Vercel)
+
+The server needs only **Node 20+** (no `npm install`, no internet). Rooms are kept in the server's memory.
+
+**Option A – a laptop hosts:** `docker compose up -d` (or `node server.js`). Everyone joins the same Wi-Fi/hotspot and opens
+`http://<laptop-address>:8080`. On Windows allow the port once:
+`netsh advfirewall firewall add rule name="GrowX 8080" dir=in action=allow protocol=TCP localport=8080`.
+
+**Option B – an Android phone hosts (no laptop), using Termux** (install Termux from F-Droid):
+1. One time, with internet: `pkg update && pkg install nodejs git`, then `git clone https://github.com/akashkarthi11/uno.git`
+   (or copy just the `api`, `public` and `server.js` files onto the phone).
+2. Switch the phone's hotspot on; the other phones join it.
+3. In Termux: `cd uno && termux-wake-lock && node server.js`  (keep Termux open; exempt it from battery optimisation).
+4. The host's address on its own hotspot is shown in `ip addr` (often `192.168.x.1`, or `10.x.x.1`). Everyone, including the
+   host, opens `http://<that address>:8080`.
+
+Notes: the game, chat, emoji and all cards work offline. **Voice chat does not** over plain `http://` (browsers only allow the
+microphone on https or localhost). Bluetooth is not supported. Restarting the server clears the rooms.
