@@ -204,8 +204,14 @@ function tickGame(s, now) {
     return true;
   }
   if (idle > TURN_MS) {
-    // time is up: nothing is played or drawn for them, the turn just moves to the next player
-    addLog(s, p.name + ' ran out of time — turn passes.');
+    // time is up: nothing is played for them. If they never picked up a card this turn they get 1 penalty card,
+    // then the turn moves to the next player.
+    if (s.drawnId == null) {
+      give(s, p, 1);
+      addLog(s, p.name + ' ran out of time — draws 1 card, turn passes.');
+    } else {
+      addLog(s, p.name + ' ran out of time — turn passes.');
+    }
     advance(s, 1, now);
     return true;
   }
