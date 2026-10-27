@@ -11,6 +11,7 @@ const MAX_LOG = 40;
 export const ONLINE_MS = 20000; // a player not heard from for this long counts as offline
 export const HEARTBEAT_MS = 8000; // how often an idle client refreshes its presence
 const AUTO_MS = 3000; // wait before playing an offline player's turn
+export const TURN_MS = 30000; // time a player has for their turn before it is played for them
 const PRUNE_MS = 30000; // lobby members unseen this long are dropped
 
 const fail = (msg) => {
@@ -149,7 +150,13 @@ export function tick(s, now) {
     return true;
   }
   const p = byId(s, s.seats[s.cur]);
-  if (!online(p, now) && now - s.turnAt > AUTO_MS) {
+  const idle = now - s.turnAt;
+  if (!online(p, now) && idle > AUTO_MS) {
+    autoPlay(s, p, now);
+    return true;
+  }
+  if (idle > TURN_MS) {
+    addLog(s, p.name + ' ran out of time.');
     autoPlay(s, p, now);
     return true;
   }
@@ -424,6 +431,10 @@ function commonColor(p) {
 /** An offline player's turn is played automatically so the table never stalls. */
 function autoPlay(s, p, now) {
   beforeAction(s, p);
+  if (s.drawnId != null) {
+    // already drew this turn: the only legal card is the one just drawn
+    return doPlay(s, p, p.hand.find((c) => c.id === s.drawnId), commonColor(p), now);
+  }
   const options = p.hand.filter((c) => playable(s, c, p)).sort((a, b) => (a.color === 'wild') - (b.color === 'wild'));
   if (options.length) return doPlay(s, p, options[0], commonColor(p), now);
   drawOne(s, p, now);
@@ -451,6 +462,7 @@ export function view(s, me, now) {
   return {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
+    turnMs: TURN_MS, turnLeft: s.over ? 0 : Math.max(0, TURN_MS - (now - s.turnAt)),
     hand: [...me.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)),
     playable: myTurn
       ? me.hand.filter((c) => (s.drawnId == null || c.id === s.drawnId) && playable(s, c, me)).map((c) => c.id)

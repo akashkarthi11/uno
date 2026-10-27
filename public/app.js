@@ -182,6 +182,8 @@ function render() {
   if (!inGame) {
     seenCards = null;
     lastTopId = null;
+    turn = null;
+    updateTimer();
     $("endModal").classList.add("hidden");
     return renderLobby(s);
   }
@@ -282,6 +284,8 @@ function renderGame(s) {
   }
 
   seenCards = nowSeen;
+  turn = s.over ? null : { deadline: Date.now() + s.turnLeft, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
+  updateTimer();
 
   let msg;
   if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
@@ -333,6 +337,40 @@ function renderGame(s) {
     celebrated = null;
   }
 }
+
+/* ---------- turn timer ---------- */
+
+let turn = null; // { deadline, total, mine, name } while a game is running
+
+function updateTimer() {
+  const bar = $("turnBar");
+  const root = document.documentElement;
+  if (!turn) {
+    bar.classList.add("hidden");
+    document.body.classList.remove("myturn");
+    root.style.removeProperty("--turn-color");
+    return;
+  }
+  const left = Math.max(0, turn.deadline - Date.now());
+  const frac = Math.min(1, left / turn.total);
+  const secs = Math.ceil(left / 1000);
+  const fill = $("turnFill");
+  bar.classList.remove("hidden");
+  fill.style.width = frac * 100 + "%";
+  if (turn.mine) {
+    const color = "hsl(" + Math.round(120 * frac) + " 78% 42%)"; // 120 = green ... 0 = red
+    fill.style.background = color;
+    root.style.setProperty("--turn-color", color);
+    document.body.classList.add("myturn");
+    $("turnText").textContent = "Your turn · " + secs + "s";
+  } else {
+    fill.style.background = "";
+    document.body.classList.remove("myturn");
+    root.style.removeProperty("--turn-color");
+    $("turnText").textContent = turn.name + "'s turn · " + secs + "s";
+  }
+}
+setInterval(updateTimer, 250);
 
 /* ---------- small visual helpers ---------- */
 

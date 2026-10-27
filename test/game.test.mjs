@@ -155,6 +155,40 @@ test('admin can remove players in the lobby and mid-game; the game stays consist
   assert.equal(s.over, true);
 });
 
+test('a turn left idle for 30s is played automatically, respecting a card just drawn', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const a = G.join(s, { name: 'A', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false }, now);
+  G.act(s, a, { op: 'start' }, now);
+  const idleId = s.seats[s.cur];
+
+  now += 29000;
+  a.lastSeen = b.lastSeen = now;
+  assert.equal(G.tick(s, now), false, 'still within 30s');
+  assert.ok(G.view(s, a, now).turnLeft <= 1000);
+
+  now += 2000;
+  a.lastSeen = b.lastSeen = now;
+  assert.equal(G.tick(s, now), true);
+  assert.notEqual(s.seats[s.cur], idleId, 'turn moved on');
+  assert.ok(s.log.some((l) => /ran out of time/.test(l)));
+
+  // after drawing a playable card, a timeout may only play that card
+  const p = s.members.find((m) => m.id === s.seats[s.cur]);
+  s.color = 'red';
+  s.discard.push({ id: 7000, color: 'red', value: '4' });
+  const drawn = { id: 7001, color: 'red', value: '8' };
+  p.hand = [{ id: 7002, color: 'red', value: '1' }, drawn];
+  s.drawnId = drawn.id;
+  s.turnAt = now;
+  now += 31000;
+  a.lastSeen = b.lastSeen = now;
+  G.tick(s, now);
+  assert.ok(s.discard.some((c) => c.id === 7001), 'the drawn card was the one played');
+  assert.ok(p.hand.some((c) => c.id === 7002), 'the other card stays in hand');
+});
+
 test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {
   const s = G.newRoom('t');
   const now = 1000;
