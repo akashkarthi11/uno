@@ -70,6 +70,22 @@ function updateHandArrows() {
   $("handLeft").classList.toggle("hidden", !(more && hand.scrollLeft > 2));
   $("handRight").classList.toggle("hidden", !(more && hand.scrollLeft + hand.clientWidth < hand.scrollWidth - 2));
 }
+/** "▼ Your cards": shown while a game is running and the hand is below the visible part of the screen. */
+function updateCardsPill() {
+  const wrap = $("handWrap");
+  const inGame = document.body.classList.contains("in-game");
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const hidden = inGame && wrap.getBoundingClientRect().top > vh - 36;
+  $("cardsPill").classList.toggle("hidden", !hidden);
+}
+$("cardsPill").addEventListener("click", () => {
+  $("handWrap").scrollIntoView({ behavior: "smooth", block: "end" });
+  [150, 500, 1000].forEach((ms) => setTimeout(updateCardsPill, ms));
+});
+window.addEventListener("scroll", updateCardsPill, { passive: true });
+window.addEventListener("resize", updateCardsPill);
+setInterval(updateCardsPill, 700); // layouts change as the game moves on; a cheap check keeps the button honest
+
 $("hand").addEventListener("scroll", updateHandArrows, { passive: true });
 window.addEventListener("resize", updateHandArrows);
 function scrollHand(direction) {
@@ -955,9 +971,10 @@ $("copyLink").addEventListener("click", () => {
 
 /* ---------- phone helpers: "Desktop site" hint and ?debug=1 diagnostics ---------- */
 
-/** True when a small phone screen is showing a desktop-width page (the browser's "Desktop site" option is on). */
+/** True when a small phone screen is showing a desktop-width page (the browser's "Desktop site" option is on). A phone held
+ *  sideways is NOT this: its screen is wide too, so the page width matches the screen width. */
 function desktopOnPhone(screenW, screenH, innerW) {
-  return Math.min(screenW, screenH) <= 600 && innerW > 700;
+  return Math.min(screenW, screenH) <= 600 && innerW > 700 && innerW > screenW * 1.3;
 }
 
 (function phoneHelpers() {

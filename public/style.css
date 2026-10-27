@@ -314,7 +314,7 @@ button.kick {
 }
 
 /* ---------- phones: the whole table fits on one screen and the hand is pinned to the bottom ---------- */
-@media (max-width: 640px) {
+@media (max-width: 640px), (max-height: 520px) {
   html, body { overflow-x: hidden; }
   body { -webkit-tap-highlight-color: transparent; }
   button, .card { touch-action: manipulation; }
@@ -397,7 +397,7 @@ button.kick {
 
 #gameTop { display: flex; flex-direction: column; gap: 16px; }
 
-@media (max-width: 640px) {
+@media (max-width: 640px), (max-height: 520px) {
   /* During a game the page itself never scrolls: it is exactly one screen tall. The table area flexes to fit (and scrolls
      inside itself on a very small screen) while the hand is a fixed part of the layout at the bottom, so nothing slides
      around when the browser's address bar hides or shows. */
@@ -451,7 +451,7 @@ button.chip { cursor: pointer; }
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; z-index: 75; border-radius: 999px; padding: 10px 20px;
   box-shadow: var(--shadow-lg);
 }
-@media (max-width: 640px) {
+@media (max-width: 640px), (max-height: 520px) {
   #sheetPill { bottom: calc(140px + env(safe-area-inset-bottom)); }
   .swatch { height: 60px; }
 }
@@ -467,7 +467,7 @@ button.chip { cursor: pointer; }
   border: 1px solid var(--line); box-shadow: var(--shadow-lg);
 }
 #handLeft { left: 4px; } #handRight { right: 4px; }
-@media (max-width: 640px) {
+@media (max-width: 640px), (max-height: 520px) {
   #handWrap { flex: 0 0 auto; margin: 0 -8px; }
   #hand { margin: 0; }
 }
@@ -481,4 +481,27 @@ button.chip { cursor: pointer; }
 #debugBox {
   position: fixed; left: 4px; top: 4px; z-index: 300; max-width: 96vw; padding: 6px 8px; border-radius: 8px; background: rgba(0,0,0,.82);
   color: #9f9; font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; pointer-events: none;
+}
+
+/* "▼ Your cards" jump button: appears only when the hand is below the visible part of the screen */
+#cardsPill {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 60; border-radius: 999px; padding: 10px 20px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* sideways phones and very short windows: tighter, so the table, the buttons and the hand all fit */
+@media (max-height: 520px) {
+  body.in-game header { display: none; }
+  .card { width: 48px; height: 72px; font-size: 20px; border-width: 3px; }
+  #hand .card { margin-left: -24px; }
+  #hand { padding-top: 10px; padding-bottom: 6px; }
+  #table { padding: 6px 8px; gap: 18px; min-height: 96px !important; }
+  #turnBar { height: 22px; }
+  #opponents { padding: 0; }
+  .opp { padding: 4px 8px 4px !important; }
+  .opp .avatar { width: 26px; height: 26px; font-size: 10px; margin-bottom: 0; }
+  #status { padding: 6px 10px; }
+  #message { font-size: 12px; }
+  .actions button { min-height: 32px; padding: 4px 8px; font-size: 12px; }
+  .pile small { display: none; }
 }
