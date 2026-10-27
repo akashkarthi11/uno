@@ -1,0 +1,8 @@
+services:
+  uno:
+    build: .
+    image: uno-server:latest
+    container_name: uno
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

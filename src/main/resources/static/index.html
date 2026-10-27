@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GrowX</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1><span class="logo">G</span>GrowX</h1>
+  <div id="roomInfo" class="hidden">
+    Room <b id="roomName"></b>
+    <button id="copyLink" class="ghost">Copy invite link</button>
+    <button id="rulesBtn" class="ghost">Rules</button>
+  </div>
+</header>
+
+<!-- join screen -->
+<section id="joinScreen" class="center-box">
+  <h2>Join the game</h2>
+  <label>Your name <input id="nameInput" maxlength="16" placeholder="e.g. Karthi" autofocus></label>
+  <label>Password <input id="pwInput" type="password" maxlength="32" autocomplete="off"></label>
+  <label>Room <input id="roomInput" maxlength="24" value="main"></label>
+  <button id="joinBtn">Join</button>
+  <p class="hint">Share the page link with friends on the same network — everyone who opens it with the same room joins the same game.</p>
+</section>
+
+<!-- lobby -->
+<section id="lobby" class="center-box hidden">
+  <h2>Lobby</h2>
+  <ul id="lobbyPlayers"></ul>
+  <button id="startBtn">Start game</button>
+  <p id="lobbyHint" class="hint"></p>
+</section>
+
+<!-- game -->
+<main id="game" class="hidden">
+  <section id="opponents"></section>
+
+  <section id="table">
+    <div class="pile">
+      <div id="drawPile" class="card back" title="Draw a card"><span>GrowX</span></div>
+      <small id="drawCount"></small>
+    </div>
+    <div class="pile">
+      <div id="discardPile"></div>
+      <div id="colorDot" title="Current colour"></div>
+    </div>
+    <div id="dirInfo"></div>
+  </section>
+
+  <section id="status">
+    <div id="message"></div>
+    <div class="actions">
+      <button id="passBtn" disabled>Pass</button>
+      <button id="unoBtn" disabled>GrowX!</button>
+      <button id="catchBtn" class="hidden">Catch!</button>
+    </div>
+  </section>
+
+  <section id="hand"></section>
+  <section id="log"></section>
+</main>
+
+<div id="toast" class="hidden"></div>
+
+<div id="colorModal" class="modal hidden">
+  <div class="box">
+    <h2>Choose a colour</h2>
+    <div class="swatches">
+      <button data-color="red" class="red"></button>
+      <button data-color="yellow" class="yellow"></button>
+      <button data-color="green" class="green"></button>
+      <button data-color="blue" class="blue"></button>
+    </div>
+  </div>
+</div>
+
+<div id="endModal" class="modal hidden">
+  <div class="box">
+    <h2 id="endTitle"></h2>
+    <p id="endText"></p>
+    <button id="playAgain">Play again</button>
+    <p id="endHint" class="hint"></p>
+  </div>
+</div>
+
+<div id="rulesModal" class="modal hidden">
+  <div class="box rules">
+    <h2>Game rules</h2>
+    <ul>
+      <li>2–8 players. 108-card deck, 5 cards each. The admin starts the game; people who join mid-game play from the next one.</li>
+      <li>Play a card that matches the top card by colour, number or symbol. Wilds can be played any time, except <b>Wild Draw Four</b>, which needs a hand with no card of the current colour.</li>
+      <li><b>Skip</b> skips the next player. <b>Reverse</b> flips direction (acts as Skip with 2 players). <b>Draw Two</b> / <b>Wild Draw Four</b> make the next player draw 2 / 4 and lose the turn.</li>
+      <li>No playable card? Click the draw pile. If the drawn card fits you may play it, otherwise press Pass.</li>
+      <li><b>GrowX call:</b> press GrowX! when you have 2 cards or fewer. If you reach one card without calling it, the next action by anyone — or a click on <b>Catch!</b> — makes you draw 2.</li>
+      <li>If a player's connection drops, their turns are played automatically; they can rejoin by reopening the link.</li>
+      <li><b>Losing:</b> play continues after someone empties their hand — they are out and ranked. The last player still holding cards loses.</li>
+    </ul>
+    <button id="closeRules">Close</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
