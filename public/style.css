@@ -257,6 +257,7 @@ button.kick {
 .modal { position: fixed; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 70; padding: 16px; }
 .box { background: var(--surface); padding: 28px 34px; border-radius: 22px; text-align: center; max-width: 540px; box-shadow: var(--shadow-lg); animation: rise .3s cubic-bezier(.2,1.2,.4,1); }
 .box h2 { margin: 0 0 8px; font-size: 24px; }
+#endText { white-space: pre-line; line-height: 1.7; margin: 8px 0 14px; max-height: 40vh; overflow-y: auto; }
 .box button + button { margin-left: 8px; }
 .box.rules { text-align: left; } .box.rules li { margin-bottom: 6px; color: #344054; }
 .swatches { display: flex; gap: 14px; justify-content: center; margin-top: 14px; }
@@ -405,3 +406,19 @@ button.kick {
 
 /* stacked buttons in the pickers line up (the generic ".box button + button" spacing is for side-by-side buttons) */
 #ruleList button, #targetList button { margin-left: 0 !important; }
+
+/* tall phones (about 720 px of visible height and up, e.g. OnePlus 12R): use the extra height for bigger cards */
+@media (max-width: 640px) and (min-height: 720px) {
+  .card { width: 66px; height: 99px; font-size: 28px; }
+  #hand .card { margin-left: -30px; }
+  #table { padding: 18px 10px; gap: 28px; }
+  #log { max-height: 88px; }
+  #hand { padding-top: 18px; }
+}
+@media (max-width: 640px) and (min-height: 820px) {
+  .card { width: 74px; height: 111px; font-size: 32px; }
+  #hand .card { margin-left: -34px; }
+  #table { padding: 28px 10px; gap: 32px; }
+  #hand { padding-top: 22px; }
+  .opp { min-width: 84px !important; padding: 10px 10px 8px !important; }
+}

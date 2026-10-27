@@ -426,9 +426,12 @@ function renderGame(s) {
     $("endTitle").textContent = s.loser
       ? (s.loser === mine ? "😬 You lose — last with cards!" : s.loser + " loses!")
       : "Game ended";
-    const order = s.ranking.map((n, i) => (i + 1) + ". " + n).join("   ");
-    $("endText").textContent = (s.notice || "") + (order ? "Finished: " + order : "") +
-      (s.loser ? "   Last: " + s.loser : "");
+    // one line per finisher, then who was left holding cards (shown with line breaks, see #endText in the CSS)
+    const lines = [];
+    if (s.notice) lines.push(s.notice);
+    s.ranking.forEach((n, i) => lines.push((i + 1) + ". " + n));
+    if (s.loser) lines.push("Last with cards: " + s.loser);
+    $("endText").textContent = lines.join("\n");
     $("playAgain").classList.toggle("hidden", !s.admin);
     $("toLobby").classList.toggle("hidden", !s.admin);
     $("endHint").textContent = s.admin ? "" : "Waiting for the admin to start the next game…";
