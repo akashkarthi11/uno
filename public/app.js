@@ -362,8 +362,10 @@ function sendChat(text) {
   if (busy || !state) return;
   const before = state;
   const me = state.players.find((p) => p.id === state.you);
-  state = { ...state, chat: [...(state.chat || []), { from: state.you, name: me ? me.name : "You", text, t: Date.now() }] };
+  const mine = { from: state.you, name: me ? me.name : "You", text, t: Date.now() };
+  state = { ...state, chat: [...(state.chat || []), mine] };
   renderChat(state);
+  floatOne(mine, state.you);
   send({ op: "chat", text }, () => {
     state = before; // refused (for example: too fast, or the game just ended): take it back
     chatSig = "";
@@ -886,18 +888,20 @@ function floatNewMessages(s) {
   const msgs = s.chat || [];
   const newest = msgs.length ? msgs[msgs.length - 1].t : 0;
   if (floatSeenT === null) { floatSeenT = newest; return; }
-  const box = $("chatFloat");
-  for (const m of msgs.filter((x) => x.t > floatSeenT).slice(-4)) {
-    const el = document.createElement("div");
-    el.className = "float-msg" + (m.from === s.you ? " mine" : "");
-    const who = document.createElement("b");
-    who.textContent = (m.from === s.you ? "You" : m.name) + " ";
-    el.append(who, document.createTextNode(m.text));
-    box.appendChild(el);
-    setTimeout(() => el.remove(), 6000);
-  }
-  while (box.children.length > 4) box.firstChild.remove();
+  // your own messages float once, the moment you send them (sendChat); the server's copy of them is not floated again
+  for (const m of msgs.filter((x) => x.t > floatSeenT && x.from !== s.you).slice(-4)) floatOne(m, s.you);
   floatSeenT = Math.max(floatSeenT, newest);
+}
+function floatOne(m, you) {
+  const box = $("chatFloat");
+  const el = document.createElement("div");
+  el.className = "float-msg" + (m.from === you ? " mine" : "");
+  const who = document.createElement("b");
+  who.textContent = (m.from === you ? "You" : m.name) + " ";
+  el.append(who, document.createTextNode(m.text));
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+  while (box.children.length > 4) box.firstChild.remove();
 }
 
 function renderChat(s) {
