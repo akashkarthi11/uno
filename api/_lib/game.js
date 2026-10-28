@@ -358,6 +358,8 @@ function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
   const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, stacking, challenge: challengeOpt } = b || {};
   const hasSupers = supers && typeof supers === 'object';
+  // the voice route and public voice are the real admin's alone (a co-admin has the rest of the game settings)
+  if ((voiceRelay !== undefined || publicVoice !== undefined) && !p.admin) fail('Only the admin can do that.');
   if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
   if (stacking !== undefined && typeof stacking !== 'boolean') fail('Bad settings.');
   if (challengeOpt !== undefined && typeof challengeOpt !== 'boolean') fail('Bad settings.');

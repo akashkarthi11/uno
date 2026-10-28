@@ -188,8 +188,7 @@ Static credentials from another provider also work via `GAME_TURN_URLS`, `GAME_T
 
 ### Direct or relay: the admin's switch
 
-Voice starts in the original **direct** mode (STUN only, audio goes straight between phones). The admin — and a player the
-admin allowed to start games — has a **📡 Relay** button in the top bar, in the lobby and during a game. **On** adds the
+Voice starts in the original **direct** mode (STUN only, audio goes straight between phones). Only the real admin (not a co-admin) has a **📡 Relay** switch in Settings, in the lobby and during a game. **On** adds the
 relay servers above as a backup: a call uses them only when a direct route fails, so it uses little relay data. Switching
 it on rebuilds the pairs that are not connected; switching it off restarts every pair so nothing keeps going through the
 relay. The choice is stored with the room's settings (`settings.voiceRelay`, default off) and resets with the room.
@@ -216,8 +215,7 @@ in), and **Join voice** brings them back. If the microphone is refused the page 
 
 ### Public voice switch
 
-Voice is for the admin and private players. The admin's **🎙 Public voice** button in the top bar (also for a player the
-admin allowed to start games) lets public players use it as well; turning it off again drops public players from the
+Voice is for the admin and private players. The real admin's **🎙 Public voice** switch in Settings (not available to a co-admin) lets public players use it as well; turning it off again drops public players from the
 call. It is shown only while the game is public (a private game has no public players): making a game private switches it off, and it cannot be switched on while private. It is stored with the room settings (`settings.publicVoice`, default off).
 
 ## More rules and tools

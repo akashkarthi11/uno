@@ -404,7 +404,7 @@ function ensureVoice() {
 
 /** Admin: voice goes straight between phones ("off", the original way) or may fall back to a relay server ("on"). */
 function toggleRelay() {
-  if (busy || !state || !state.canStart) return;
+  if (busy || !state || !state.admin) return;
   const on = !(state.settings && state.settings.voiceRelay);
   const before = state;
   state = { ...state, settings: { ...state.settings, voiceRelay: on } };
@@ -415,7 +415,7 @@ $("relayBtn").addEventListener("click", toggleRelay);
 
 /** Admin: may public players use voice chat too? (off by default: only the admin and private players) */
 function togglePublicVoice() {
-  if (busy || !state || !state.canStart) return;
+  if (busy || !state || !state.admin) return;
   const on = !(state.settings && state.settings.publicVoice);
   const before = state;
   state = { ...state, settings: { ...state.settings, publicVoice: on } };
@@ -426,7 +426,7 @@ $("pubVoiceBtn").addEventListener("click", togglePublicVoice);
 
 function renderRelayBtn(s) {
   const pv = $("pubVoiceBtn");
-  pv.classList.toggle("hidden", !s.canStart || s.private); // a private game has no public players, so the switch is not needed there
+  pv.classList.toggle("hidden", !s.admin || s.private); // a private game has no public players, so the switch is not needed there
   const pvOn = Boolean(s.settings && s.settings.publicVoice);
   pv.textContent = "🎙 Public voice: " + (pvOn ? "on" : "off");
   pv.classList.toggle("on", pvOn);
@@ -434,7 +434,7 @@ function renderRelayBtn(s) {
     ? "Public players can join voice chat too. Click to limit voice to you and private players."
     : "Only you and private players have voice chat. Click to let public players join it too.";
   const btn = $("relayBtn");
-  btn.classList.toggle("hidden", !s.canStart); // only the admin (and a player the admin allowed to start games)
+  btn.classList.toggle("hidden", !s.admin); // only the real admin, not a co-admin
   const on = Boolean(s.settings && s.settings.voiceRelay);
   btn.textContent = "📡 Relay: " + (on ? "on" : "off");
   btn.classList.toggle("on", on);
