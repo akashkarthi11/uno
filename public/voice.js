@@ -34,7 +34,7 @@ function voiceSync(s) {
   voice.members = s.voice || [];
   if (voice.active) {
     if (!voice.members.includes(s.you)) {
-      voiceStopLocal(); // dropped by the server, e.g. after going offline
+      rejoinVoice(); // dropped by the server (e.g. the phone slept): step back in with the same microphone
     } else {
       for (const id of [...voice.peers.keys()]) if (!voice.members.includes(id)) closePeer(id);
       if (voice.members.some((id) => !before.has(id))) pollSignals(); // someone new: look for their offer now
@@ -76,6 +76,43 @@ async function voiceJoin() {
   voiceSync(state);
 }
 
+let rejoining = false;
+/** The server forgot us after a long silence. Re-enter the voice list and reconnect to everyone, no new mic prompt. */
+async function rejoinVoice() {
+  if (rejoining || !voice.active || !voice.stream) return;
+  rejoining = true;
+  try {
+    await api({ op: "voiceJoin" }).then((r) => { if (r.state) apply(r); });
+    if (state && state.voice.includes(state.you)) {
+      for (const id of state.voice) if (id !== state.you) createPeer(id, true);
+      pollSignals();
+    } else {
+      voiceStopLocal();
+    }
+  } catch (e) {
+    /* network is still down: the next state update tries again */
+  }
+  rejoining = false;
+}
+
+/** Phones pause audio when the screen sleeps or a tap hasn't happened yet; wake everything up. */
+function unlockAudio() {
+  if (!voice.active) return;
+  if (voice.ctx && voice.ctx.state === "suspended") voice.ctx.resume().catch(() => {});
+  for (const p of voice.peers.values()) if (p.audio && p.audio.paused) p.audio.play().catch(() => {});
+}
+["click", "touchstart", "keydown"].forEach((ev) => document.addEventListener(ev, unlockAudio, { passive: true }));
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !voice.active) return;
+  unlockAudio();
+  pollSignals();
+  // a connection that died while the page was away is rebuilt
+  for (const [id, p] of voice.peers) {
+    if (["failed", "disconnected", "closed"].includes(p.pc.connectionState)) rebuildPeer(id);
+  }
+});
+window.addEventListener("online", () => { if (voice.active) { unlockAudio(); pollSignals(); } });
+
 async function voiceLeave() {
   voiceStopLocal();
   await send({ op: "voiceLeave" });
@@ -111,7 +148,10 @@ function createPeer(id, initiator) {
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(id, "ice", e.candidate.toJSON()); };
   pc.ontrack = (e) => attachRemote(id, peer, e.streams[0]);
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "failed") { try { pc.restartIce(); } catch (err) { /* ignore */ } }
+    clearTimeout(peer.fix);
+    if (pc.connectionState === "failed") rebuildPeer(id);
+    // "disconnected" often heals by itself; give it a few seconds, then start over
+    else if (pc.connectionState === "disconnected") peer.fix = setTimeout(() => rebuildPeer(id), 4000);
   };
   if (initiator) {
     (async () => {
@@ -123,9 +163,22 @@ function createPeer(id, initiator) {
   return peer;
 }
 
+/**
+ * Start a broken pairing over. Only the person with the smaller id sends the new offer, so the two sides never
+ * both offer at the same moment; the other side answers when it arrives.
+ */
+function rebuildPeer(id) {
+  if (!voice.active || !voice.stream || !state || !voice.members.includes(id)) return;
+  const peer = voice.peers.get(id);
+  if (peer && ["connected", "connecting", "new"].includes(peer.pc.connectionState) && peer.pc.iceConnectionState !== "disconnected") return;
+  if (state.you < id) createPeer(id, true);
+  else closePeer(id); // wait for their offer
+}
+
 function closePeer(id) {
   const peer = voice.peers.get(id);
   if (!peer) return;
+  clearTimeout(peer.fix);
   try { peer.pc.close(); } catch (e) { /* ignore */ }
   if (peer.audio) peer.audio.remove();
   voice.meters.delete(id);

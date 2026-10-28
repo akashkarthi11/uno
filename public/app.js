@@ -161,6 +161,17 @@ let inFlight = false;
 let lastOk = Date.now();
 let removed = false;
 
+/** Keeps the screen awake while a game or voice chat is on, so the phone does not freeze the page and drop out. */
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if (!("wakeLock" in navigator) || wakeLock || document.hidden) return;
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch (e) { /* not allowed (e.g. low battery); the game still works */ }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && polling) keepAwake(); });
+
 function removedByAdmin() {
   removed = true;
   applyTheme("growx"); // back on the sign-in screen: default look
@@ -201,6 +212,7 @@ async function pollOnce() {
 function startPolling() {
   if (polling) return;
   polling = true;
+  keepAwake();
   const tick = async () => {
     await pollOnce(); // never throws
     setTimeout(tick, pollDelay());

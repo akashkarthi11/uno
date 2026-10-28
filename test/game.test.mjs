@@ -705,7 +705,12 @@ test('voice chat: only admin and private players; list drops people who go offli
   assert.equal(G.view(s, pub, now).canVoice, false);
   assert.deepEqual(G.view(s, pub, now).voice, [], 'public players do not even see who is in voice');
 
-  now += 25000; // the private player goes quiet
+  now += 25000; // a short drop-out keeps the place in the voice list
+  admin.lastSeen = pub.lastSeen = now;
+  assert.equal(G.tick(s, now), false);
+  assert.deepEqual(s.voice.sort(), [admin.id, priv.id].sort());
+
+  now += 70000; // really gone
   admin.lastSeen = pub.lastSeen = now;
   assert.equal(G.tick(s, now), true);
   assert.deepEqual(s.voice, [admin.id]);
@@ -803,4 +808,45 @@ test('API: password gate and admin start', async () => {
   assert.equal(ok.body.state.hand.length, 5);
   const poll = await call({ op: 'state', room: 'api1', playerId: a.body.state.you, since: ok.body.state.version });
   assert.equal(poll.body.unchanged, true);
+});
+
+test('switching public/private clears the chat (setting the same mode does not)', () => {
+  const s = G.newRoom('t');
+  const admin = G.join(s, { name: 'Boss', admin: true }, 1000);
+  G.act(s, admin, { op: 'chat', text: 'one' }, 1000);
+  G.act(s, admin, { op: 'private', on: false }, 2000); // already public: nothing changes
+  assert.equal(s.chat.length, 1);
+  G.act(s, admin, { op: 'private', on: true }, 3000);
+  assert.equal(s.chat.length, 0);
+  G.act(s, admin, { op: 'chat', text: 'two' }, 4000);
+  G.act(s, admin, { op: 'private', on: false }, 5000);
+  assert.equal(s.chat.length, 0);
+});
+
+test('a game survives players being offline for a while, and ends only after the grace period', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  now += 60000; // both phones asleep for a minute
+  G.tick(s, now);
+  assert.equal(s.over, false);
+  now += 70000; // gone for over two minutes
+  G.tick(s, now);
+  assert.equal(s.over, true);
+});
+
+test('a game survives players being offline for a while, and ends only after the grace period', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  now += 60000; // both phones asleep for a minute
+  G.tick(s, now);
+  assert.equal(s.over, false);
+  now += 70000; // gone for over two minutes
+  G.tick(s, now);
+  assert.equal(s.over, true);
 });

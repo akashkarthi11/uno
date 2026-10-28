@@ -14,7 +14,9 @@ export const ONLINE_MS = 20000; // a player not heard from for this long counts 
 export const HEARTBEAT_MS = 8000; // how often an idle client refreshes its presence
 const AUTO_MS = 3000; // wait before playing an offline player's turn
 export const TURN_MS = 30000; // time a player has for their turn before it is played for them
-const PRUNE_MS = 30000; // lobby members unseen this long are dropped
+const PRUNE_MS = 120000; // lobby members unseen this long are dropped (a locked phone must not lose its seat)
+export const GRACE_MS = 120000; // a game only ends for lack of players after they have been gone this long
+const VOICE_GRACE_MS = 60000; // a short drop-out keeps your place in the voice list
 
 const fail = (msg) => {
   throw new GameError(msg);
@@ -196,7 +198,7 @@ function cleanVoice(s, now) {
   const before = s.voice || [];
   const keep = before.filter((id) => {
     const m = byId(s, id);
-    return m && canVoice(m) && online(m, now);
+    return m && canVoice(m) && now - m.lastSeen < VOICE_GRACE_MS;
   });
   if (keep.length === before.length) return false;
   s.voice = keep;
@@ -219,7 +221,7 @@ function tickGame(s, now) {
   }
   if (s.over) return false;
   if (s.paused) return false; // nothing times out or auto-plays while the admin has the game paused
-  if (active(s).filter((p) => online(p, now)).length < 2) {
+  if (active(s).filter((p) => now - p.lastSeen < GRACE_MS).length < 2) {
     s.over = true;
     s.winner = null;
     s.loser = null;
@@ -357,7 +359,9 @@ function setConfig(s, p, b) {
  */
 function setPrivate(s, p, on, now) {
   if (!p.admin) fail('Only the admin can do that.');
+  const changed = !!s.private !== !!on;
   s.private = on;
+  if (changed) s.chat = []; // switching public/private starts a clean chat
   addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
   const want = on ? 'private' : 'public';
   for (const m of [...s.members]) {
