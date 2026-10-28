@@ -243,3 +243,17 @@ call. It is shown only while the game is public (a private game has no public pl
   stats live with the room (they go a few hours after the last move); device totals stay on the device, also one set per kind.
 - **Alerts are per kind of game:** a separate switch for public and for private games, and the notifications carry the kind of game
   ("Public game: it's your turn!") and never replace each other.
+
+## The table screen (landscape-first)
+
+During a game the screen is a felt card table: opponents are seated round the top with their cards **face down** (you can count
+them; a very long hand shows 16 backs, 8 on an upright phone, then "+n"), the draw and discard piles are in the middle, the
+message / Pass / GrowX! panel floats at the right, and your hand lies along the front edge with large cards (they scale with the
+screen height, so a phone held sideways gets the biggest cards). Held upright, the layout still works and a "turn your phone
+sideways" bar offers **Landscape** (full screen + orientation lock where the browser allows it; iPhones cannot lock).
+
+- **One Settings button (⚙)**: everything else hides behind it. For everyone: Alerts, Landscape / full screen, Stats, Rules,
+  invite link, Leave. For the admin (and a co-admin): the game settings and switches (theme, cards, turn time, house rules,
+  super cards, public / private, relay, public voice). Cards, turn time, house rules and super cards lock while a game runs.
+- **See-through icons** (semi-transparent circles over the table): Settings, Pause / Resume, Restart, Mic, Mute.
+- **Chat** opens as a side panel, so the table stays in view.

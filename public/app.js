@@ -263,7 +263,7 @@ function removedByAdmin(message = "You were removed by the admin.") {
   playerId = null;
   store("uno-id-" + room, "");
   session(tokenKey(), null);
-  ["game", "lobby", "roomInfo", "endModal", "playSheet", "sheetPill", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
+  ["game", "lobby", "roomInfo", "endModal", "playSheet", "sheetPill", "cheatModal", "chatToggle", "chatDock", "settingsModal"].forEach((id) => $(id).classList.add("hidden"));
   $("joinScreen").classList.remove("hidden");
   toast(message);
 }
@@ -477,6 +477,7 @@ function render() {
   if (!state) return;
   const s = state;
   $("privateChip").classList.toggle("hidden", !s.private);
+  renderSettings(s);
   renderRelayBtn(s);
   renderNotifyBtn(); // the alerts switch belongs to the kind of game on screen (public or private)
   applyTheme(s.settings && s.settings.theme); // every update carries the room's theme, so a change shows for everyone
@@ -484,6 +485,7 @@ function render() {
   // the sheet is only useful while it is still your turn and the card is still in your hand
   if (sheet && !(s.started && !s.over && !s.paused && s.cur === s.you && s.hand.some((c) => c.id === sheet.card.id))) closeSheet();
   document.body.classList.toggle("in-game", inGame); // on phones a running game fills the screen exactly, no page scrolling
+  renderRotateHint();
   placeChat(inGame);
   renderChat(s);
   updateChatUi(s);
@@ -496,6 +498,8 @@ function render() {
     turn = null;
     updateTimer();
     $("endModal").classList.add("hidden");
+    $("pauseBtn").classList.add("hidden"); // these two only exist during a game
+    $("restartBtn").classList.add("hidden");
     return renderLobby(s);
   }
   renderGame(s);
@@ -538,10 +542,7 @@ function renderLobby(s) {
     }
     ul.appendChild(li);
   }
-  renderSettings(s);
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
-  $("privateBtn").classList.toggle("hidden", !s.admin);
-  $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
   $("startBtn").classList.toggle("hidden", !isHost);
   $("startBtn").disabled = s.players.length < 2;
   $("lobbyHint").textContent = isHost
@@ -611,16 +612,24 @@ function renderGame(s) {
 
   const opp = $("opponents");
   opp.innerHTML = "";
-  for (const p of s.players) {
-    if (p.id === s.you) continue;
+  const others = s.players.filter((p) => p.id !== s.you);
+  opp.dataset.n = String(others.length);
+  others.forEach((p, i) => {
     const d = document.createElement("div");
     d.className = "opp" + (s.cur === p.id && !s.over ? " active" : "") + (p.connected ? "" : " offline");
     const rank = s.ranking.indexOf(p.name) + 1;
-    d.innerHTML = '<div class="avatar"></div><div class="name"></div><div class="mini">' + "<span></span>".repeat(Math.min(p.count, 10)) +
-      '</div><div class="count">' +
-      (p.finished ? '<span class="uno-tag">✔ out (#' + rank + ")</span>" :
-        p.count + " card" + (p.count === 1 ? "" : "s") + (p.count === 1 ? ' <span class="uno-tag">GrowX!</span>' : "")) +
-      (p.connected ? "" : " · offline") + "</div>";
+    // their cards, face down, so you can see and count them (a very long hand shows the first 16 and "+n")
+    const shown = Math.min(p.count, maxBacks());
+    d.innerHTML = '<div class="seat-top"><div class="avatar"></div><div class="name"></div><span class="count">' +
+      (p.finished ? '<span class="uno-tag">✔ #' + rank + "</span>" :
+        p.count + (p.count === 1 ? ' <span class="uno-tag">GrowX!</span>' : "")) +
+      (p.connected ? "" : " · offline") + '</span></div><div class="mini">' + "<span></span>".repeat(shown) +
+      (p.count > shown ? '<em class="more">+' + (p.count - shown) + "</em>" : "") + "</div>";
+    // seats are spread along an arc over the top of the table: one opponent sits at the top, more fan out to the sides
+    const ang = (160 - (others.length === 1 ? 70 : (140 * i) / (others.length - 1))) * (Math.PI / 180);
+    const upright = window.innerHeight > window.innerWidth; // a tall, narrow table: a tighter, higher arc
+    d.style.left = (50 + 36 * Math.cos(ang)).toFixed(1) + "%";
+    d.style.top = ((upright ? 37 : 49) - (upright ? 24 : 32) * Math.sin(ang)).toFixed(1) + "%";
     d.querySelector(".name").textContent = p.name;
     d.dataset.pid = p.id;
     paintAvatar(d.querySelector(".avatar"), p.name);
@@ -641,7 +650,7 @@ function renderGame(s) {
       d.appendChild(x);
     }
     opp.appendChild(d);
-  }
+  });
 
   $("game").classList.toggle("myturn", myTurn);
   $("status").classList.toggle("mine", myTurn);
@@ -703,7 +712,8 @@ function renderGame(s) {
   $("pausedBanner").classList.toggle("hidden", !(s.paused && !s.over));
   $("pausedBanner").textContent = s.pauseNote ? "⏸ Game paused — " + s.pauseNote + (s.admin ? " Resume, remove them, or restart." : s.canStart ? " Resume or restart." : " Waiting for the admin.") : "⏸ Game paused by the admin";
   $("pauseBtn").classList.toggle("hidden", !(s.canStart && !s.over));
-  $("pauseBtn").textContent = s.paused ? "▶ Resume" : "⏸ Pause";
+  $("pauseBtn").textContent = s.paused ? "▶" : "⏸";
+  $("pauseBtn").title = s.paused ? "Resume the game" : "Pause the game";
   updateTimer();
 
   let msg;
@@ -1101,19 +1111,25 @@ $("stackingBox").addEventListener("change", (e) => sendRule({ stacking: e.target
 $("challengeBox").addEventListener("change", (e) => sendRule({ challenge: e.target.checked }));
 
 function renderSettings(s) {
-  // these are the admin's controls: public and private players don't see the panel at all (the theme still applies to them)
+  // The game settings are the admin's: other players only see the "For you" part of the Settings window.
+  $("privateBtn").classList.toggle("hidden", !s.admin);
+  $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
   $("settings").classList.toggle("hidden", !s.canStart);
   if (!s.canStart) return;
+  const locked = s.started && !s.over; // cards, turn time, house rules and super cards: lobby only
+  $("settingsLock").classList.toggle("hidden", !locked);
   const hs = (s.settings && s.settings.handSize) || 5;
   $("handSizeVal").textContent = hs;
-  $("handMinus").disabled = hs <= 3;
-  $("handPlus").disabled = hs >= 10;
+  $("handMinus").disabled = locked || hs <= 3;
+  $("handPlus").disabled = locked || hs >= 10;
   $("stackingBox").checked = Boolean(s.settings && s.settings.stacking);
   $("challengeBox").checked = Boolean(s.settings && s.settings.challenge);
+  $("stackingBox").disabled = locked;
+  $("challengeBox").disabled = locked;
   const ts = (s.settings && s.settings.turnSecs) || 30;
   $("turnSecsVal").textContent = ts;
-  $("turnMinus").disabled = ts <= 15;
-  $("turnPlus").disabled = ts >= 120;
+  $("turnMinus").disabled = locked || ts <= 15;
+  $("turnPlus").disabled = locked || ts >= 120;
   renderThemePicker(s);
   const list = $("superList");
   if (!list.children.length) {
@@ -1137,14 +1153,47 @@ function renderSettings(s) {
     const row = list.querySelector('[data-k="' + info.k + '"]');
     const box = row.querySelector("input");
     box.checked = on;
-    box.disabled = !s.canStart; // only the admin can change it; everyone else sees what is in play
+    box.disabled = !s.canStart || locked; // only the admin can change it, and only in the lobby
     row.classList.toggle("off", !on);
     if (on) total += info.n;
   }
   $("deckCount").textContent = "Deck: " + total + " cards";
-  $("supersAll").classList.toggle("hidden", !s.canStart);
-  $("supersNone").classList.toggle("hidden", !s.canStart);
+  $("supersAll").classList.toggle("hidden", !s.canStart || locked);
+  $("supersNone").classList.toggle("hidden", !s.canStart || locked);
 }
+
+/* ---------- the Settings window (one button; everything else hides behind it) ---------- */
+const settingsModal = $("settingsModal");
+$("settingsBtn").addEventListener("click", () => settingsModal.classList.remove("hidden"));
+$("settingsX").addEventListener("click", () => settingsModal.classList.add("hidden"));
+settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
+["rulesBtn", "statsBtn", "leaveBtn"].forEach((id) => $(id).addEventListener("click", () => settingsModal.classList.add("hidden")));
+
+/* ---------- landscape: the table is laid out wide; on a phone held upright we offer to turn it ---------- */
+const maxBacks = () => (window.innerHeight > window.innerWidth ? 8 : 16); // an upright phone is narrow: fewer backs, then "+n"
+let rotateDismissed = false;
+function renderRotateHint() {
+  const portrait = window.innerHeight > window.innerWidth;
+  const touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  $("rotateHint").classList.toggle("hidden", !(document.body.classList.contains("in-game") && portrait && touch && !rotateDismissed));
+}
+async function enterLandscape() {
+  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { /* not allowed */ }
+  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape"); } catch (e) { toast("Turn your phone sideways to play in landscape."); }
+  renderRotateHint();
+}
+$("landscapeBtn").addEventListener("click", enterLandscape);
+$("fsBtn").addEventListener("click", () => { settingsModal.classList.add("hidden"); enterLandscape(); });
+$("rotateX").addEventListener("click", () => { rotateDismissed = true; renderRotateHint(); });
+window.addEventListener("resize", renderRotateHint);
+window.addEventListener("orientationchange", renderRotateHint);
+
+/* the chat is a side panel: close button */
+$("chatCloseX").addEventListener("click", () => {
+  chatOpen = false;
+  $("chatDock").classList.add("hidden");
+  if (state) updateChatUi(state);
+});
 
 $("supersAll").addEventListener("click", () => sendSupers(Object.fromEntries(SUPER_INFO.map((i) => [i.k, true]))));
 $("supersNone").addEventListener("click", () => sendSupers(Object.fromEntries(SUPER_INFO.map((i) => [i.k, false]))));

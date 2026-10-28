@@ -23,6 +23,8 @@
   --shadow: 0 6px 24px rgba(16, 24, 40, 0.06);
   --shadow-lg: 0 24px 60px rgba(16, 24, 40, 0.18);
   --shadow-brand: 0 6px 16px rgba(124, 92, 255, 0.28);
+  --felt: radial-gradient(ellipse at 50% 42%, #1f8a5c 0%, #136a45 58%, #0b4a30 100%); --rim: linear-gradient(135deg, #7a4f2b, #4b2f17);
+  --room-bg: radial-gradient(1000px 600px at 50% 30%, #1d2331, #0d1017);
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 * { box-sizing: border-box; }
@@ -564,6 +566,8 @@ button.chip { cursor: pointer; }
 
 /* ---------- Classic: bold primary colours, black card backs, green felt ---------- */
 html[data-theme="classic"] {
+  --felt: radial-gradient(ellipse at 50% 42%, #23874c 0%, #14683a 55%, #0b4a2a 100%); --rim: linear-gradient(135deg, #6a4424, #3d2512);
+  --room-bg: radial-gradient(1000px 600px at 50% 30%, #0e3f25, #06231a);
   --card-red: #ed1c24; --card-yellow: #ffde16; --card-green: #50aa44; --card-blue: #0072bc;
   --num-red: #ed1c24; --num-yellow: #d9a600; --num-green: #3b8d30; --num-blue: #0072bc;
   --card-back: #141414; --card-back-oval: #ed1c24; --card-back-text: #ffde16;
@@ -594,6 +598,8 @@ html[data-theme="classic"] #hand { background-blend-mode: normal; }
 
 /* ---------- Midnight: dark mode ---------- */
 html[data-theme="midnight"] {
+  --felt: radial-gradient(ellipse at 50% 42%, #2b3560 0%, #1a2142 60%, #0f1530 100%); --rim: linear-gradient(135deg, #3a4270, #20254a);
+  --room-bg: radial-gradient(1000px 600px at 50% 30%, #121628, #07080f);
   --ink: #e7eaf3; --muted: #a4adc0; --faint: #8a93a8; --line: #272d42; --line-2: #1f2537; --canvas: #0c0f1c;
   --surface: #141a2b; --surface-soft: #181e31; --label: #c6ccda;
   --brand: #9b82ff; --brand-2: #b6a3ff; --brand-ink: #cdc2ff; --brand-soft: #241f45; --brand-line: #3a3170;
@@ -634,3 +640,189 @@ html[data-theme="midnight"] .opp .avatar, html[data-theme="midnight"] .avatar { 
 #handSizeRow b { min-width: 32px; text-align: center; font-size: 22px; }
 #handSizeRow small { color: var(--muted); }
 #handSizeRow button.icon { width: 40px; height: 40px; }
+
+
+/* =====================================================================================================
+   THE TABLE — a felt card table with the players seated round it, the piles in the middle and your hand along
+   the front edge. Built for a phone held sideways (landscape): the cards scale with the screen height.
+   ===================================================================================================== */
+
+/* semi-transparent round icon buttons (Settings, Pause / Resume, Restart, Mic, Mute) */
+button.ico {
+  position: relative; width: 38px; height: 38px; min-height: 0; padding: 0; border-radius: 50%; font-size: 18px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(15,23,42,.38); color: #fff; border: 1px solid rgba(255,255,255,.28); box-shadow: none;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); text-shadow: 0 1px 3px rgba(0,0,0,.4);
+}
+body:not(.in-game) button.ico { background: rgba(15,23,42,.78); } /* on the light lobby header they need more body */
+button.ico:hover:not(:disabled) { background: rgba(15,23,42,.58); transform: none; filter: none; }
+button.ico.on { background: rgba(18,183,106,.6); border-color: rgba(255,255,255,.55); }
+button.ico.speaking { box-shadow: 0 0 0 3px rgba(18,183,106,.55); }
+button.ico[data-count]:not([data-count="0"])::after {
+  content: attr(data-count); position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px;
+  background: rgba(15,23,42,.85); color: #fff; font-size: 10px; font-weight: 800; line-height: 16px; text-align: center;
+}
+#overlayCtl { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; }
+#roomInfo { flex-wrap: wrap; }
+.roomtag { display: inline-flex; align-items: center; gap: 6px; }
+
+/* the Settings window */
+.settings-box { width: min(560px, 100%); }
+.set-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.set-buttons button { text-align: left; }
+#settings h3 { margin: 6px 0 8px; font-size: 16px; }
+#settingsMine { margin-bottom: 4px; }
+
+/* ---------- the game screen ---------- */
+body.in-game {
+  --ch: clamp(84px, calc(var(--app-h, 100vh) * .27), 170px);   /* height of a card in your hand */
+  --oh: clamp(20px, min(calc(var(--app-h, 100vh) * .065), 4.6vw), 40px); /* height of an opponent's face-down card */
+  height: var(--app-h, 100dvh); overflow: hidden; display: flex; flex-direction: column; background: var(--room-bg);
+}
+/* the header becomes a see-through bar over the top of the table: ping and room on the left, icons on the right */
+body.in-game header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40; display: flex; flex-direction: row; justify-content: flex-end;
+  padding: 6px 12px; padding-top: calc(6px + env(safe-area-inset-top)); background: transparent; border: 0;
+  backdrop-filter: none; -webkit-backdrop-filter: none; pointer-events: none;
+}
+body.in-game header h1 { display: none; }
+body.in-game #roomInfo { width: 100%; flex-wrap: nowrap; justify-content: flex-start; gap: 8px; color: #fff; }
+body.in-game #roomInfo > * { pointer-events: auto; }
+body.in-game .ping, body.in-game .roomtag {
+  margin: 0; padding: 3px 10px; border-radius: 999px; font-size: 12px; background: rgba(15,23,42,.38); color: #fff;
+  border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+body.in-game .roomtag b { background: transparent; border: 0; padding: 0; color: #fff; }
+body.in-game .roomtag .badge { background: rgba(255,255,255,.18); color: #fff; border-color: rgba(255,255,255,.3); }
+
+body.in-game main#game { max-width: none; margin: 0; padding: 6px; gap: 0; flex: 1 1 auto; min-height: 0; width: 100%; position: relative; }
+body.in-game #gameTop {
+  position: absolute; inset: 6px; display: block; padding: 0; gap: 0; overflow: hidden;
+  border: 7px solid transparent; border-radius: 28px;
+  background: var(--felt) padding-box, var(--rim) border-box;
+  box-shadow: inset 0 0 70px rgba(0,0,0,.5), 0 10px 34px rgba(0,0,0,.5);
+}
+
+/* opponents: seated round the top of the table, cards face down */
+body.in-game #opponents { position: absolute; inset: 0; display: block; padding: 0; overflow: visible; pointer-events: none; }
+body.in-game .opp {
+  position: absolute; translate: -50% -50%; pointer-events: auto; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 0 !important; max-width: none; padding: 4px 8px 5px !important; border-radius: 14px; flex: none;
+  background: rgba(0,0,0,.32); color: #fff; border: 1px solid rgba(255,255,255,.22); box-shadow: none;
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+body.in-game .opp.active { transform: none; border-color: #ffd54a; box-shadow: 0 0 0 3px rgba(255,213,74,.35), 0 0 24px rgba(255,213,74,.5); }
+body.in-game .opp .seat-top { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+body.in-game .opp .avatar { margin: 0; width: 28px; height: 28px; font-size: 11px; border-width: 2px; }
+body.in-game .opp .name { font-size: 12px; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; color: #fff; }
+body.in-game .opp .mini { display: flex !important; align-items: center; justify-content: center; min-height: var(--oh); margin: 2px 0 0; padding-left: calc(var(--oh) * .42); }
+body.in-game .opp .mini span {
+  width: calc(var(--oh) * .68); height: var(--oh); margin-left: calc(var(--oh) * -.42); border-radius: calc(var(--oh) * .14);
+  border: max(1.5px, calc(var(--oh) * .06)) solid var(--card-border); background: var(--card-back); box-shadow: 0 2px 5px rgba(0,0,0,.4);
+}
+body.in-game .opp .mini span:first-child { margin-left: 0; }
+body.in-game .opp .mini .more { font-style: normal; font-weight: 800; font-size: 11px; margin-left: 6px; color: #fff; }
+body.in-game .opp .count { font-size: 11px; font-weight: 700; color: rgba(255,255,255,.9); margin: 0 0 0 2px; white-space: nowrap; }
+body.in-game .opp .uno-tag { color: #ffd54a; }
+/* the admin's small remove / appoint buttons sit on the seat's corners, not over the name */
+body.in-game .opp button.kick, body.in-game .opp button.cadm { width: 20px; height: 20px; top: -9px; font-size: 10px; background: rgba(15,23,42,.7); color: #fff; border-color: rgba(255,255,255,.35); opacity: .9; }
+body.in-game .opp button.kick { right: -9px; left: auto; }
+body.in-game .opp button.cadm { left: -9px; right: auto; }
+body.in-game .opp button.cadm.on { background: #7c5cff; }
+body.in-game .opp.speaking { border-color: #4ade80; box-shadow: 0 0 0 3px rgba(74,222,128,.3); }
+body.in-game #opponents[data-n="5"], body.in-game #opponents[data-n="6"], body.in-game #opponents[data-n="7"] { --oh: clamp(18px, min(calc(var(--app-h, 100vh) * .055), 4vw), 34px); }
+body.in-game #opponents[data-n="5"] .name, body.in-game #opponents[data-n="6"] .name, body.in-game #opponents[data-n="7"] .name { max-width: 56px; }
+
+/* the middle of the table */
+body.in-game #table {
+  position: absolute; left: 44%; top: 47%; translate: -50% -50%; flex: none; min-height: 0 !important;
+  display: flex; align-items: center; justify-content: center; gap: calc(var(--ch) * .4); padding: 0;
+  background: none; border: 0; box-shadow: none; border-radius: 0;
+}
+body.in-game .pile small { color: rgba(255,255,255,.85); text-shadow: 0 1px 3px rgba(0,0,0,.5); display: block; }
+body.in-game #dirInfo { color: #ffd54a; opacity: .75; top: -26px; }
+/* the colour in play: a small dot on the corner of the discard pile (its glow shows the colour too) */
+body.in-game .pile:has(#discardPile) { position: relative; }
+body.in-game #colorDot { position: absolute; right: -8px; top: -8px; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,.95); }
+body.in-game #hand .card, body.in-game #discardPile .card, body.in-game #drawPile {
+  width: calc(var(--ch) * .667); height: var(--ch); font-size: calc(var(--ch) * .3);
+  border-width: max(3px, calc(var(--ch) * .035)); border-radius: calc(var(--ch) * .1);
+}
+body.in-game #hand .card .c, body.in-game #discardPile .card .c { font-size: calc(var(--ch) * .11); }
+body.in-game #hand .card.back span, body.in-game #drawPile span { font-size: calc(var(--ch) * .13); }
+
+/* my turn bar, the pause banner and the message panel float over the felt */
+body.in-game #turnBar { position: absolute; top: 10px; left: 50%; translate: -50% 0; width: min(44%, 340px); height: 22px; margin: 0; z-index: 4; }
+body.in-game #turnText { font-size: 12px; padding: 0 12px; }
+body.in-game #pausedBanner {
+  position: absolute; top: 50%; left: 50%; translate: -50% -50%; z-index: 6; width: min(80%, 380px); font-size: 14px;
+  background: rgba(254,244,230,.94);
+}
+body.in-game #status {
+  position: absolute; z-index: 35; right: 14px; top: 70%; translate: 0 -50%; width: min(25%, 210px); padding: 8px 10px; gap: 6px;
+  flex-direction: column; align-items: stretch; border-radius: 16px; background: rgba(0,0,0,.38); color: #fff; border: 1px solid rgba(255,255,255,.2);
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); box-shadow: none;
+}
+body.in-game #status.mine { background: var(--brand-grad); border-color: transparent; box-shadow: 0 0 24px rgba(124,92,255,.5); }
+body.in-game #message { font-size: 12px; line-height: 1.3; flex: none; }
+body.in-game .actions { flex-direction: column; flex-wrap: nowrap; gap: 6px; width: 100%; }
+body.in-game .actions button { flex: none; width: 100%; padding: 6px 10px; font-size: 13px; min-height: 34px; }
+
+/* your hand along the front edge of the table; big cards, one row, scrolls sideways when it is long */
+body.in-game #handWrap { position: absolute; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; pointer-events: none; }
+body.in-game #hand {
+  pointer-events: auto; background: none; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; justify-content: safe center; margin: 0; min-height: 0;
+  padding: calc(var(--ch) * .2) 14px calc(8px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch;
+}
+body.in-game #hand .card { margin-left: calc(var(--ch) * -.22); flex: 0 0 auto; }
+body.in-game #hand .card:first-child { margin-left: 0; }
+body.in-game #hand .card.playable { transform: translateY(calc(var(--ch) * -.12)); }
+body.in-game #hand .card.playable:hover { transform: translateY(calc(var(--ch) * -.2)) scale(1.05); }
+body.in-game .hand-arrow { pointer-events: auto; }
+body.in-game .hand-note { color: rgba(255,255,255,.85); }
+
+/* chat: a side panel, so the table stays in view */
+body.in-game #chatToggle {
+  right: 10px; top: calc(54px + env(safe-area-inset-top)); bottom: auto; width: 38px; height: 38px; font-size: 18px; z-index: 41;
+  background: rgba(15,23,42,.38); border: 1px solid rgba(255,255,255,.28); box-shadow: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#chatBadge { top: -5px; right: -5px; }
+body.in-game #chatDock {
+  position: fixed; left: auto; right: 0; top: 0; bottom: 0; width: min(340px, max(44vw, 270px)); z-index: 60;
+  display: flex; flex-direction: column; padding: 10px; border-radius: 18px 0 0 18px; border-right: 0;
+  background: rgba(255,255,255,.94); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); animation: slidein .22s ease;
+}
+html[data-theme="midnight"] body.in-game #chatDock { background: rgba(20,26,43,.94); }
+.dock-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 8px; }
+.dock-head button.icon { width: 34px; height: 34px; }
+body.in-game #chatDock #chat { flex: 1 1 auto; min-height: 0; border: 0; padding: 0; }
+body.in-game #chatDock #chatLog { flex: 1 1 auto; height: auto; min-height: 0; }
+@keyframes slidein { from { transform: translateX(100%); } to { transform: none; } }
+
+/* floating bits sit above the hand */
+body.in-game #toast { bottom: calc(var(--ch) * 1.3 + 14px); }
+body.in-game #sheetPill, body.in-game #cardsPill { bottom: calc(var(--ch) * 1.3 + 14px); }
+#rotateHint {
+  position: fixed; left: 50%; translate: -50% 0; bottom: calc(var(--ch, 100px) * 1.35 + 16px); z-index: 45; display: flex; align-items: center; gap: 8px;
+  max-width: calc(100% - 20px); padding: 6px 8px 6px 14px; border-radius: 999px; background: rgba(15,23,42,.82); color: #fff; font-size: 13px; font-weight: 600;
+}
+#rotateHint button { padding: 5px 12px; min-height: 0; font-size: 12px; }
+#rotateHint button.ghost { background: transparent; color: #fff; border-color: rgba(255,255,255,.4); }
+
+/* upright phone: the table is tall and narrow, so the message panel sits above the hand, centred */
+@media (orientation: portrait) {
+  body.in-game { --ch: clamp(84px, calc(var(--app-h, 100vh) * .15), 134px); }
+  body.in-game { --oh: clamp(17px, 4.6vw, 30px); }
+  body.in-game #table { left: 50%; top: 54%; }
+  body.in-game #turnBar { top: 50px; width: min(72%, 340px); }
+  body.in-game .opp .name { max-width: 60px; }
+  body.in-game #opponents[data-n="5"], body.in-game #opponents[data-n="6"], body.in-game #opponents[data-n="7"] { --oh: clamp(15px, 3.6vw, 24px); }
+  body.in-game #status {
+    left: 50%; right: auto; top: auto; bottom: calc(var(--ch) * 1.3 + 8px); translate: -50% 0; width: calc(100% - 28px);
+    flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: center;
+  }
+  body.in-game #message { flex: 1 1 100%; text-align: center; }
+  body.in-game .actions { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  body.in-game .actions button { width: auto; flex: 1 1 auto; max-width: 150px; }
+  body.in-game #chatDock { width: min(340px, max(70vw, 270px)); }
+}

@@ -60,9 +60,12 @@ function voiceSync(s) {
     }
   }
   btn.classList.toggle("on", voice.active);
-  btn.textContent = voice.active ? "🎤 Leave voice" : "🎤 Join voice" + (voice.members.length ? " (" + voice.members.length + ")" : "");
+  btn.textContent = "🎤";
+  btn.title = voice.active ? "Leave voice" : "Join voice" + (voice.members.length ? " (" + voice.members.length + " in voice)" : "");
+  btn.dataset.count = String(voice.members.length);
   $("muteBtn").classList.toggle("hidden", !voice.active);
-  $("muteBtn").textContent = voice.muted ? "🔇 Unmute" : "🎙 Mute";
+  $("muteBtn").textContent = voice.muted ? "🔇" : "🎙";
+  $("muteBtn").title = voice.muted ? "Unmute" : "Mute";
 }
 
 async function voiceJoin() {

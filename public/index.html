@@ -13,16 +13,14 @@
   <h1><span class="logo">G</span>GrowX Mindrelax</h1>
   <div id="roomInfo" class="hidden">
     <span id="ping" class="ping" title="Round trip to the game server (middle of the last 5 checks)"><i></i><span>-- ms</span></span>
-    Room <b id="roomName"></b><span id="privateChip" class="badge hidden">🔒 Private</span>
-    <button id="relayBtn" class="ghost hidden" type="button">📡 Relay: off</button>
-    <button id="pubVoiceBtn" class="ghost hidden" type="button">🎙 Public voice: off</button>
-    <button id="voiceBtn" class="ghost hidden">🎤 Join voice</button>
-    <button id="muteBtn" class="ghost hidden">🎙 Mute</button>
-    <button id="copyLink" class="ghost">Copy invite link</button>
-    <button id="rulesBtn" class="ghost">Rules</button>
-    <button id="statsBtn" class="ghost" type="button">📊 Stats</button>
-    <button id="notifyBtn" class="ghost" type="button">🔔 Alerts: off</button>
-    <button id="leaveBtn" class="ghost" type="button">🚪 Leave</button>
+    <span class="roomtag">Room <b id="roomName"></b><span id="privateChip" class="badge hidden">🔒 Private</span></span>
+    <span id="overlayCtl">
+      <button id="settingsBtn" class="ico" type="button" title="Settings" aria-label="Settings">⚙</button>
+      <button id="pauseBtn" class="ico hidden" type="button" title="Pause the game" aria-label="Pause or resume">⏸</button>
+      <button id="restartBtn" class="ico hidden" type="button" title="Restart: everyone back to the lobby" aria-label="Restart">↻</button>
+      <button id="voiceBtn" class="ico hidden" type="button" title="Join voice" aria-label="Join or leave voice">🎤</button>
+      <button id="muteBtn" class="ico hidden" type="button" title="Mute" aria-label="Mute or unmute">🎙</button>
+    </span>
   </div>
 </header>
 
@@ -40,40 +38,6 @@
 <section id="lobby" class="center-box hidden">
   <h2>Lobby</h2>
   <ul id="lobbyPlayers"></ul>
-  <div id="settings">
-    <h3>Admin settings</h3>
-    <div class="set-label">Table theme</div>
-    <div id="themeList"></div>
-    <div class="set-label">Cards dealt to each player</div>
-    <div id="handSizeRow">
-      <button id="handMinus" class="ghost icon" type="button" aria-label="Fewer cards">−</button>
-      <b id="handSizeVal">5</b>
-      <button id="handPlus" class="ghost icon" type="button" aria-label="More cards">+</button>
-      <small>cards each (3–10)</small>
-    </div>
-    <div class="set-label">Time for each turn</div>
-    <div id="turnRow">
-      <button id="turnMinus" class="ghost icon" type="button" aria-label="Shorter turn">−</button>
-      <b id="turnSecsVal">30</b>
-      <button id="turnPlus" class="ghost icon" type="button" aria-label="Longer turn">+</button>
-      <small>seconds (15–120)</small>
-    </div>
-    <div class="set-label">House rules</div>
-    <div id="ruleList">
-      <label class="rule-row"><input type="checkbox" id="stackingBox"><span class="t">Stacking</span><small>+2 on +2, +4 on +4; the total goes to whoever cannot stack</small></label>
-      <label class="rule-row"><input type="checkbox" id="challengeBox"><span class="t">Challenge +4</span><small>a +4 can be bluffed; the next player may challenge it</small></label>
-    </div>
-    <div class="set-label">Super cards in this game</div>
-    <div id="superList"></div>
-    <div class="settings-foot">
-      <small id="deckCount"></small>
-      <span class="settings-actions">
-        <button id="supersAll" type="button" class="ghost hidden">All on</button>
-        <button id="supersNone" type="button" class="ghost hidden">All off</button>
-      </span>
-    </div>
-  </div>
-  <button id="privateBtn" class="ghost hidden">🔒 Make private</button>
   <button id="startBtn">Start game</button>
   <p id="lobbyHint" class="hint"></p>
   <div id="chat">
@@ -108,8 +72,6 @@
   <section id="status">
     <div id="message"></div>
     <div class="actions">
-      <button id="pauseBtn" class="ghost hidden">⏸ Pause</button>
-      <button id="restartBtn" class="ghost hidden">Restart</button>
       <button id="challengeBtn" class="hidden" type="button">⚔ Challenge</button>
       <button id="catchBtn" class="hidden" type="button">🎯 Catch!</button>
       <button id="passBtn" disabled>Pass</button>
@@ -125,12 +87,73 @@
   </div>
 </main>
 
+<div id="rotateHint" class="hidden"><span>↻ Turn your phone sideways for a bigger table</span><button id="landscapeBtn" type="button">Landscape</button><button id="rotateX" class="ghost" type="button" aria-label="Dismiss">✕</button></div>
 <div id="desktopHint" class="hidden">📱 You're seeing the computer version of this page on a phone. In Brave: tap ⋮ and untick <b>Desktop site</b>. <button id="desktopHintOk" type="button">OK</button></div>
 <button id="cardsPill" class="hidden" type="button">▼ Your cards</button>
 <div id="updateBanner" class="hidden">🔄 A new version of the game is available. <button id="reloadBtn" type="button">Reload</button></div>
 <button id="chatToggle" class="hidden" title="Chat">💬<span id="chatBadge" class="hidden"></span></button>
-<div id="chatDock" class="hidden"></div>
+<div id="chatDock" class="hidden"><div class="dock-head"><b>💬 Chat</b><button id="chatCloseX" class="icon ghost" type="button" aria-label="Close chat">✕</button></div></div>
 <div id="toast" class="hidden"></div>
+
+<div id="settingsModal" class="modal hidden">
+  <div class="box sheet settings-box">
+    <div class="sheet-head">
+      <h2>⚙ Settings</h2>
+      <button id="settingsX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
+    </div>
+    <div id="settingsMine">
+      <div class="set-label">For you</div>
+      <div class="set-buttons">
+        <button id="notifyBtn" class="ghost" type="button">🔔 Alerts: off</button>
+        <button id="fsBtn" class="ghost" type="button">⛶ Landscape / full screen</button>
+        <button id="statsBtn" class="ghost" type="button">📊 Stats</button>
+        <button id="rulesBtn" class="ghost" type="button">📖 Rules</button>
+        <button id="copyLink" class="ghost" type="button">🔗 Copy invite link</button>
+        <button id="leaveBtn" class="ghost" type="button">🚪 Leave</button>
+      </div>
+    </div>
+  <div id="settings">
+    <h3>Game settings</h3>
+    <p id="settingsLock" class="hint hidden">A game is running: cards per player, turn time, house rules and super cards can only be changed in the lobby.</p>
+    <div class="set-label">Table theme</div>
+    <div id="themeList"></div>
+    <div class="set-label">Cards dealt to each player</div>
+    <div id="handSizeRow">
+      <button id="handMinus" class="ghost icon" type="button" aria-label="Fewer cards">−</button>
+      <b id="handSizeVal">5</b>
+      <button id="handPlus" class="ghost icon" type="button" aria-label="More cards">+</button>
+      <small>cards each (3–10)</small>
+    </div>
+    <div class="set-label">Time for each turn</div>
+    <div id="turnRow">
+      <button id="turnMinus" class="ghost icon" type="button" aria-label="Shorter turn">−</button>
+      <b id="turnSecsVal">30</b>
+      <button id="turnPlus" class="ghost icon" type="button" aria-label="Longer turn">+</button>
+      <small>seconds (15–120)</small>
+    </div>
+    <div class="set-label">House rules</div>
+    <div id="ruleList">
+      <label class="rule-row"><input type="checkbox" id="stackingBox"><span class="t">Stacking</span><small>+2 on +2, +4 on +4; the total goes to whoever cannot stack</small></label>
+      <label class="rule-row"><input type="checkbox" id="challengeBox"><span class="t">Challenge +4</span><small>a +4 can be bluffed; the next player may challenge it</small></label>
+    </div>
+    <div class="set-label">Super cards in this game</div>
+    <div id="superList"></div>
+    <div class="settings-foot">
+      <small id="deckCount"></small>
+      <span class="settings-actions">
+        <button id="supersAll" type="button" class="ghost hidden">All on</button>
+        <button id="supersNone" type="button" class="ghost hidden">All off</button>
+      </span>
+    </div>
+    <div class="set-label">Game switches</div>
+    <div class="set-buttons">
+      <button id="privateBtn" class="ghost hidden" type="button">🔒 Make private</button>
+      <button id="relayBtn" class="ghost hidden" type="button">📡 Relay: off</button>
+      <button id="pubVoiceBtn" class="ghost hidden" type="button">🎙 Public voice: off</button>
+    </div>
+  </div>
+  </div>
+</div>
 
 <div id="playSheet" class="modal hidden">
   <div class="box sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
