@@ -853,3 +853,39 @@ test('quiet polls: a heartbeat alone does not change the version, a change in wh
   const moved = await call({ op: 'state', room, playerId: A, since: b.body.state.version, ps: '10' });
   assert.ok(moved.body.state, 'presence changed → full state');
 });
+
+test('co-admin: can start games and nothing else; only the admin grants or drops it, any time', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const pub = G.join(s, { name: 'Pub', admin: false, role: 'public' }, now);
+  const priv = G.join(s, { name: 'Priv', admin: false, role: 'private' }, now);
+
+  assert.throws(() => G.act(s, pub, { op: 'start' }, now), /Only the admin/);
+  assert.throws(() => G.act(s, pub, { op: 'starter', targetId: priv.id, on: true }, now), /Only the admin/);
+  assert.throws(() => G.act(s, admin, { op: 'starter', targetId: admin.id, on: true }, now), /already an admin/);
+  assert.equal(G.view(s, pub, now).canStart, false);
+
+  G.act(s, admin, { op: 'starter', targetId: pub.id, on: true }, now);
+  assert.equal(G.view(s, pub, now).canStart, true);
+  assert.equal(G.view(s, pub, now).admin, false, 'still not an admin');
+  assert.equal(G.view(s, admin, now).players.find((p) => p.id === pub.id).starter, true);
+
+  // nothing but starting
+  assert.throws(() => G.act(s, pub, { op: 'private', on: true }, now), /Only the admin/);
+  assert.throws(() => G.act(s, pub, { op: 'config', handSize: 7 }, now), /Only the admin/);
+  assert.throws(() => G.act(s, pub, { op: 'kick', targetId: priv.id }, now), /Only the admin/);
+  assert.equal(G.canVoice(pub), false, 'a public co-admin gets no voice chat');
+
+  G.act(s, pub, { op: 'start' }, now); // the co-admin starts the game
+  assert.equal(s.started, true);
+  assert.throws(() => G.act(s, pub, { op: 'pause' }, now), /Only the admin/);
+  assert.throws(() => G.act(s, pub, { op: 'lobby' }, now), /Only the admin/);
+  s.cur = s.seats.indexOf(pub.id);
+  assert.throws(() => G.act(s, pub, { op: 'draw', value: 'skip', color: 'red' }, now), /Admin only/);
+
+  G.act(s, admin, { op: 'starter', targetId: pub.id, on: false }, now); // dropped mid-game
+  assert.equal(G.view(s, pub, now).canStart, false);
+  s.over = true; // game over: the dropped co-admin can no longer start the next one
+  assert.throws(() => G.act(s, pub, { op: 'start' }, now), /Only the admin/);
+});

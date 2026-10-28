@@ -303,6 +303,10 @@ function ensureVoice() {
   return voiceLoading;
 }
 
+function toggleStarter(p) {
+  send({ op: "starter", targetId: p.id, on: !p.starter });
+}
+
 function removePlayer(p) {
   if (confirm("Remove " + p.name + " from the game?")) send({ op: "kick", targetId: p.id });
 }
@@ -367,6 +371,14 @@ function renderLobby(s) {
     who.className = "who";
     who.textContent = p.name + (p.id === s.you ? " (you)" : "");
     li.append(av, who);
+    if (s.admin && p.id !== s.you && !p.isAdmin) {
+      const c = document.createElement("button");
+      c.className = "ghost cadm-lobby";
+      c.textContent = p.starter ? "Drop co-admin" : "Make co-admin";
+      c.title = p.starter ? "They can no longer start games" : "Lets them start games, nothing else";
+      c.addEventListener("click", () => toggleStarter(p));
+      li.appendChild(c);
+    }
     if (s.admin && p.id !== s.you) {
       const x = document.createElement("button");
       x.className = "ghost remove";
@@ -379,18 +391,23 @@ function renderLobby(s) {
       b.className = "badge";
       b.textContent = "admin";
       li.appendChild(b);
+    } else if (p.starter) {
+      const b = document.createElement("span");
+      b.className = "badge";
+      b.textContent = "co-admin";
+      li.appendChild(b);
     }
     ul.appendChild(li);
   }
   renderSettings(s);
-  const isHost = s.you === s.host;
+  const isHost = s.canStart; // the admin, or a player the admin allowed to start games
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
   $("startBtn").classList.toggle("hidden", !isHost);
   $("startBtn").disabled = s.players.length < 2;
   $("lobbyHint").textContent = isHost
     ? (s.players.length < 2 ? "Waiting for at least one more player — send them the invite link." : "Everyone here will be dealt in when you press Start.")
-    : (s.host ? "Waiting for the admin to start the game…" : "Waiting for the admin to join and start the game…");
+    : (s.host || s.players.some((p) => p.starter) ? "Waiting for the admin to start the game…" : "Waiting for the admin to join and start the game…");
 }
 
 function renderGame(s) {
@@ -413,6 +430,14 @@ function renderGame(s) {
     d.querySelector(".name").textContent = p.name;
     d.dataset.pid = p.id;
     paintAvatar(d.querySelector(".avatar"), p.name);
+    if (s.admin && !p.isAdmin) {
+      const c = document.createElement("button");
+      c.className = "ghost cadm" + (p.starter ? " on" : "");
+      c.title = p.starter ? "Drop co-admin (can start games)" : "Make co-admin (can start games)";
+      c.textContent = "★";
+      c.addEventListener("click", () => toggleStarter(p));
+      d.appendChild(c);
+    }
     if (s.admin && !s.over) {
       const x = document.createElement("button");
       x.className = "ghost kick";
@@ -505,9 +530,9 @@ function renderGame(s) {
     s.ranking.forEach((n, i) => lines.push((i + 1) + ". " + n));
     if (s.loser) lines.push("Last with cards: " + s.loser);
     $("endText").textContent = lines.join("\n");
-    $("playAgain").classList.toggle("hidden", !s.admin);
+    $("playAgain").classList.toggle("hidden", !s.canStart);
     $("toLobby").classList.toggle("hidden", !s.admin);
-    $("endHint").textContent = s.admin ? "" : "Waiting for the admin to start the next game…";
+    $("endHint").textContent = s.canStart ? "" : "Waiting for the admin to start the next game…";
     end.classList.remove("hidden");
     const key = s.ranking.join("|") + "|" + (s.loser || "");
     if (celebrated !== key) {
@@ -1006,6 +1031,7 @@ $("sheetPill").addEventListener("click", () => peekSheet(false));
 $("playSheet").addEventListener("click", (e) => { if (e.target === $("playSheet")) closeSheet(); }); // tap outside
 $("cheatModal").addEventListener("click", (e) => { if (e.target === $("cheatModal")) $("cheatModal").classList.add("hidden"); });
 $("cheatX").addEventListener("click", () => $("cheatModal").classList.add("hidden"));
+$("cheatClose").addEventListener("click", () => $("cheatModal").classList.add("hidden"));
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   closeSheet();

@@ -284,12 +284,13 @@ function dispatch(s, me, b, now) {
     case 'voiceJoin': return voiceJoin(s, me);
     case 'voiceLeave': return voiceLeave(s, me);
     case 'kick': return kick(s, me, String(b.targetId ?? ''), now);
+    case 'starter': return setStarter(s, me, String(b.targetId ?? ''), b.on === true);
     default: return fail('Unknown action.');
   }
 }
 
 function start(s, p, now) {
-  if (!p.admin) fail('Only the admin can start the game.');
+  if (!p.admin && !p.starter) fail('Only the admin can start the game.');
   if (s.started && !s.over) fail('A game is already running.');
   s.members = s.members.filter((m) => m.id === p.id || online(m, now));
   if (s.members.length < 2) fail('At least 2 players are needed.');
@@ -372,6 +373,21 @@ function setPrivate(s, p, on, now) {
       addLog(s, `${m.name} was removed (this game is now ${want}).`);
     }
   }
+}
+
+/**
+ * The admin (110299) lets any public or private player start games, or takes that back at any time.
+ * A co-admin can start a game and nothing else: no settings, no public/private switch, no pause, restart or removal,
+ * no special-card pick-up, and no voice chat unless they joined with the private password.
+ */
+function setStarter(s, admin, targetId, on) {
+  if (!admin.admin) fail('Only the admin can do that.');
+  const t = byId(s, targetId);
+  if (!t) fail('That player is not here.');
+  if (t.admin) fail('That player is already an admin.');
+  if (on === Boolean(t.starter)) return;
+  t.starter = on;
+  addLog(s, on ? `${t.name} can now start games.` : `${t.name} can no longer start games.`);
 }
 
 /** Admin removes a player (lobby or mid-game). Their cards go back into the draw pile. */
@@ -741,11 +757,13 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
 export function view(s, me, now) {
   const out = {
     room: s.code, version: s.version, ps: presenceSig(s, now), you: me.id, admin: me.admin, private: !!s.private,
+    canStart: Boolean(me.admin || me.starter),
     host: me.admin ? me.id : (s.members.find((m) => m.admin && online(m, now)) || {}).id || null,
     started: s.started, over: s.over, winner: s.winner, loser: s.loser, ranking: s.ranking, notice: s.notice,
     seated: s.started && s.seats.includes(me.id),
     players: (s.started ? seated(s) : s.members.filter((m) => online(m, now))).map((p) => ({
       id: p.id, name: p.name, count: p.hand.length, finished: s.started && p.finished, connected: online(p, now),
+      isAdmin: Boolean(p.admin), starter: Boolean(p.starter),
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),

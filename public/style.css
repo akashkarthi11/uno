@@ -298,6 +298,16 @@ button.kick {
 #cheatOptions { display: grid; grid-template-columns: repeat(5, auto); gap: 8px; justify-content: center; margin: 12px 0 16px; }
 #cheatOptions .card { width: 64px; height: 96px; font-size: 26px; cursor: pointer; }
 #cheatOptions .card:hover { transform: translateY(-4px); }
+/* the list is long: keep the title with its ✕ and a Close button in view while it scrolls */
+#cheatModal .sheet-head { position: sticky; top: 0; z-index: 1; background: inherit; padding-bottom: 6px; }
+#cheatClose { position: sticky; bottom: 0; width: 100%; margin-top: 4px; background: var(--card, #fff); }
+button.cadm {
+  position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; padding: 0; font-size: 12px; line-height: 1;
+  border-radius: 50%; opacity: .55;
+}
+button.cadm.on { opacity: 1; background: var(--brand-soft); border-color: var(--brand-line); }
+.opp:hover button.cadm { opacity: 1; }
+button.cadm-lobby { padding: 4px 10px; font-size: 12px; }
 
 /* ---------- confetti ---------- */
 .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; }
@@ -348,6 +358,7 @@ button.kick {
   .opp .mini { display: none; }
   .opp .count { font-size: 11px; white-space: nowrap; }
   button.kick { width: 24px; height: 24px; top: 2px; right: 2px; min-height: 0; }
+  button.cadm { width: 24px; height: 24px; top: 2px; left: 2px; min-height: 0; }
 
   /* table: smaller cards */
   #table { gap: 22px; padding: 12px 8px; border-radius: 20px; }
