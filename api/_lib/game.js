@@ -791,6 +791,7 @@ export function view(s, me, now) {
   return {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
+    turnAt: s.turnAt, // changes whenever a new turn starts, even when the same player goes again (🔁 Play Again)
     paused: Boolean(s.paused), pauseNote: s.paused ? s.pauseNote || '' : '',
     turnMs: turnMsOf(s), turnLeft: s.over ? 0 : Math.max(0, turnMsOf(s) - ((s.paused ? s.pausedAt : now) - s.turnAt)),
     hand: [...me.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)),

@@ -154,12 +154,26 @@ function resetScreenCaches() {
   chatSeenT = 0;
 }
 
+/**
+ * One light tap whenever a new turn of yours starts: it passed to you, or you go again (🔁 Play Again, a Master card
+ * aimed at yourself, a skip that comes back round). Not on the first screen after a refresh, not at the start of a game
+ * and not when a pause ends. Judged on answers from the server only, never on the instant on-screen guesses.
+ */
+function buzzIfMyTurnStarted(prev, s) {
+  if (!prev || !prev.started || prev.over || prev.paused || !s.started || s.over || s.paused) return;
+  if (s.cur !== s.you || !(s.turnLeft > 0)) return;
+  if (prev.cur === s.you && prev.turnAt === s.turnAt) return; // the same turn is still running
+  try { if (navigator.vibrate) navigator.vibrate(90); } catch (e) { /* vibration not allowed here */ }
+}
+
 function apply(data) {
   if (data.token) session(tokenKey(), data.token); // renewed on every sign-in / resume
   if (data.state) {
     // Responses can arrive out of order; never replace newer state with older.
     if (state && data.state.you === state.you && data.state.version < state.version) return;
+    const prev = state;
     state = data.state;
+    buzzIfMyTurnStarted(prev, state);
     playerId = state.you;
     store("uno-id-" + room, playerId);
     render();
@@ -458,7 +472,6 @@ function render() {
   if (!inGame) {
     seenCards = null;
     lastTopId = null;
-    wasMyTurn = null;
     turn = null;
     updateTimer();
     $("endModal").classList.add("hidden");
@@ -554,11 +567,6 @@ function renderGame(s) {
     opp.appendChild(d);
   }
 
-  // One light tap when the turn arrives (not on the first screen after a refresh, and never while paused).
-  if (myTurn && wasMyTurn === false && !s.paused && s.turnLeft > 0) {
-    try { if (navigator.vibrate) navigator.vibrate(90); } catch (e) { /* vibration not allowed here */ }
-  }
-  wasMyTurn = myTurn;
   $("game").classList.toggle("myturn", myTurn);
   $("status").classList.toggle("mine", myTurn);
 
@@ -664,7 +672,6 @@ let turn = null; // { deadline, total, mine, name } while a game is running
 const URGENT_SECS = 10;
 const BUZZ_SECS = 5;
 let buzzed = false;
-let wasMyTurn = null; // null until the first game screen, so a refresh does not buzz
 
 function updateTimer() {
   const bar = $("turnBar");
