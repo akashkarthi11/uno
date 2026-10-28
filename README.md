@@ -185,3 +185,11 @@ In the Cloudflare dashboard: **Realtime → TURN → Create TURN key**. Then add
 credentials from them (cached for 12 h per server instance); players never see the token, and public players get no voice
 details at all. Without the variables voice uses STUN only. Check Cloudflare's current free allowance on its pricing page.
 Static credentials from another provider also work via `GAME_TURN_URLS`, `GAME_TURN_USER`, `GAME_TURN_PASS`.
+
+### Direct or relay: the admin's switch
+
+Voice starts in the original **direct** mode (STUN only, audio goes straight between phones). The admin — and a player the
+admin allowed to start games — has a **📡 Relay** button in the top bar, in the lobby and during a game. **On** adds the
+relay servers above as a backup: a call uses them only when a direct route fails, so it uses little relay data. Switching
+it on rebuilds the pairs that are not connected; switching it off restarts every pair so nothing keeps going through the
+relay. The choice is stored with the room's settings (`settings.voiceRelay`, default off) and resets with the room.

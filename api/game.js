@@ -47,15 +47,20 @@ async function ensureIce() {
   if (!cfIce) await cfPending; // first time on this instance: wait (2 s at most)
 }
 
-function iceServers() {
+/**
+ * "Direct" (the default, the original behaviour): STUN only, calls go straight between phones.
+ * "Relay" (the admin switches it on): relay servers are added as a backup; a call uses them only when a direct route fails.
+ */
+function iceServers(relay) {
   const out = [...STUN];
+  if (!relay) return out;
   if (cfIce) out.push(...cfIce.servers);
   const urls = (process.env.GAME_TURN_URLS || '').split(',').map((x) => x.trim()).filter(Boolean);
   if (urls.length) out.push({ urls, username: process.env.GAME_TURN_USER || '', credential: process.env.GAME_TURN_PASS || '' });
   return out;
 }
 const withIce = (state) => {
-  if (state && state.canVoice) state.iceServers = iceServers();
+  if (state && state.canVoice) state.iceServers = iceServers(Boolean(state.settings && state.settings.voiceRelay));
   return state;
 };
 

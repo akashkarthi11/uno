@@ -30,6 +30,15 @@ function voiceSync(s) {
     return;
   }
   if (s.iceServers) voice.ice = s.iceServers;
+  const relayNow = Boolean(s.settings && s.settings.voiceRelay);
+  if (voice.active && voice.relay !== undefined && voice.relay !== relayNow) {
+    // The admin switched the route. Turning the relay on only helps pairs that are not connected; turning it off starts
+    // every pair over so no call keeps going through the relay.
+    for (const [id, p] of [...voice.peers]) {
+      if (!relayNow || p.pc.connectionState !== "connected") rebuildPeer(id, true);
+    }
+  }
+  voice.relay = relayNow;
   const before = new Set(voice.members);
   voice.members = s.voice || [];
   if (voice.active) {
@@ -167,10 +176,10 @@ function createPeer(id, initiator) {
  * Start a broken pairing over. Only the person with the smaller id sends the new offer, so the two sides never
  * both offer at the same moment; the other side answers when it arrives.
  */
-function rebuildPeer(id) {
+function rebuildPeer(id, force) {
   if (!voice.active || !voice.stream || !state || !voice.members.includes(id)) return;
   const peer = voice.peers.get(id);
-  if (peer && ["connected", "connecting", "new"].includes(peer.pc.connectionState) && peer.pc.iceConnectionState !== "disconnected") return;
+  if (!force && peer && ["connected", "connecting", "new"].includes(peer.pc.connectionState) && peer.pc.iceConnectionState !== "disconnected") return;
   if (state.you < id) createPeer(id, true);
   else closePeer(id); // wait for their offer
 }

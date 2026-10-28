@@ -67,6 +67,7 @@ export const SUPER_KINDS = ['again', 'sweep', 'blast', 'swap', 'gift', 'master']
 export const THEMES = ['growx', 'classic', 'midnight'];
 /** How many cards each player is dealt (the admin sets it in the lobby; 5 unless changed). */
 const handSizeOf = (s) => (s.settings && Number.isInteger(s.settings.handSize) ? s.settings.handSize : DEFAULT_HAND);
+const voiceRelayOf = (s) => Boolean(s.settings && s.settings.voiceRelay);
 const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
 const superSettings = (s) => Object.fromEntries(SUPER_KINDS.map((k) => [k, superOn(s, k)]));
@@ -334,9 +335,10 @@ function start(s, p, now) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
-  const { supers, theme, handSize } = b || {};
+  const { supers, theme, handSize, voiceRelay } = b || {};
   const hasSupers = supers && typeof supers === 'object';
-  if (!hasSupers && theme === undefined && handSize === undefined) fail('Bad settings.');
+  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined) fail('Bad settings.');
+  if (voiceRelay !== undefined && typeof voiceRelay !== 'boolean') fail('Bad settings.');
   if (theme !== undefined && !THEMES.includes(theme)) fail('Unknown theme.');
   if (handSize !== undefined && !(Number.isInteger(handSize) && handSize >= HAND_MIN && handSize <= HAND_MAX)) {
     fail(`Cards per player must be a whole number from ${HAND_MIN} to ${HAND_MAX}.`);
@@ -348,8 +350,9 @@ function setConfig(s, p, b) {
       if (typeof supers[kind] === 'boolean') next[kind] = supers[kind];
     }
   }
-  // the theme is only cosmetic, so it can be changed at any time, even during a game
+  // the theme and the voice route can be changed at any time, even during a game
   s.settings = {
+    voiceRelay: voiceRelay !== undefined ? voiceRelay : voiceRelayOf(s),
     supers: next,
     theme: theme !== undefined ? theme : themeOf(s),
     handSize: handSize !== undefined ? handSize : handSizeOf(s),
@@ -767,7 +770,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s) },
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s) },
     canVoice: canVoice(me),
     voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };

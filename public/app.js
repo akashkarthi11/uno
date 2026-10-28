@@ -305,6 +305,28 @@ function ensureVoice() {
   return voiceLoading;
 }
 
+/** Admin: voice goes straight between phones ("off", the original way) or may fall back to a relay server ("on"). */
+function toggleRelay() {
+  if (busy || !state || !state.canStart) return;
+  const on = !(state.settings && state.settings.voiceRelay);
+  const before = state;
+  state = { ...state, settings: { ...state.settings, voiceRelay: on } };
+  render();
+  send({ op: "config", voiceRelay: on }, () => { state = before; render(); });
+}
+$("relayBtn").addEventListener("click", toggleRelay);
+
+function renderRelayBtn(s) {
+  const btn = $("relayBtn");
+  btn.classList.toggle("hidden", !s.canStart); // only the admin (and a player the admin allowed to start games)
+  const on = Boolean(s.settings && s.settings.voiceRelay);
+  btn.textContent = "📡 Relay: " + (on ? "on" : "off");
+  btn.classList.toggle("on", on);
+  btn.title = on
+    ? "Voice may use a relay server when two phones cannot connect directly. Click to go back to direct only."
+    : "Voice goes straight between phones. Click to also allow a relay server if some players cannot connect.";
+}
+
 function toggleStarter(p) {
   send({ op: "starter", targetId: p.id, on: !p.starter });
 }
@@ -339,6 +361,7 @@ function render() {
   if (!state) return;
   const s = state;
   $("privateChip").classList.toggle("hidden", !s.private);
+  renderRelayBtn(s);
   applyTheme(s.settings && s.settings.theme); // every update carries the room's theme, so a change shows for everyone
   const inGame = s.started;
   // the sheet is only useful while it is still your turn and the card is still in your hand

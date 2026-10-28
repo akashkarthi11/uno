@@ -34,13 +34,21 @@ const call = (b) => new Promise((resolve) => {
 test('relay credentials are minted by the server, handed to voice users only, and cached', async () => {
   const room = 'turn' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'A', password: '110299' });
-  const ice = admin.body.state.iceServers;
+  assert.equal(admin.body.state.settings.voiceRelay, false, 'relay is off by default (the original direct way)');
+  assert.ok(!admin.body.state.iceServers.some((s) => s.username), 'off: no relay entry is handed out');
+  const switched = await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: true });
+  const ice = switched.body.state.iceServers;
   const relay = ice.find((s) => s.username);
   assert.ok(relay, 'a relay entry is present');
   assert.equal(relay.username, 'u1');
   assert.ok(ice.some((s) => String(s.urls).includes('stun.l.google.com')), 'our own STUN servers stay');
   const pub = await call({ op: 'join', room, name: 'P', password: '123456' });
   assert.equal(pub.body.state.iceServers, undefined, 'public players get no voice details');
+  const refused = await call({ op: 'config', room, playerId: pub.body.state.you, voiceRelay: false });
+  assert.equal(refused.code, 400, 'an ordinary player cannot switch the route');
+  const back = await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: false });
+  assert.ok(!back.body.state.iceServers.some((s) => s.username), 'switched off again: relay entries disappear');
+  await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: true });
   await call({ op: 'state', room, playerId: admin.body.state.you });
   assert.equal(hits, 1, 'minted once, then served from the cache');
 });

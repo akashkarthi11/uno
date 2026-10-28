@@ -307,6 +307,7 @@ button.cadm {
 }
 button.cadm.on { opacity: 1; background: var(--brand-soft); border-color: var(--brand-line); }
 .opp:hover button.cadm { opacity: 1; }
+#relayBtn.on { background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand-ink); }
 button.cadm-lobby { padding: 4px 10px; font-size: 12px; }
 
 /* ---------- confetti ---------- */
