@@ -452,6 +452,20 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal((await call({ op: 'rooms', room: A, playerId: 'nobody' })).code, 400);
   assert.equal((await call({ op: 'closeRoom', room: A, playerId: admin.body.state.you, target: 'bad room!' })).code, 400);
 
+  // the admin can watch any room, private included, without joining: the table only, no cards, nothing written
+  const before = (await call({ op: 'state', room: B, playerId: bPriv.body.state.you })).body.state;
+  const peek = await call({ op: 'peek', room: A, playerId: admin.body.state.you, target: B });
+  assert.equal(peek.code, 200);
+  assert.deepEqual([peek.body.peek.mode, peek.body.peek.phase, peek.body.peek.players.length], ['private', 'playing', 2]);
+  assert.ok(peek.body.peek.players.every((p) => typeof p.count === 'number' && !('hand' in p)), 'card counts only');
+  assert.equal(JSON.stringify(peek.body).includes('"hand"'), false, 'no cards in the answer');
+  const afterPeek = (await call({ op: 'state', room: B, playerId: bPriv.body.state.you })).body.state;
+  assert.equal(afterPeek.players.length, before.players.length, 'the watcher is not a member');
+  assert.equal(afterPeek.version, before.version, 'watching changes nothing');
+  assert.equal((await call({ op: 'peek', room: A, playerId: co.body.state.you, target: B })).code, 400, 'a co-admin cannot watch');
+  assert.equal((await call({ op: 'peek', room: A, playerId: aPub.body.state.you, target: B })).code, 400);
+  assert.equal((await call({ op: 'peek', room: A, playerId: admin.body.state.you, target: 'nonexistentroom' })).code, 400);
+
   // remove room B: it disappears from the list, its players are told, their old sign-in no longer works
   assert.equal((await call({ op: 'closeRoom', room: A, playerId: admin.body.state.you, target: B })).code, 200);
   const after = await call({ op: 'rooms', room: A, playerId: admin.body.state.you });

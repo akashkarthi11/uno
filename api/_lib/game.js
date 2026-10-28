@@ -957,6 +957,29 @@ export function roomSummary(s, code, now) {
   };
 }
 
+/**
+ * What the real admin sees when they watch a room from the Rooms window without joining it: the table, card counts and chat,
+ * never anyone's cards. Nothing is written, so the admin is not a member and nobody in the room can tell.
+ */
+export function peekView(s, code, now) {
+  const members = s.members || [];
+  const seatedNow = s.started ? s.seats.map((id) => members.find((m) => m.id === id)).filter(Boolean) : members;
+  const cur = s.started && !s.over ? members.find((m) => m.id === s.seats[s.cur]) : null;
+  return {
+    code, mode: s.private ? 'private' : 'public',
+    phase: !s.started ? 'lobby' : s.over ? 'finished' : s.paused ? 'paused' : 'playing',
+    gameNo: s.gameNo || 0, started: Boolean(s.started), over: Boolean(s.over),
+    top: s.started ? top(s) : null, color: s.started ? s.color : null, dir: s.dir, deck: s.started ? s.deck.length : 0,
+    cur: cur ? cur.name : null, ranking: s.ranking || [], loser: s.loser || null,
+    totals: s.match || {}, target: MATCH_TARGET,
+    players: seatedNow.map((p) => ({
+      name: p.name, count: p.hand.length, finished: Boolean(s.started && p.finished), connected: online(p, now),
+      admin: Boolean(p.admin), starter: Boolean(p.starter), role: p.role || 'public',
+    })),
+    chat: (s.chat || []).slice(-30),
+  };
+}
+
 /* ---------------- stats and history ---------------- */
 
 /**

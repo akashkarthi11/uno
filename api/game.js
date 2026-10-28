@@ -199,7 +199,7 @@ export default async function handler(req, res) {
 
     // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.
     // The admin is whoever signed in with the admin password in the room they are in now.
-    if (b.op === 'rooms' || b.op === 'closeRoom') {
+    if (b.op === 'rooms' || b.op === 'closeRoom' || b.op === 'peek') {
       const here = await readRoom(code);
       const who = here && here.members.find((m) => m.id === b.playerId);
       if (!who || !who.admin) throw new G.GameError('Only the admin can do that.');
@@ -209,6 +209,11 @@ export default async function handler(req, res) {
       }
       const target = String(b.target ?? '');
       if (!/^[A-Za-z0-9_-]{1,24}$/.test(target)) throw new G.GameError('Bad room name.');
+      if (b.op === 'peek') {
+        const there = await readRoom(target);
+        if (!there) throw new G.GameError('That room no longer exists.');
+        return res.json({ peek: G.peekView(there, target, now) });
+      }
       await closeRoom(target);
       return res.json({ ok: true });
     }

@@ -306,6 +306,19 @@ button.kick {
 .room-row .info .badge { margin-left: 6px; }
 .room-row .info .who { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .room-row.live { border-color: var(--green); }
+#chatFloat { position: fixed; left: 12px; top: 64px; z-index: 60; display: flex; flex-direction: column; gap: 6px; max-width: min(300px, 70vw); pointer-events: none; }
+.float-msg { background: rgba(15,23,42,.88); color: #fff; padding: 7px 12px; border-radius: 14px; font-size: 14px; word-break: break-word; box-shadow: 0 4px 14px rgba(0,0,0,.35); animation: floatIn .25s ease-out, floatOut .5s ease-in 5.5s forwards; }
+.float-msg b { color: #ffd54a; }
+.float-msg.mine b { color: #9be7a1; }
+@keyframes floatIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes floatOut { to { opacity: 0; transform: translateY(-8px); } }
+.room-row .row-actions { display: flex; gap: 6px; }
+#watchPlayers { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+#watchPlayers .wp { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); font-size: 14px; }
+#watchPlayers .wp.turn { border-color: var(--green); font-weight: 700; }
+#watchPlayers .wp .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#watchPlayers .wp.off { opacity: .55; }
+.watch-chat { max-height: 160px; overflow-y: auto; font-size: 13px; color: var(--label); border-top: 1px solid var(--line); padding-top: 6px; }
 #statsTabs { display: flex; gap: 8px; margin: 4px 0 2px; }
 #statsTabs button.on { background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand-ink); font-weight: 800; }
 .stats-h { margin: 14px 0 6px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }

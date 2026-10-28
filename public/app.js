@@ -147,6 +147,7 @@ if (window.visualViewport) window.visualViewport.addEventListener("resize", setA
 /** Forget everything remembered about the previous table (used when joining again or after being removed). */
 function resetScreenCaches() {
   chatSig = "";
+  floatSeenT = null;
   seenCards = null;
   lastTopId = null;
   celebrated = null;
@@ -879,7 +880,28 @@ function isEmojiOnly(text) {
   return text.length <= 8 && !/[A-Za-z0-9]/.test(text);
 }
 
+/** Every new message floats over the table for a few seconds with the sender's name, whether or not the chat panel is open. */
+let floatSeenT = null; // null until the first screen is drawn, so old messages do not all pop up after a refresh
+function floatNewMessages(s) {
+  const msgs = s.chat || [];
+  const newest = msgs.length ? msgs[msgs.length - 1].t : 0;
+  if (floatSeenT === null) { floatSeenT = newest; return; }
+  const box = $("chatFloat");
+  for (const m of msgs.filter((x) => x.t > floatSeenT).slice(-4)) {
+    const el = document.createElement("div");
+    el.className = "float-msg" + (m.from === s.you ? " mine" : "");
+    const who = document.createElement("b");
+    who.textContent = (m.from === s.you ? "You" : m.name) + " ";
+    el.append(who, document.createTextNode(m.text));
+    box.appendChild(el);
+    setTimeout(() => el.remove(), 6000);
+  }
+  while (box.children.length > 4) box.firstChild.remove();
+  floatSeenT = Math.max(floatSeenT, newest);
+}
+
 function renderChat(s) {
+  floatNewMessages(s);
   const msgs = s.chat || [];
   const sig = msgs.length + ":" + (msgs.length ? msgs[msgs.length - 1].t : 0);
   if (sig === chatSig) return; // nothing new: leave the scroll position alone
@@ -1217,7 +1239,15 @@ function renderRooms(r) {
     rm.className = "ghost remove";
     rm.textContent = "Remove";
     rm.addEventListener("click", () => closeRoomNow(room));
-    row.append(info, rm);
+    const watch = document.createElement("button");
+    watch.type = "button";
+    watch.className = "ghost";
+    watch.textContent = "👁 Watch";
+    watch.addEventListener("click", () => openWatch(room.code));
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    actions.append(watch, rm);
+    row.append(info, actions);
     list.appendChild(row);
   }
   if (!r.rooms.length) { const n = document.createElement("div"); n.className = "none hint"; n.textContent = "No rooms."; list.appendChild(n); }
@@ -1235,6 +1265,68 @@ async function closeRoomNow(r) {
   if (here) { removedByAdmin("You removed this room."); $("roomsModal").classList.add("hidden"); return; }
   loadRooms();
 }
+/* Watching a room without joining it: the server answers with the table only (no cards), and nothing is written to the room. */
+let watchCode = null;
+let watchTimer = null;
+const cardText = (c) => (c ? ({ red: "🟥", yellow: "🟨", green: "🟩", blue: "🟦", wild: "🌈" }[c.color] || "") + " " + c.value : "—");
+
+function renderWatch(p) {
+  $("watchTitle").textContent = "👁 " + p.code + " · " + (p.mode === "private" ? "🔒 private" : "public");
+  let line = p.phase + (p.gameNo ? " · game #" + p.gameNo : "");
+  if (p.started && !p.over) line += " · top " + cardText(p.top) + (p.color && p.top && p.top.color === "wild" ? " (" + p.color + ")" : "") + " · pile " + p.deck + (p.cur ? " · turn: " + p.cur : "");
+  if (p.over) line += " · winner " + (p.ranking[0] || "—");
+  $("watchSummary").textContent = line;
+  const list = $("watchPlayers");
+  list.textContent = "";
+  for (const pl of p.players) {
+    const row = document.createElement("div");
+    row.className = "wp" + (pl.name === p.cur ? " turn" : "") + (pl.connected ? "" : " off");
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = (pl.connected ? "🟢 " : "⚪ ") + pl.name + (pl.admin ? " 👑" : pl.starter ? " (admin)" : "");
+    const c = document.createElement("span");
+    c.textContent = p.started ? (pl.finished ? "out" : pl.count + " 🂠") : "";
+    const sc = p.totals[pl.name];
+    row.append(n, c);
+    if (sc) { const t = document.createElement("span"); t.textContent = sc + " pts"; row.append(t); }
+    list.appendChild(row);
+  }
+  const chat = $("watchChat");
+  chat.textContent = "";
+  for (const m of p.chat) { const d = document.createElement("div"); d.textContent = m.name + ": " + m.text; chat.appendChild(d); }
+  chat.classList.toggle("hidden", !p.chat.length);
+}
+
+async function pollWatch() {
+  if (!watchCode) return;
+  try {
+    const r = await api({ op: "peek", target: watchCode });
+    if (watchCode) renderWatch(r.peek);
+  } catch (e) {
+    if (watchCode) $("watchSummary").textContent = e.message;
+  }
+}
+function openWatch(code) {
+  watchCode = code;
+  $("watchSummary").textContent = "Loading…";
+  $("watchPlayers").textContent = "";
+  $("watchChat").textContent = "";
+  $("watchModal").classList.remove("hidden");
+  $("roomsModal").classList.add("hidden");
+  pollWatch();
+  clearInterval(watchTimer);
+  watchTimer = setInterval(pollWatch, 2500);
+}
+function closeWatch() {
+  watchCode = null;
+  clearInterval(watchTimer);
+  $("watchModal").classList.add("hidden");
+  $("roomsModal").classList.remove("hidden");
+  loadRooms();
+}
+$("watchX").addEventListener("click", closeWatch);
+$("watchClose").addEventListener("click", closeWatch);
+
 $("roomsBtn").addEventListener("click", () => { $("roomsModal").classList.remove("hidden"); loadRooms(); });
 $("roomsRefresh").addEventListener("click", loadRooms);
 $("roomsX").addEventListener("click", () => $("roomsModal").classList.add("hidden"));
