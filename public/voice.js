@@ -2,7 +2,7 @@
 /*
  * Voice chat: browser-to-browser audio (WebRTC, one connection per pair of people).
  * The game server only passes the small set-up messages; the audio never goes through it.
- * Only the admin and private players can use it; the server enforces that (state.canVoice).
+ * The admin and private players can use it, and public players too while the admin has "Public voice" on; the server enforces that (state.canVoice).
  * Uses $, api, send, state and toast from app.js.
  */
 

@@ -187,10 +187,11 @@ function chat(s, p, raw, now) {
 /* ---------------- voice chat (membership only; audio is browser-to-browser) ---------------- */
 
 /** Voice chat is for the admin and private players. */
-export const canVoice = (p) => Boolean(p.admin || p.role === 'private');
+export const canVoice = (s, p) => Boolean(p.admin || p.role === 'private' || publicVoiceOf(s));
+export const publicVoiceOf = (s) => Boolean(s.settings && s.settings.publicVoice);
 
 function voiceJoin(s, p) {
-  if (!canVoice(p)) fail('Voice chat is for private players and the admin.');
+  if (!canVoice(s, p)) fail('Voice chat is for private players and the admin.');
   s.voice = s.voice || [];
   if (!s.voice.includes(p.id)) s.voice.push(p.id);
 }
@@ -204,7 +205,7 @@ function cleanVoice(s, now) {
   const before = s.voice || [];
   const keep = before.filter((id) => {
     const m = byId(s, id);
-    return m && canVoice(m) && now - m.lastSeen < VOICE_GRACE_MS;
+    return m && canVoice(s, m) && now - m.lastSeen < VOICE_GRACE_MS;
   });
   if (keep.length === before.length) return false;
   s.voice = keep;
@@ -338,9 +339,10 @@ function start(s, p, now) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
-  const { supers, theme, handSize, voiceRelay, turnSecs } = b || {};
+  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice } = b || {};
   const hasSupers = supers && typeof supers === 'object';
-  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined) fail('Bad settings.');
+  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined) fail('Bad settings.');
+  if (publicVoice !== undefined && typeof publicVoice !== 'boolean') fail('Bad settings.');
   if (turnSecs !== undefined && !(Number.isInteger(turnSecs) && turnSecs >= TURN_MIN_SECS && turnSecs <= TURN_MAX_SECS)) {
     fail(`Turn time must be a whole number of seconds from ${TURN_MIN_SECS} to ${TURN_MAX_SECS}.`);
   }
@@ -359,6 +361,7 @@ function setConfig(s, p, b) {
   // the theme and the voice route can be changed at any time, even during a game
   s.settings = {
     voiceRelay: voiceRelay !== undefined ? voiceRelay : voiceRelayOf(s),
+    publicVoice: publicVoice !== undefined ? publicVoice : publicVoiceOf(s),
     turnSecs: turnSecs !== undefined ? turnSecs : turnMsOf(s) / 1000,
     supers: next,
     theme: theme !== undefined ? theme : themeOf(s),
@@ -777,9 +780,9 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), turnSecs: turnMsOf(s) / 1000 },
-    canVoice: canVoice(me),
-    voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), turnSecs: turnMsOf(s) / 1000 },
+    canVoice: canVoice(s, me),
+    voice: canVoice(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };
   if (!s.started) return out;
   const myTurn = !s.over && s.seats[s.cur] === me.id;

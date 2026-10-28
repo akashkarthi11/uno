@@ -380,7 +380,26 @@ function toggleRelay() {
 }
 $("relayBtn").addEventListener("click", toggleRelay);
 
+/** Admin: may public players use voice chat too? (off by default: only the admin and private players) */
+function togglePublicVoice() {
+  if (busy || !state || !state.canStart) return;
+  const on = !(state.settings && state.settings.publicVoice);
+  const before = state;
+  state = { ...state, settings: { ...state.settings, publicVoice: on } };
+  render();
+  send({ op: "config", publicVoice: on }, () => { state = before; render(); });
+}
+$("pubVoiceBtn").addEventListener("click", togglePublicVoice);
+
 function renderRelayBtn(s) {
+  const pv = $("pubVoiceBtn");
+  pv.classList.toggle("hidden", !s.canStart);
+  const pvOn = Boolean(s.settings && s.settings.publicVoice);
+  pv.textContent = "🎙 Public voice: " + (pvOn ? "on" : "off");
+  pv.classList.toggle("on", pvOn);
+  pv.title = pvOn
+    ? "Public players can join voice chat too. Click to limit voice to you and private players."
+    : "Only you and private players have voice chat. Click to let public players join it too.";
   const btn = $("relayBtn");
   btn.classList.toggle("hidden", !s.canStart); // only the admin (and a player the admin allowed to start games)
   const on = Boolean(s.settings && s.settings.voiceRelay);

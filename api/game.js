@@ -180,7 +180,7 @@ export default async function handler(req, res) {
       const me = s && s.members.find((m) => m.id === b.playerId);
       const to = s && s.members.find((m) => m.id === b.to);
       if (!me || !to) throw new G.GameError('Not in this room.');
-      if (!G.canVoice(me) || !G.canVoice(to)) throw new G.GameError('Voice chat is for private players and the admin.');
+      if (!G.canVoice(s, me) || !G.canVoice(s, to)) throw new G.GameError('Voice chat is for private players and the admin.');
       const live = s.voice || [];
       if (!live.includes(me.id) || !live.includes(to.id)) throw new G.GameError('Not in voice chat.');
       if (!['offer', 'answer', 'ice'].includes(b.kind) || JSON.stringify(b.data ?? null).length > 8000) {

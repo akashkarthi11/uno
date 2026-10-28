@@ -883,7 +883,7 @@ test('co-admin: can start games and choose settings, nothing else; only the admi
   assert.throws(() => G.act(s, priv, { op: 'config', handSize: 6 }, now), /Only the admin/, 'an ordinary player still cannot');
   G.act(s, admin, { op: 'config', handSize: 5, theme: 'growx', supers: { blast: true } }, now);
   assert.throws(() => G.act(s, pub, { op: 'kick', targetId: priv.id }, now), /Only the admin/);
-  assert.equal(G.canVoice(pub), false, 'a public co-admin gets no voice chat');
+  assert.equal(G.canVoice(s, pub), false, 'a public co-admin gets no voice chat');
 
   G.act(s, pub, { op: 'start' }, now); // the co-admin starts the game
   assert.equal(s.started, true);
@@ -987,4 +987,31 @@ test('API: the admin can pause and resume a game (resume must not be mistaken fo
   const resumed = await call({ op: 'resume', room, playerId: A });
   assert.equal(resumed.code, 200, 'the un-pause works');
   assert.equal(resumed.body.state.paused, false);
+});
+
+test('public voice switch: off by default; the admin turns it on or off and public players follow', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const pub = G.join(s, { name: 'Pub', admin: false, role: 'public' }, now);
+  assert.equal(G.view(s, admin, now).settings.publicVoice, false);
+  assert.equal(G.view(s, pub, now).canVoice, false);
+  assert.throws(() => G.act(s, pub, { op: 'voiceJoin' }, now), /private players and the admin/);
+  assert.throws(() => G.act(s, pub, { op: 'config', publicVoice: true }, now), /Only the admin/);
+  assert.throws(() => G.act(s, admin, { op: 'config', publicVoice: 'yes' }, now), /Bad settings/);
+
+  G.act(s, admin, { op: 'config', publicVoice: true }, now);
+  assert.equal(G.view(s, pub, now).canVoice, true);
+  assert.equal(G.view(s, pub, now).settings.publicVoice, true);
+  G.act(s, pub, { op: 'voiceJoin' }, now);
+  G.act(s, admin, { op: 'voiceJoin' }, now);
+  assert.deepEqual(G.view(s, pub, now).voice.sort(), [admin.id, pub.id].sort());
+  G.act(s, admin, { op: 'config', theme: 'classic' }, now); // other changes keep the choice
+  assert.equal(G.view(s, pub, now).settings.publicVoice, true);
+
+  G.act(s, admin, { op: 'config', publicVoice: false }, now); // switched off: public players drop out of the list
+  assert.equal(G.tick(s, now), true);
+  assert.deepEqual(s.voice, [admin.id]);
+  assert.equal(G.view(s, pub, now).canVoice, false);
+  assert.deepEqual(G.view(s, pub, now).voice, []);
 });

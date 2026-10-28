@@ -209,3 +209,9 @@ are refused and see the password form. Changing any of the three game passwords 
 Everyone who may use voice (the admin and private players) joins it automatically when they enter the room; the
 browser asks for the microphone once. **Leave voice** is remembered for that tab (a refresh does not pull the player back
 in), and **Join voice** brings them back. If the microphone is refused the page asks only once; the button tries again.
+
+### Public voice switch
+
+Voice is for the admin and private players. The admin's **🎙 Public voice** button in the top bar (also for a player the
+admin allowed to start games) lets public players use it as well; turning it off again drops public players from the
+call. It is stored with the room settings (`settings.publicVoice`, default off).
