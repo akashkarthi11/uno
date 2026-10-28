@@ -1181,6 +1181,7 @@ function renderSettings(s) {
 const settingsModal = $("settingsModal");
 $("settingsBtn").addEventListener("click", () => settingsModal.classList.remove("hidden"));
 $("settingsX").addEventListener("click", () => settingsModal.classList.add("hidden"));
+$("settingsClose").addEventListener("click", () => settingsModal.classList.add("hidden"));
 settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
 ["rulesBtn", "statsBtn", "leaveBtn", "roomsBtn"].forEach((id) => $(id).addEventListener("click", () => settingsModal.classList.add("hidden")));
 
@@ -1237,6 +1238,7 @@ async function closeRoomNow(r) {
 $("roomsBtn").addEventListener("click", () => { $("roomsModal").classList.remove("hidden"); loadRooms(); });
 $("roomsRefresh").addEventListener("click", loadRooms);
 $("roomsX").addEventListener("click", () => $("roomsModal").classList.add("hidden"));
+$("roomsClose").addEventListener("click", () => $("roomsModal").classList.add("hidden"));
 $("roomsModal").addEventListener("click", (e) => { if (e.target === $("roomsModal")) $("roomsModal").classList.add("hidden"); });
 
 /* ---------- landscape: the table is laid out wide; on a phone held upright we offer to turn it ---------- */

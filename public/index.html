@@ -165,6 +165,7 @@
       <button id="pubVoiceBtn" class="ghost hidden" type="button">🎙 Public voice: off</button>
     </div>
   </div>
+    <button id="settingsClose" class="ghost sticky-close" type="button">Close</button>
   </div>
 </div>
 
@@ -215,6 +216,7 @@
     <p id="roomsSummary" class="hint">Loading…</p>
     <div id="roomsList"></div>
     <p class="hint">"Active now" means somebody in that room was seen in the last 30 seconds. Removing a room sends everyone in it out; they can sign in again after a couple of minutes.</p>
+    <button id="roomsClose" class="ghost sticky-close" type="button">Close</button>
   </div>
 </div>
 
@@ -233,7 +235,7 @@
     <h3 class="stats-h">On this device</h3>
     <div id="statsDevice"></div>
     <p class="hint">The room's table and games are kept while the room is in use (they disappear a few hours after the last move). The device totals stay on this phone or computer.</p>
-    <button id="statsClose" class="ghost" type="button">Close</button>
+    <button id="statsClose" class="ghost sticky-close" type="button">Close</button>
   </div>
 </div>
 
