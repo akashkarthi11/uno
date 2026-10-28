@@ -235,9 +235,11 @@ function startPolling() {
 
 /** Poll faster while a game is running (that is when waiting for someone's move is felt), slower in a hidden tab. */
 function pollDelay() {
-  if (document.hidden) return POLL_HIDDEN_MS;
-  if (state && state.started && !state.over && !state.paused) return quiet > 20 ? POLL_GAME_QUIET_MS : POLL_GAME_MS;
-  return quiet > 10 ? POLL_QUIET_MS : POLL_MS;
+  // In voice chat a newcomer must be noticed quickly, so the quiet-screen slowdown is off and a hidden tab still checks often.
+  const inVoice = typeof voice !== "undefined" && voice.active;
+  if (document.hidden) return inVoice ? 3000 : POLL_HIDDEN_MS;
+  if (state && state.started && !state.over && !state.paused) return quiet > 20 && !inVoice ? POLL_GAME_QUIET_MS : POLL_GAME_MS;
+  return quiet > 10 && !inVoice ? POLL_QUIET_MS : POLL_MS;
 }
 
 async function send(body, onFail) {
