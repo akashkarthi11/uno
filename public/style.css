@@ -197,6 +197,15 @@ button.kick {
 #discardPile[data-color="green"] { box-shadow: 0 0 36px 6px rgba(18,183,106,.45); }
 #discardPile[data-color="blue"] { box-shadow: 0 0 36px 6px rgba(47,107,255,.45); }
 #discardPile .card { transform: rotate(-4deg); }
+#discardPile .card.land { animation: land .2s ease-out; }
+.card.fly { box-shadow: 0 16px 34px rgba(16,24,40,.35); }
+.fly-tag {
+  position: absolute; left: 50%; bottom: calc(100% + 4px); transform: translateX(-50%); white-space: nowrap;
+  padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; line-height: 1.4;
+  background: rgba(15,23,42,.88); color: #fff; animation: tagfade .9s ease forwards;
+}
+@keyframes land { 0% { transform: scale(1.1) rotate(-3deg); } 60% { transform: scale(.97) rotate(1deg); } 100% { transform: none; } }
+@keyframes tagfade { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
 #discardPile .card.pop { animation: pop .35s cubic-bezier(.2,1.4,.4,1); }
 #colorDot { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #fff; box-shadow: var(--shadow); }
 #dirInfo {

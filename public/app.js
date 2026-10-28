@@ -152,6 +152,8 @@ function resetScreenCaches() {
   celebrated = null;
   chatOpen = false;
   chatSeenT = 0;
+  lastCur = null;
+  flyFrom = null;
 }
 
 /**
@@ -472,6 +474,7 @@ function render() {
   if (!inGame) {
     seenCards = null;
     lastTopId = null;
+    lastCur = null;
     turn = null;
     updateTimer();
     $("endModal").classList.add("hidden");
@@ -528,7 +531,62 @@ function renderLobby(s) {
     : (s.host || s.players.some((p) => p.starter) ? "Waiting for the admin to start the game…" : "Waiting for the admin to join and start the game…");
 }
 
+/**
+ * The drop: a copy of the card flies from where it was played (my hand, or an opponent's avatar) to the pile, lifts a
+ * little just before landing, and the real card on the pile appears when it lands. Returns false if there is nothing
+ * to animate (no start spot, reduced motion), so the plain "pop" is used instead.
+ */
+function flyCard(card, topEl, start, who) {
+  if (!start || !start.width || !topEl.isConnected) return false;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  const end = topEl.getBoundingClientRect();
+  if (!end.width || !end.height || !fly_ok()) return false;
+  const fly = cardEl(card);
+  fly.classList.add("fly");
+  Object.assign(fly.style, {
+    position: "fixed", left: end.left + "px", top: end.top + "px", width: end.width + "px", height: end.height + "px",
+    margin: "0", zIndex: "70", pointerEvents: "none", transformOrigin: "center",
+  });
+  if (who) {
+    const tag = document.createElement("div");
+    tag.className = "fly-tag";
+    tag.textContent = who;
+    fly.appendChild(tag);
+  }
+  document.body.appendChild(fly);
+  topEl.style.visibility = "hidden";
+  const dx = start.left + start.width / 2 - (end.left + end.width / 2);
+  const dy = start.top + start.height / 2 - (end.top + end.height / 2);
+  const sx = Math.max(0.15, start.width / end.width);
+  const sy = Math.max(0.15, start.height / end.height);
+  let finished = false;
+  const done = () => {
+    if (finished) return;
+    finished = true;
+    fly.remove();
+    topEl.style.visibility = "";
+    topEl.classList.add("land");
+  };
+  try {
+    const anim = fly.animate([
+      { transform: "translate(" + dx + "px," + dy + "px) scale(" + sx + "," + sy + ") rotate(" + (who ? -28 : 10) + "deg)", opacity: who ? 0.55 : 1, offset: 0 },
+      { transform: "translate(" + dx * 0.1 + "px," + (dy * 0.1 - 26) + "px) scale(1.14) rotate(-7deg)", opacity: 1, offset: 0.72 },
+      { transform: "translate(0,0) scale(1) rotate(0deg)", opacity: 1, offset: 1 },
+    ], { duration: who ? 520 : 420, easing: "cubic-bezier(.25,.8,.3,1)", fill: "forwards" });
+    anim.onfinish = done;
+    anim.oncancel = done;
+  } catch (e) {
+    done();
+    return false;
+  }
+  setTimeout(done, 1000); // never leave a card hanging if the animation is interrupted
+  return true;
+}
+const fly_ok = () => typeof Element !== "undefined" && typeof Element.prototype.animate === "function";
+
 function renderGame(s) {
+  const prevCur = lastCur;
+  lastCur = s.cur;
   const me = s.players.find((p) => p.id === s.you);
   const myTurn = !s.over && s.cur === s.you;
   const curPlayer = s.players.find((p) => p.id === s.cur);
@@ -574,9 +632,23 @@ function renderGame(s) {
   dp.innerHTML = "";
   dp.dataset.color = s.color;
   const topEl = cardEl(s.top);
-  if (lastTopId !== null && lastTopId !== s.top.id) topEl.classList.add("pop");
-  lastTopId = s.top.id;
   dp.appendChild(topEl);
+  if (lastTopId !== null && lastTopId !== s.top.id) {
+    // A card was played. Whoever's turn it was at the previous screen played it: my card drops from my hand, an
+    // opponent's flies in from their avatar with their name on it.
+    let start = null;
+    let who = null;
+    if (prevCur === s.you) {
+      if (flyFrom && flyFrom.id === s.top.id && Date.now() - flyFrom.at < 15000) start = flyFrom.rect;
+    } else if (prevCur) {
+      const av = $("opponents").querySelector('[data-pid="' + prevCur + '"] .avatar');
+      const pl = s.players.find((p) => p.id === prevCur);
+      if (av) { start = av.getBoundingClientRect(); who = pl ? pl.name : ""; }
+    }
+    flyFrom = null;
+    if (!flyCard(s.top, topEl, start, who)) topEl.classList.add("pop");
+  }
+  lastTopId = s.top.id;
   $("colorDot").style.background = "var(--" + (s.color === "yellow" ? "card-yellow" : s.color) + ")";
   $("drawCount").textContent = s.deck + " in pile";
   $("dirInfo").textContent = s.dir === 1 ? "↻" : "↺";
@@ -591,7 +663,10 @@ function renderGame(s) {
     nowSeen.add(card.id);
     if (!firstRender && !seenCards.has(card.id)) el.classList.add("deal"); // newly drawn card slides in
     if (ok.has(card.id)) el.classList.add("playable");
-    el.addEventListener("click", () => onCard(card));
+    el.addEventListener("click", () => {
+      flyFrom = { id: card.id, rect: el.getBoundingClientRect(), at: Date.now() };
+      onCard(card);
+    });
     hand.appendChild(el);
   }
   if (!s.hand.length) {
@@ -803,6 +878,8 @@ $("chatForm").addEventListener("submit", (ev) => {
 /* ---------- small visual helpers ---------- */
 
 let lastTopId = null;
+let lastCur = null; // whose turn it was at the previous game screen
+let flyFrom = null; // { id, rect, at }: where my last tapped card was, so it can drop from there
 let seenCards = null;
 let celebrated = null;
 

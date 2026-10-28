@@ -194,6 +194,10 @@ relay servers above as a backup: a call uses them only when a direct route fails
 it on rebuilds the pairs that are not connected; switching it off restarts every pair so nothing keeps going through the
 relay. The choice is stored with the room's settings (`settings.voiceRelay`, default off) and resets with the room.
 
+## Card drop animation
+
+A played card flies onto the pile: from the player's hand for my own card, from the avatar (with a name tag) for an opponent's. It is skipped when the device asks for reduced motion.
+
 ## Staying signed in after a refresh
 
 Signing in returns a signed token (`api/_lib/token.js`). The page keeps it in `sessionStorage` (this tab only; closing the
