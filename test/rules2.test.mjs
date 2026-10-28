@@ -38,7 +38,7 @@ const turnOf = (s) => s.members.find((m) => m.id === s.seats[s.cur]);
 /* ---------- stacking ---------- */
 
 test('stacking: +2 on +2 adds up, the one who cannot stack draws everything and loses the turn', () => {
-  const { s, ps, now } = table(3, { stacking: true });
+  const { s, ps, now } = table(3, { stacking: true, challenge: false });
   ps[0].hand = [card(1, 'red', 'draw2'), card(2, 'red', '5')];
   ps[1].hand = [card(3, 'blue', 'draw2'), card(4, 'blue', '1')];
   ps[2].hand = [card(5, 'green', '1'), card(6, 'green', '2')];
@@ -49,7 +49,7 @@ test('stacking: +2 on +2 adds up, the one who cannot stack draws everything and 
   assert.equal(turnOf(s), ps[1], 'the +2 waits for the next player');
   assert.equal(ps[1].hand.length, 2, 'nothing drawn yet');
   const v = G.view(s, ps[1], now);
-  assert.deepEqual(v.pend, { kind: 'draw2', n: 2, by: 'P0', canChallenge: false });
+  assert.deepEqual(v.pend, { kind: 'draw2', n: 2, by: 'P0', canChallenge: false, colour: 'red' });
   assert.deepEqual(v.playable, [3], 'only a +2 can be played now');
   assert.throws(() => G.act(s, ps[1], { op: 'play', cardId: 4 }, now), /Play another \+2 to stack it, or draw 2/);
 
@@ -65,7 +65,7 @@ test('stacking: +2 on +2 adds up, the one who cannot stack draws everything and 
 });
 
 test('stacking: +4 stacks on +4 only (a +2 cannot be put on a +4), and a timeout takes the cards', () => {
-  const { s, ps, now } = table(3, { stacking: true });
+  const { s, ps, now } = table(3, { stacking: true, challenge: false });
   ps[0].hand = [card(1, 'wild', 'wild4'), card(2, 'blue', '5')]; // no red: a legal +4 under the strict rule
   ps[1].hand = [card(3, 'red', 'draw2'), card(4, 'wild', 'wild4')];
   G.act(s, ps[0], { op: 'play', cardId: 1, color: 'blue' }, now);
@@ -78,8 +78,8 @@ test('stacking: +4 stacks on +4 only (a +2 cannot be put on a +4), and a timeout
   assert.equal(s.pend, null);
 });
 
-test('stacking off: a +2 still makes the next player draw 2 at once (the old rule)', () => {
-  const { s, ps, now } = table(3);
+test('stacking and challenge both off: a +2 makes the next player draw 2 at once', () => {
+  const { s, ps, now } = table(3, { challenge: false });
   ps[0].hand = [card(1, 'red', 'draw2'), card(2, 'red', '5')];
   const h = ps[1].hand.length;
   G.act(s, ps[0], { op: 'play', cardId: 1 }, now);
@@ -105,13 +105,13 @@ test('challenge: a bluffed +4 makes the bluffer draw 4 and the challenger plays 
   assert.equal(s.pend, null);
 });
 
-test('challenge: a legal +4 costs the challenger 6 and the turn', () => {
+test('challenge: a legal +4 costs the challenger the 4 and the turn', () => {
   const { s, ps, now } = table(3, { challenge: true });
   ps[0].hand = [card(1, 'wild', 'wild4'), card(2, 'blue', '5'), card(7, 'green', '1')]; // no red: legal
   ps[1].hand = [card(3, 'blue', '1'), card(4, 'green', '2')];
   G.act(s, ps[0], { op: 'play', cardId: 1, color: 'blue' }, now);
   G.act(s, ps[1], { op: 'challenge' }, now);
-  assert.equal(ps[1].hand.length, 2 + 6);
+  assert.equal(ps[1].hand.length, 2 + 4, '4 in total, nothing extra');
   assert.equal(turnOf(s), ps[2]);
 });
 
@@ -126,7 +126,7 @@ test('challenge: not challenging means drawing the 4; and challenge needs the se
   const nothing = table(3, { challenge: true });
   assert.throws(() => G.act(nothing.s, nothing.ps[0], { op: 'challenge' }, nothing.now), /nothing to challenge/);
 
-  const off = table(3); // challenges off: the strict rule stays — a +4 only without the current colour
+  const off = table(3, { challenge: false }); // challenges switched off: the strict rule stays — a +4 only without the current colour
   off.ps[0].hand = [card(1, 'wild', 'wild4'), card(2, 'red', '5')];
   assert.throws(() => G.act(off.s, off.ps[0], { op: 'play', cardId: 1, color: 'blue' }, off.now), /only legal when you hold no card/);
 });
@@ -137,13 +137,13 @@ test('settings: stacking and challenge are lobby-only admin switches', () => {
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false }, now);
   assert.equal(G.view(s, b, now).settings.stacking, false);
-  assert.equal(G.view(s, b, now).settings.challenge, false);
+  assert.equal(G.view(s, b, now).settings.challenge, true, 'the challenge question is on by default, like the official rules');
   assert.throws(() => G.act(s, b, { op: 'config', stacking: true }, now), /Only the admin/);
   assert.throws(() => G.act(s, admin, { op: 'config', stacking: 'yes' }, now), /Bad settings/);
-  G.act(s, admin, { op: 'config', stacking: true, challenge: true }, now);
+  G.act(s, admin, { op: 'config', stacking: true, challenge: false }, now);
   G.act(s, admin, { op: 'config', theme: 'classic' }, now);
   assert.equal(G.view(s, b, now).settings.stacking, true);
-  assert.equal(G.view(s, b, now).settings.challenge, true);
+  assert.equal(G.view(s, b, now).settings.challenge, false, 'the admin can switch it off');
   G.act(s, admin, { op: 'start' }, now);
   assert.throws(() => G.act(s, admin, { op: 'config', stacking: false }, now), /only be changed in the lobby/);
 });
@@ -269,8 +269,9 @@ test('stats: every finished game is kept (last 10) and the room table counts win
   assert.equal(st.history[0].no, 3, 'newest first');
   assert.deepEqual(st.history[0].players.sort(), ['Ann', 'Bob']);
   assert.equal(st.history[0].ranking[0], 'Bob');
-  assert.deepEqual(st.table.find((r) => r.name === 'Ann'), { name: 'Ann', played: 3, wins: 2, losses: 1 });
-  assert.deepEqual(st.table.find((r) => r.name === 'Bob'), { name: 'Bob', played: 3, wins: 1, losses: 2 });
+  const row = (n) => { const { points, ...rest } = st.table.find((x) => x.name === n); assert.ok(points >= 0); return rest; };
+  assert.deepEqual(row('Ann'), { name: 'Ann', played: 3, wins: 2, losses: 1 });
+  assert.deepEqual(row('Bob'), { name: 'Bob', played: 3, wins: 1, losses: 2 });
   assert.equal(st.table[0].name, 'Ann', 'most wins first');
 
   // a game that ends when someone leaves is recorded once; going back to the lobby does not add a game

@@ -54,6 +54,20 @@
 <main id="game" class="hidden">
   <div id="gameTop">
   <div id="pausedBanner" class="hidden">⏸ Game paused by the admin</div>
+  <div id="challengeBox" class="hidden" role="dialog" aria-live="assertive">
+    <div id="cqTitle" class="cq-title"></div>
+    <div id="cqQuestion" class="cq-question"></div>
+    <div class="cq-buttons">
+      <button id="cqYes" type="button">✅ Yes</button>
+      <button id="cqNo" class="ghost" type="button">❌ No</button>
+    </div>
+    <div class="cq-sub">
+      <button id="cqSkip" class="ghost" type="button">Skip challenge</button>
+      <button id="cqStack" class="ghost hidden" type="button">Stack a card instead</button>
+    </div>
+    <p id="cqNote" class="cq-note"></p>
+  </div>
+  <div id="reveal" class="hidden"></div>
   <div id="turnBar" class="hidden"><div id="turnFill"></div><span id="turnText"></span></div>
   <section id="opponents"></section>
 
@@ -72,7 +86,6 @@
   <section id="status">
     <div id="message"></div>
     <div class="actions">
-      <button id="challengeBtn" class="hidden" type="button">⚔ Challenge</button>
       <button id="catchBtn" class="hidden" type="button">🎯 Catch!</button>
       <button id="passBtn" disabled>Pass</button>
       <button id="unoBtn" disabled>GrowX!</button>
@@ -135,7 +148,7 @@
     <div class="set-label">House rules</div>
     <div id="ruleList">
       <label class="rule-row"><input type="checkbox" id="stackingBox"><span class="t">Stacking</span><small>+2 on +2, +4 on +4; the total goes to whoever cannot stack</small></label>
-      <label class="rule-row"><input type="checkbox" id="challengeBox"><span class="t">Challenge +4</span><small>a +4 can be bluffed; the next player may challenge it</small></label>
+      <label class="rule-row"><input type="checkbox" id="challengeBox"><span class="t">Challenge +4 / +2</span><small>the next player is asked if the opponent holds the colour in play (on = official)</small></label>
     </div>
     <div class="set-label">Super cards in this game</div>
     <div id="superList"></div>
@@ -186,6 +199,7 @@
   <div class="box">
     <h2 id="endTitle"></h2>
     <p id="endText"></p>
+    <p id="endScore"></p>
     <button id="playAgain">Play again</button>
     <button id="toLobby" class="ghost">Back to lobby</button>
     <p id="endHint" class="hint"></p>
@@ -230,14 +244,16 @@
     <ul>
       <li>Before a game starts, the admin can tick which super cards are in the deck in the lobby; unticked ones are left out.</li>
       <li><b>★ Super cards</b> (golden border): <b>🔁 Play Again</b> (matches its colour — you go again), <b>🧹 Sweep</b> (matches its colour — every other card of that colour in your hand goes down with it),<b>💥 Blast</b> (play any time, pick a colour — everyone else draws 1), <b>🔄 Swap Hands</b> (play any time, pick a colour and a player — you trade hands), <b>🎁 Gift</b> (play any time, pick a colour — give 1 random card to every other player, you always keep at least 1). The single plain <b>✨ Master card</b> (play any time): pick a colour, then a player, then one super rule to apply to that player — 🔁 they play next, 🧹 they put down all cards of the new colour, 💥 they draw 2, 🔄 you swap hands with them, 🎁 you give them 2 cards, +2 / +4 they draw 2 / 4 cards and lose their next turn. You may pick yourself for 🔁 or 🧹.</li>
-      <li>2–8 players. 123-card deck (108 classic + 15 super cards). The admin chooses how many cards each player gets (3–10, usually 5), which table theme is used and which super cards are in the deck; the admin also starts the game. People who join mid-game play from the next one.</li>
+      <li>2–8 players. 123-card deck (108 classic + 15 super cards). The admin chooses how many cards each player gets (3–10, the official 7 by default), which table theme is used and which super cards are in the deck; the admin also starts the game. People who join mid-game play from the next one.</li>
       <li>Play a card that matches the top card by colour, number or symbol. Wilds can be played any time, except <b>Wild Draw Four</b>, which needs a hand with no card of the current colour.</li>
       <li><b>Skip</b> skips the next player. <b>Reverse</b> flips direction (acts as Skip with 2 players). <b>Draw Two</b> / <b>Wild Draw Four</b> make the next player draw 2 / 4 and lose the turn.</li>
       <li>No playable card? Click the draw pile. If the drawn card fits you may play it, otherwise press Pass.</li>
       <li><b>Turn timer</b> (30 seconds unless the admin changed it in the lobby): if you haven't picked up or played a card in time, you draw 1 extra card and the turn moves to the next player.</li>
       <li><b>GrowX! button:</b> when you hold 2 cards, press <b>GrowX!</b> before you play your second-to-last card. If you play it without pressing, anyone can tap <b>🎯 Catch!</b> before the next player moves and you draw 2 cards. Pressing GrowX! right after playing still saves you.</li>
       <li><b>Stacking</b> (if the admin switched it on): a +2 can be answered with another +2, a +4 with another +4. The total goes to the first player who cannot stack.</li>
-      <li><b>Challenge +4</b> (if switched on): a Wild Draw Four may be played at any time. The next player can <b>⚔ Challenge</b> it: if the player did hold the current colour, they draw the 4 instead; if not, the challenger draws 6 and loses the turn.</li>
+      <li><b>Challenge +4 / +2</b> (on unless the admin switched it off): when a Wild Draw Four or a Draw Two is played, the next player gets a question: <i>"Does your opponent have a red card?"</i> (the colour that was in play before the card). <b>Yes</b>: if they really do hold that colour the challenge succeeds and <i>they</i> draw the cards instead; if not, you draw the 4 or 2 and lose your turn. <b>No</b> or <b>Skip challenge</b>: you draw the cards and lose your turn as usual. The result is shown for a few seconds.</li>
+      <li><b>Scoring</b> (official): the first player out scores the value of every card left in the others' hands: numbers face value, Skip / Reverse / Draw Two 20, Wild / Wild Draw Four 50 (our own cards: 20 colour ones, 50 wild ones). Points add up over the games; the first to <b>500</b> wins the match and a new match starts. Play still goes on after the first player is out, and the last player holding cards loses.</li>
+      <li><b>The first card</b> turned over is never a Wild. If it is a Skip the first player is skipped, a Reverse turns play the other way, a Draw Two makes the first player draw 2. Everyone is dealt 7 cards unless the admin chooses another number (3–10).</li>
       <li>If a player's connection drops, the game pauses and the admin decides: wait, remove them, or restart. <b>🚪 Leave</b> takes you out of the game; you can sign in again to join as a new player.</li>
       <li><b>🔔 Alerts</b> shows a notification when it is your turn while this page is in the background (the page must stay open). <b>📊 Stats</b> shows this room's wins and losses and its recent games.</li>
       <li><b>Losing:</b> play continues after someone empties their hand — they are out and ranked. The last player still holding cards loses.</li>

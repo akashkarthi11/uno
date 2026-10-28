@@ -6,7 +6,7 @@ export class GameError extends Error {}
 
 export const COLORS = ['red', 'yellow', 'green', 'blue'];
 const MAX_SEATS = 8;
-const DEFAULT_HAND = 5;
+const DEFAULT_HAND = 7; // the official deal (the admin can choose 3-10)
 export const HAND_MIN = 3;
 export const HAND_MAX = 10;
 const MAX_LOG = 40;
@@ -70,8 +70,11 @@ export const THEMES = ['growx', 'classic', 'midnight'];
 /** How many cards each player is dealt (the admin sets it in the lobby; 5 unless changed). */
 const handSizeOf = (s) => (s.settings && Number.isInteger(s.settings.handSize) ? s.settings.handSize : DEFAULT_HAND);
 const turnMsOf = (s) => (s.settings && Number.isInteger(s.settings.turnSecs) ? s.settings.turnSecs * 1000 : TURN_MS);
+export const MATCH_TARGET = 500; // official: first to 500 points wins the match
+/** Official card values: numbers = face value, Skip / Reverse / Draw Two = 20, Wild / Wild Draw Four = 50 (our extra cards: 20 / 50). */
+export const cardPoints = (c) => (/^[0-9]$/.test(c.value) ? Number(c.value) : ['skip', 'reverse', 'draw2', 'again', 'sweep'].includes(c.value) ? 20 : 50);
 const stackingOf = (s) => Boolean(s.settings && s.settings.stacking);
-const challengeOf = (s) => Boolean(s.settings && s.settings.challenge);
+const challengeOf = (s) => !(s.settings && s.settings.challenge === false); // on by default, like the official rules
 const voiceRelayOf = (s) => Boolean(s.settings && s.settings.voiceRelay);
 const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
@@ -331,7 +334,9 @@ function start(s, p, now) {
   if (s.seats.length * handSize + 1 > s.deck.length) fail('Not enough cards for that many players — lower the cards per player.');
   seated(s).forEach((m) => give(s, m, handSize));
   let first = s.deck.pop();
-  while (first.color === 'wild' || ['skip', 'reverse', 'draw2', 'again', 'sweep'].includes(first.value)) {
+  // official: a Wild (or Wild Draw Four) cannot start the pile, so it goes back and another card is turned over. Our own
+  // colour super cards are kept out too. Skip, Reverse and Draw Two are allowed and do their job (below).
+  while (first.color === 'wild' || ['again', 'sweep'].includes(first.value)) {
     s.deck.unshift(first);
     shuffle(s.deck);
     first = s.deck.pop();
@@ -340,6 +345,13 @@ function start(s, p, now) {
   s.color = first.color;
   s.dir = 1;
   s.cur = rnd(s.seats.length);
+  if (s.matchWinner) { // the previous match was won: a new one starts from zero
+    s.match = {};
+    s.matchWinner = null;
+  }
+  s.roundWinner = null;
+  s.roundPoints = 0;
+  s.reveal = null;
   s.drawnId = null;
   s.winner = null;
   s.loser = null;
@@ -357,6 +369,18 @@ function start(s, p, now) {
   s.chat = []; // a new game starts with a clean chat
   s.paused = false;
   addLog(s, `Game started with ${s.seats.length} players. First card: ${first.color} ${first.value}`);
+  const firstPlayer = byId(s, s.seats[s.cur]);
+  if (first.value === 'skip') { // official: the first player misses their turn
+    addLog(s, `${firstPlayer.name} is skipped.`);
+    s.cur = index(s, s.cur, 1);
+  } else if (first.value === 'reverse') { // official: play runs the other way round
+    s.dir = -1;
+    addLog(s, 'Direction reversed.');
+  } else if (first.value === 'draw2') { // official: the first player draws two and misses their turn
+    give(s, firstPlayer, 2);
+    addLog(s, `${firstPlayer.name} draws 2.`);
+    s.cur = index(s, s.cur, 1);
+  }
   addLog(s, `${byId(s, s.seats[s.cur]).name} goes first.`);
 }
 
@@ -595,19 +619,25 @@ function takePend(s, p, now) {
 function challenge(s, p, now) {
   requireTurn(s, p);
   const pd = s.pend;
-  if (!pd || pd.kind !== 'wild4' || !challengeOf(s)) fail('There is nothing to challenge.');
+  if (!pd || !challengeOf(s)) fail('There is nothing to challenge.');
   const by = byId(s, pd.by);
   if (!by || by.finished || !s.seats.includes(by.id)) fail('That player is already out of the game — nothing to challenge.');
   s.pend = null;
   s.catchId = null;
+  const colour = pd.prevColor;
+  const sign = pd.kind === 'wild4' ? '+4' : '+2';
+  // everyone sees the result for a few seconds ("They had a red card" / "They had no red card")
+  s.reveal = { id: (s.revealNo = (s.revealNo || 0) + 1), ok: Boolean(pd.bluff), challenger: p.name, target: by.name, colour, n: pd.n, kind: pd.kind, at: now };
   if (pd.bluff) {
+    // successful: the cards go back to the player who played them, and the challenger plays on
     give(s, by, pd.n);
     s.drawnId = null;
-    s.turnAt = now; // the challenger plays on, with a fresh clock
-    addLog(s, `⚔ ${p.name} challenged ${by.name}'s +4 — it was a bluff! ${by.name} draws ${pd.n}.`);
+    s.turnAt = now; // a fresh clock
+    addLog(s, `⚔ ${p.name} challenged ${by.name}'s ${sign} — successful! ${by.name} had a ${colour} card and draws ${pd.n}.`);
   } else {
-    give(s, p, pd.n + 2);
-    addLog(s, `⚔ ${p.name} challenged ${by.name}'s +4 — it was legal! ${p.name} draws ${pd.n + 2}.`);
+    // failed: the challenger takes the cards (the amount of the card, nothing extra) and loses the turn
+    give(s, p, pd.n);
+    addLog(s, `⚔ ${p.name} challenged ${by.name}'s ${sign} — failed! ${by.name} had no ${colour} card, so ${p.name} draws ${pd.n}.`);
     advance(s, 1, now);
   }
 }
@@ -681,9 +711,15 @@ function chosenCard(s, p, b) {
 
 /** Marks a player as out of cards. Returns true if that ended the game. */
 function finishPlayer(s, t) {
+  const firstOut = s.ranking.length === 0;
   t.finished = true;
   t.saidUno = false;
   s.ranking.push(t.name);
+  if (firstOut) {
+    // official scoring: the winner of the round scores the value of every card still in the other players' hands
+    s.roundWinner = t.name;
+    s.roundPoints = active(s).reduce((sum, o) => sum + o.hand.reduce((a, c) => a + cardPoints(c), 0), 0);
+  }
   addLog(s, `${t.name} is out of cards — #${s.ranking.length}!`);
   const left = active(s);
   if (left.length > 1) return false;
@@ -760,9 +796,10 @@ function masterEffect(s, p, t, rule, now) {
 }
 
 function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
-  const hadColor = p.hand.some((h) => h.color === s.color); // for a +4: did they hold the current colour (a bluff)?
+  const prevColor = s.color; // the colour in play before this card (what a challenge asks about)
   const hadTwo = p.hand.length === 2; // playing from two cards is the moment GrowX! must already have been pressed
   p.hand = p.hand.filter((h) => h !== c && h.id !== c.id);
+  const holdsColour = p.hand.some((h) => h.color === prevColor); // still holding that colour after playing = a challenge would succeed
   let swept = [];
   if (c.value === 'sweep') {
     // 🧹 Sweep: every other card of the same colour in the hand goes down too (no effects; wilds are never swept)
@@ -777,7 +814,18 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
   addLog(s, `${p.name} played ${c.color === 'wild' ? '' : c.color + ' '}${label}${c.color === 'wild' ? ' → ' + s.color : ''}`);
   if (swept.length) addLog(s, `🧹 ${p.name} swept ${swept.length} more ${c.color} card${swept.length === 1 ? '' : 's'}.`);
 
+  let lastPenalty = false;
   if (p.hand.length === 0) {
+    // the winning card still does its job before the points are counted: a +2 / +4 played to go out makes the next player draw
+    if (c.value === 'draw2' || c.value === 'wild4') {
+      const nxt = byId(s, s.seats[index(s, s.cur, 1)]);
+      const n = c.value === 'draw2' ? 2 : 4;
+      if (nxt && nxt !== p && !nxt.finished) {
+        give(s, nxt, n);
+        addLog(s, nxt.name + ' draws ' + n + '.');
+        lastPenalty = true;
+      }
+    }
     if (finishPlayer(s, p)) return;
   } else if (p.hand.length === 1) {
     if (hadTwo && !p.saidUno) {
@@ -845,8 +893,10 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
       addLog(s, 'Direction reversed.');
       break;
     case 'draw2':
-      if (stackingOf(s)) {
-        setPend(s, 'draw2', 2, p, false, target);
+      if (lastPenalty) {
+        skip = true;
+      } else if (stackingOf(s) || challengeOf(s)) {
+        setPend(s, 'draw2', 2, p, holdsColour, target, prevColor);
       } else {
         give(s, target, 2);
         skip = true;
@@ -854,8 +904,10 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
       }
       break;
     case 'wild4':
-      if (stackingOf(s) || challengeOf(s)) {
-        setPend(s, 'wild4', 4, p, hadColor, target);
+      if (lastPenalty) {
+        skip = true;
+      } else if (stackingOf(s) || challengeOf(s)) {
+        setPend(s, 'wild4', 4, p, holdsColour, target, prevColor);
       } else {
         give(s, target, 4);
         skip = true;
@@ -879,14 +931,14 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
  * A +2 / +4 that waits for the next player (stacking and/or challenges are on): they may stack the same card, challenge
  * a +4, or draw everything stacked so far. Only the same kind stacks (+2 on +2, +4 on +4).
  */
-function setPend(s, kind, add, p, bluff, target) {
+function setPend(s, kind, add, p, bluff, target, prevColor) {
   const prior = s.pend && s.pend.kind === kind ? s.pend.n : 0;
-  s.pend = { kind, n: prior + add, by: p.id, bluff: kind === 'wild4' && bluff };
+  s.pend = { kind, n: prior + add, by: p.id, bluff: Boolean(bluff), prevColor };
   addLog(s, `${target.name} must stack a +${add} or draw ${s.pend.n}.`);
 }
 
 const canChallenge = (s) => {
-  const by = s.pend && s.pend.kind === 'wild4' && challengeOf(s) ? byId(s, s.pend.by) : null;
+  const by = s.pend && challengeOf(s) ? byId(s, s.pend.by) : null;
   return Boolean(by && !by.finished && s.seats.includes(by.id));
 };
 
@@ -923,14 +975,23 @@ function recordGame(s) {
   }].slice(-10);
   const scores = { ...bucket.scores };
   for (const name of names) {
-    const row = { played: 0, wins: 0, losses: 0, ...(scores[name] || {}) };
+    const row = { played: 0, wins: 0, losses: 0, points: 0, ...(scores[name] || {}) };
     row.played += 1;
-    if (s.ranking[0] === name) row.wins += 1;
+    if (s.ranking[0] === name) {
+      row.wins += 1;
+      row.points += s.roundPoints || 0;
+    }
     if (s.loser === name) row.losses += 1;
     scores[name] = row;
   }
   bucket.scores = Object.fromEntries(Object.entries(scores).slice(-30));
   s.stats[mode] = bucket;
+  // the match: points add up from game to game until somebody reaches 500
+  if (s.roundWinner && s.roundPoints > 0) {
+    s.match = { ...(s.match || {}) };
+    s.match[s.roundWinner] = (s.match[s.roundWinner] || 0) + s.roundPoints;
+    if (s.match[s.roundWinner] >= MATCH_TARGET) s.matchWinner = s.roundWinner;
+  }
 }
 
 /**
@@ -945,7 +1006,7 @@ export function statsView(s, me) {
     out[m] = {
       table: Object.entries(b.scores)
         .map(([name, r]) => ({ name, ...r }))
-        .sort((a, c) => c.wins - a.wins || a.losses - c.losses || a.name.localeCompare(c.name)),
+        .sort((a, c) => c.wins - a.wins || (c.points || 0) - (a.points || 0) || a.losses - c.losses || a.name.localeCompare(c.name)),
       history: [...b.history].reverse(),
     };
   }
@@ -979,7 +1040,9 @@ export function view(s, me, now) {
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
     gameNo: s.gameNo || 0,
     gameMode: s.gameMode || (s.private ? 'private' : 'public'),
-    pend: s.pend ? { kind: s.pend.kind, n: s.pend.n, by: (byId(s, s.pend.by) || {}).name || '', canChallenge: canChallenge(s) } : null,
+    pend: s.pend ? { kind: s.pend.kind, n: s.pend.n, by: (byId(s, s.pend.by) || {}).name || '', canChallenge: canChallenge(s), colour: s.pend.prevColor } : null,
+    reveal: s.reveal && now - s.reveal.at < 8000 ? { ...s.reveal, age: now - s.reveal.at } : null, // the result of the last challenge, for a few seconds
+    scoring: { target: MATCH_TARGET, roundWinner: s.roundWinner || null, roundPoints: s.roundPoints || 0, totals: s.match || {}, matchWinner: s.matchWinner || null },
     catchable: catchValid(s) ? s.catchId : null, // someone with one card left who did not say GrowX!
     turnAt: s.turnAt, // changes whenever a new turn starts, even when the same player goes again (🔁 Play Again)
     paused: Boolean(s.paused), pauseNote: s.paused ? s.pauseNote || '' : '',

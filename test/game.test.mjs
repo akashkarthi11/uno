@@ -2,6 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';
 const DECK_SIZE = 123; // 108 classic cards + 15 super cards
+/** A room with 5 cards each and no challenge question: the setup most of these older tests were written for. */
+/** The official first-card actions (a Skip, Reverse or Draw Two turned over at the start) change who moves, which way, and one
+ *  hand size. Tests that count cards or turns call this right after the start to get the plain situation. */
+function calm(s) {
+  for (const m of s.members) if (m.hand.length > 5) s.deck.push(...m.hand.splice(5)); // back into the pile: no card is lost
+  s.dir = 1;
+}
+/** Everyone was dealt `size` cards (one player holds 2 more when the first card turned over was a Draw Two). */
+function expectDealt(s, size, msg) {
+  const extra = s.discard[0].value === 'draw2' ? 2 : 0;
+  const hands = s.seats.map((id) => s.members.find((m) => m.id === id).hand.length);
+  assert.equal(hands.reduce((a, b) => a + b, 0), size * hands.length + extra, msg);
+  assert.ok(hands.every((n) => n === size || (extra && n === size + 2)), msg);
+}
+function oldRules(code) {
+  const s = G.newRoom(code);
+  s.settings = { handSize: 5, challenge: false };
+  return s;
+}
 import handler from '../api/game.js';
 
 function playOut(n) {
@@ -10,7 +29,9 @@ function playOut(n) {
   const ps = [];
   for (let i = 0; i < n; i++) ps.push(G.join(s, { name: 'P' + i, admin: i === 0 }, now));
   G.act(s, ps[0], { op: 'start' }, now);
-  for (const p of ps) assert.equal(p.hand.length, 5);
+  const drawTwo = s.discard[0].value === 'draw2'; // the official first-card action: that player started with 2 more
+  assert.equal(ps.reduce((a, p) => a + p.hand.length, 0), 7 * n + (drawTwo ? 2 : 0), 'the official deal: 7 each');
+  assert.ok(ps.every((p) => p.hand.length === 7 || (drawTwo && p.hand.length === 9)));
   let guard = 0;
   while (!s.over) {
     assert.ok(guard++ < 5000, 'game did not finish');
@@ -47,34 +68,37 @@ test('games finish with exactly one loser, for 2-6 players', () => {
 });
 
 test('only the admin can start; needs 2 players', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   assert.throws(() => G.act(s, admin, { op: 'start' }, now), /At least 2/);
   const p = G.join(s, { name: 'B', admin: false }, now);
   assert.throws(() => G.act(s, p, { op: 'start' }, now), /Only the admin/);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   assert.equal(s.started, true);
 });
 
 test('wild draw four is refused while holding the current colour', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
   G.join(s, { name: 'B', admin: false }, now);
   G.act(s, a, { op: 'start' }, now);
+  calm(s);
   const cur = s.members.find((m) => m.id === s.seats[s.cur]);
   cur.hand = [{ id: 900, color: 'wild', value: 'wild4' }, { id: 901, color: s.color, value: '5' }];
   assert.throws(() => G.act(s, cur, { op: 'play', cardId: 900, color: 'red' }, now), /Wild Draw Four/);
 });
 
 test('a player who goes offline pauses the game instead of being auto-played', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false }, now);
   const c = G.join(s, { name: 'C', admin: false }, now);
   G.act(s, a, { op: 'start' }, now);
+  calm(s);
   s.cur = s.seats.indexOf(b.id);
   const handBefore = b.hand.length;
   now += 30000; // B goes quiet; A and C keep polling
@@ -94,11 +118,12 @@ test('a player who goes offline pauses the game instead of being auto-played', (
 });
 
 test('admin can choose the special card they pick up; players cannot', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const player = G.join(s, { name: 'B', admin: false }, now);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   const deckBefore = s.deck.length;
 
   s.cur = s.seats.indexOf(player.id);
@@ -114,11 +139,12 @@ test('admin can choose the special card they pick up; players cannot', () => {
 });
 
 test('admin restart returns everyone to the lobby; mid-game joiner is a spectator without cards', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const player = G.join(s, { name: 'B', admin: false }, now);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
 
   const late = G.join(s, { name: 'Late', admin: false }, now);
   const lateView = G.view(s, late, now);
@@ -136,11 +162,13 @@ test('admin restart returns everyone to the lobby; mid-game joiner is a spectato
   assert.ok(s.members.every((m) => m.hand.length === 0));
 
   G.act(s, admin, { op: 'start' }, now); // late joiner is dealt in next game
+
+  calm(s);
   assert.equal(late.hand.length, 5);
 });
 
 test('admin can remove players in the lobby and mid-game; the game stays consistent', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false }, now);
@@ -154,6 +182,8 @@ test('admin can remove players in the lobby and mid-game; the game stays consist
   assert.ok(s.kicked.includes(d.id));
 
   G.act(s, admin, { op: 'start' }, now);
+
+  calm(s);
   const total = () => s.deck.length + s.discard.length + s.members.reduce((a, m) => a + m.hand.length, 0);
   assert.equal(total(), DECK_SIZE);
   s.cur = s.seats.indexOf(b.id); // remove the player whose turn it is
@@ -168,11 +198,12 @@ test('admin can remove players in the lobby and mid-game; the game stays consist
 });
 
 test('a turn left idle for 30s: the player draws 1 penalty card and the turn moves on', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false }, now);
   G.act(s, a, { op: 'start' }, now);
+  calm(s);
   const idleId = s.seats[s.cur];
 
   now += 29000;
@@ -207,11 +238,12 @@ test('a turn left idle for 30s: the player draws 1 penalty card and the turn mov
 });
 
 function twoCardSetup() {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
   G.join(s, { name: 'B', admin: false }, now);
   G.act(s, a, { op: 'start' }, now);
+  calm(s);
   const p = s.members.find((m) => m.id === s.seats[s.cur]);
   s.color = 'red';
   s.discard.push({ id: 8000, color: 'red', value: '3' });
@@ -240,12 +272,13 @@ test('GrowX! button: pressing it before the second-to-last card avoids the penal
 });
 
 function threePlayers(handFor) {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false }, now);
   const c = G.join(s, { name: 'C', admin: false }, now);
   G.act(s, a, { op: 'start' }, now);
+  calm(s);
   const p = s.members.find((m) => m.id === s.seats[s.cur]);
   s.color = 'red';
   s.discard.push({ id: 9000, color: 'red', value: '3' });
@@ -255,7 +288,7 @@ function threePlayers(handFor) {
 }
 
 test('super cards: the deck has 123 cards including the 15 super cards', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const a = G.join(s, { name: 'A', admin: true }, 1000);
   G.join(s, { name: 'B', admin: false }, 1000);
   G.act(s, a, { op: 'start' }, 1000);
@@ -446,7 +479,7 @@ test('super card 🎁 Gift: one random card to each other player, always keeping
 });
 
 test('lobby settings: unticked super cards are not in the deck, the picker or the Master rules', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
@@ -459,6 +492,8 @@ test('lobby settings: unticked super cards are not in the deck, the picker or th
     { again: true, sweep: false, blast: true, swap: true, gift: true, master: false });
 
   G.act(s, admin, { op: 'start' }, now);
+
+  calm(s);
   const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
   assert.equal(all.length, DECK_SIZE - 4 - 1, 'the 4 Sweep cards and the Master card are left out');
   assert.equal(all.filter((c) => c.value === 'sweep' || c.value === 'master').length, 0);
@@ -473,7 +508,7 @@ test('lobby settings: unticked super cards are not in the deck, the picker or th
 });
 
 test('table theme: GrowX by default, only the admin can change it, everyone sees it, valid names only', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false }, now);
@@ -491,6 +526,8 @@ test('table theme: GrowX by default, only the admin can change it, everyone sees
   assert.equal(G.view(s, b, now).settings.supers.sweep, false);
 
   G.act(s, admin, { op: 'start' }, now);
+
+  calm(s);
   G.act(s, admin, { op: 'config', theme: 'midnight' }, now); // cosmetic: allowed during a game
   assert.equal(G.view(s, b, now).settings.theme, 'midnight');
   assert.throws(() => G.act(s, admin, { op: 'config', supers: { sweep: true } }, now), /only be changed in the lobby/, 'card ticks are still lobby-only');
@@ -498,13 +535,13 @@ test('table theme: GrowX by default, only the admin can change it, everyone sees
   assert.equal(G.view(s, b, now).settings.theme, 'midnight', 'the choice is kept for the room');
 });
 
-test('cards per player: 5 by default, admin sets 3-10 in the lobby, dealt that many', () => {
+test('cards per player: 7 by default (official), admin sets 3-10 in the lobby, dealt that many', () => {
   const s = G.newRoom('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false }, now);
   const c = G.join(s, { name: 'C', admin: false }, now);
-  assert.equal(G.view(s, b, now).settings.handSize, 5, 'default is 5');
+  assert.equal(G.view(s, b, now).settings.handSize, 7, 'default is the official 7');
   assert.equal(G.HAND_MIN, 3);
   assert.equal(G.HAND_MAX, 10);
 
@@ -519,7 +556,7 @@ test('cards per player: 5 by default, admin sets 3-10 in the lobby, dealt that m
   assert.equal(G.view(s, c, now).settings.handSize, 8);
 
   G.act(s, admin, { op: 'start' }, now);
-  for (const p of [admin, b, c]) assert.equal(p.hand.length, 8, 'everyone is dealt 8');
+  expectDealt(s, 8, 'everyone is dealt 8');
   const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
   assert.equal(all.length, DECK_SIZE - 4, 'card count is still conserved (the 4 Sweep cards were ticked off)');
   assert.throws(() => G.act(s, admin, { op: 'config', handSize: 4 }, now), /only be changed in the lobby/);
@@ -527,18 +564,18 @@ test('cards per player: 5 by default, admin sets 3-10 in the lobby, dealt that m
   G.act(s, admin, { op: 'lobby' }, now);
   G.act(s, admin, { op: 'config', handSize: 3 }, now);
   G.act(s, admin, { op: 'start' }, now);
-  for (const p of [admin, b, c]) assert.equal(p.hand.length, 3, 'the minimum works too');
+  expectDealt(s, 3, 'the minimum works too');
 });
 
 test('cards per player: the largest hand still deals fully with 8 players', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'P0', admin: true }, now);
   for (let i = 1; i < 8; i++) G.join(s, { name: 'P' + i, admin: false }, now);
   G.act(s, admin, { op: 'config', handSize: G.HAND_MAX, supers: { again: false, sweep: false, blast: false, swap: false, gift: false, master: false } }, now);
   G.act(s, admin, { op: 'start' }, now); // 8 x 10 + 1 = 81 cards needed from a plain 108-card deck
   assert.equal(s.seats.length, 8);
-  assert.ok(s.members.every((m) => m.hand.length === 10));
+  expectDealt(s, 10, 'everyone is dealt 10');
   assert.ok(s.deck.length >= 20, 'plenty left to draw from');
 });
 
@@ -553,19 +590,20 @@ test('lobby settings: a Master card cannot use the rule of a switched-off super 
 });
 
 test('lobby settings: all super cards off gives the plain 108-card deck and a playable game', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
   G.join(s, { name: 'B', admin: false }, now);
   G.act(s, a, { op: 'config', supers: { again: false, sweep: false, blast: false, swap: false, gift: false, master: false } }, now);
   G.act(s, a, { op: 'start' }, now);
+  calm(s);
   const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
   assert.equal(all.length, 108);
   assert.ok(all.every((c) => !['again', 'sweep', 'blast', 'swap', 'gift', 'master'].includes(c.value)));
 });
 
 test('admin card picker offers the super cards too', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const a = G.join(s, { name: 'A', admin: true }, 1000);
   G.join(s, { name: 'B', admin: false }, 1000);
   G.act(s, a, { op: 'start' }, 1000);
@@ -575,11 +613,12 @@ test('admin card picker offers the super cards too', () => {
 });
 
 test('admin chosen card with no matching colour is kept and turn passes when unplayable', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   G.join(s, { name: 'B', admin: false }, now);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   s.cur = s.seats.indexOf(admin.id);
   s.color = 'red';
   s.discard.push({ id: 5000, color: 'red', value: '3' });
@@ -603,7 +642,7 @@ function call(body) {
 }
 
 test('switching public/private removes players who no longer qualify (lobby and mid-game)', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   const pub1 = G.join(s, { name: 'Pub1', admin: false, role: 'public' }, now);
@@ -618,6 +657,7 @@ test('switching public/private removes players who no longer qualify (lobby and 
 
   const late = G.join(s, { name: 'Priv2', admin: false, role: 'private' }, now);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   const total = () => s.deck.length + s.discard.length + s.members.reduce((a, m) => a + m.hand.length, 0);
   assert.equal(total(), DECK_SIZE);
   G.act(s, admin, { op: 'private', on: false }, now); // mid-game: private players are removed, game ends
@@ -628,7 +668,7 @@ test('switching public/private removes players who no longer qualify (lobby and 
 });
 
 test('chat: trimmed, length-limited, rate-limited', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const admin = G.join(s, { name: 'A', admin: true }, 1000);
   const b = G.join(s, { name: 'B', admin: false, role: 'public' }, 1000);
   G.act(s, b, { op: 'chat', text: '  hi 👋  ' }, 1000);
@@ -641,12 +681,13 @@ test('chat: trimmed, length-limited, rate-limited', () => {
 });
 
 test('chat works during a game and is cleared when the game finishes or restarts', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
   G.act(s, admin, { op: 'chat', text: 'lobby hello' }, now);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   assert.deepEqual(G.view(s, b, now).chat, [], 'a new game starts with a clean chat');
 
   now += 1000;
@@ -667,6 +708,7 @@ test('chat works during a game and is cleared when the game finishes or restarts
 
   // restart: start again, chat, then send everyone back to the lobby
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   now += 1000;
   G.act(s, admin, { op: 'chat', text: 'round two' }, now);
   assert.equal(G.view(s, b, now).chat.length, 1);
@@ -675,11 +717,12 @@ test('chat works during a game and is cleared when the game finishes or restarts
 });
 
 test('admin can pause and resume: no plays, no timeouts, time left is kept', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   const cur = s.members.find((m) => m.id === s.seats[s.cur]);
 
   now += 10000; // 20s left on the clock
@@ -705,7 +748,7 @@ test('admin can pause and resume: no plays, no timeouts, time left is kept', () 
 });
 
 test('voice chat: only admin and private players; list drops people who go offline', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const admin = G.join(s, { name: 'A', admin: true }, now);
   const priv = G.join(s, { name: 'P', admin: false, role: 'private' }, now);
@@ -818,13 +861,14 @@ test('API: password gate and admin start', async () => {
   assert.equal(deny.code, 400);
   const ok = await call({ op: 'start', room: 'api1', playerId: a.body.state.you });
   assert.equal(ok.code, 200);
-  assert.equal(ok.body.state.hand.length, 5);
+  // the official deal is 7; a Draw Two turned over as the first card makes the first player draw 2 more
+  assert.ok(ok.body.state.hand.length === 7 || (ok.body.state.top.value === 'draw2' && ok.body.state.hand.length === 9));
   const poll = await call({ op: 'state', room: 'api1', playerId: a.body.state.you, since: ok.body.state.version, ps: ok.body.state.ps });
   assert.equal(poll.body.unchanged, true);
 });
 
 test('switching public/private clears the chat (setting the same mode does not)', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const admin = G.join(s, { name: 'Boss', admin: true }, 1000);
   G.act(s, admin, { op: 'chat', text: 'one' }, 1000);
   G.act(s, admin, { op: 'private', on: false }, 2000); // already public: nothing changes
@@ -837,11 +881,12 @@ test('switching public/private clears the chat (setting the same mode does not)'
 });
 
 test('a game with too few players connected pauses rather than ending', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   G.join(s, { name: 'B', admin: false, role: 'public' }, now);
   G.act(s, admin, { op: 'start' }, now);
+  calm(s);
   now += 300000; // both phones asleep for five minutes
   G.tick(s, now);
   assert.equal(s.over, false);
@@ -861,7 +906,7 @@ test('quiet polls: a heartbeat alone does not change the version, a change in wh
 });
 
 test('co-admin: can start games and choose settings, nothing else; only the admin grants or drops it, any time', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   const pub = G.join(s, { name: 'Pub', admin: false, role: 'public' }, now);
@@ -892,6 +937,8 @@ test('co-admin: can start games and choose settings, nothing else; only the admi
   assert.equal(G.canVoice(s, pub), false, 'a public co-admin gets no voice chat');
 
   G.act(s, pub, { op: 'start' }, now); // the co-admin starts the game
+
+  calm(s);
   assert.equal(s.started, true);
   G.act(s, pub, { op: 'pause' }, now); // the co-admin can pause, resume and restart
   assert.equal(s.paused, true);
@@ -911,7 +958,7 @@ test('co-admin: can start games and choose settings, nothing else; only the admi
 });
 
 test('turn time: the admin sets it in the lobby (15-120 s), it is used for the timeout and shown to everyone', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
@@ -925,6 +972,8 @@ test('turn time: the admin sets it in the lobby (15-120 s), it is used for the t
   assert.equal(G.view(s, b, now).settings.turnSecs, 15);
 
   G.act(s, admin, { op: 'start' }, now);
+
+  calm(s);
   assert.equal(G.view(s, b, now).turnMs, 15000);
   assert.throws(() => G.act(s, admin, { op: 'config', turnSecs: 60 }, now), /only be changed in the lobby/);
   const cur = s.members.find((m) => m.id === s.seats[s.cur]);
@@ -1002,7 +1051,7 @@ test('API: the admin can pause and resume a game (resume must not be mistaken fo
 });
 
 test('public voice switch: off by default; the admin turns it on or off and public players follow', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   let now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   const pub = G.join(s, { name: 'Pub', admin: false, role: 'public' }, now);
@@ -1029,7 +1078,7 @@ test('public voice switch: off by default; the admin turns it on or off and publ
 });
 
 test('going private switches public voice off, and it cannot be switched on in a private game', () => {
-  const s = G.newRoom('t');
+  const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   const priv = G.join(s, { name: 'Priv', admin: false, role: 'private' }, now);

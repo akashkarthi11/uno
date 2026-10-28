@@ -466,12 +466,14 @@ function toast(msg) {
 function cardEl(card) {
   const el = document.createElement("div");
   el.className = "card " + card.color;
-  const sym = LABEL[card.value] || card.value;
+  const plainWild = card.value === "wild"; // the official Wild: a black card with the four-colour oval and no symbol
+  const sym = plainWild ? "" : LABEL[card.value] || card.value;
+  const under = card.value === "6" || card.value === "9" ? " u" : ""; // real cards underline 6 and 9 so they cannot be mixed up
   const isSuper = SUPER.has(card.value);
   if (isSuper) el.classList.add("super");
   if (card.value === "master") el.classList.add("master"); // the plain blank-faced card
   el.innerHTML = (isSuper ? '<span class="star">★</span>' : "") +
-    '<span class="c tl">' + sym + '</span><span class="v">' + sym + '</span><span class="c br">' + sym + "</span>";
+    '<span class="c tl">' + sym + '</span><span class="v' + under + '">' + sym + '</span><span class="c br">' + sym + "</span>";
   return el;
 }
 
@@ -631,7 +633,7 @@ function renderGame(s) {
     const ang = (160 - (others.length === 1 ? 70 : (140 * i) / (others.length - 1))) * (Math.PI / 180);
     const upright = window.innerHeight > window.innerWidth; // a tall, narrow table: a tighter, higher arc
     d.style.left = (50 + 36 * Math.cos(ang)).toFixed(1) + "%";
-    d.style.top = ((upright ? 37 : 49) - (upright ? 24 : 32) * Math.sin(ang)).toFixed(1) + "%";
+    d.style.top = ((upright ? 44 : 55) - (upright ? 24 : 32) * Math.sin(ang)).toFixed(1) + "%";
     d.querySelector(".name").textContent = p.name;
     d.dataset.pid = p.id;
     paintAvatar(d.querySelector(".avatar"), p.name);
@@ -725,9 +727,11 @@ function renderGame(s) {
   else if (s.paused) msg = s.pauseNote ? "⏸ Paused — " + s.pauseNote : "⏸ Paused by the admin — hang tight.";
   else if (me && me.finished) msg = "You're out (#" + (s.ranking.indexOf(me.name) + 1) + ")! Watching the rest play…";
   else if (s.catchable === s.you) msg = "🚨 One card left — press GrowX! before someone catches you!";
-  else if (myTurn && s.pend) {
+  else if (myTurn && s.pend && s.pend.canChallenge && pendKey(s) !== cqDismissed) {
+    msg = "⚔ Challenge question: does " + s.pend.by + " have a " + s.pend.colour + " card?";
+  } else if (myTurn && s.pend) {
     msg = "+" + s.pend.n + " is waiting — " + (s.playable.length ? "play a " + (s.pend.kind === "wild4" ? "+4" : "+2") + " to stack it, " : "") +
-      (s.pend.canChallenge ? "challenge it, " : "") + "or tap the pile to draw " + s.pend.n + ".";
+      "or tap the pile to draw " + s.pend.n + ".";
   } else if (s.pend) msg = (curPlayer ? curPlayer.name : "?") + "'s turn… (+" + s.pend.n + " waiting)";
   else if (myTurn && me && me.count === 2 && !s.saidUno) msg = "⚠ Press GrowX! before you play your second-to-last card — or others can catch you (+2)!";
   else if (myTurn) msg = s.drawn != null ? "You drew a playable card — play it or press Pass." : (s.playable.length ? "Your turn — play a highlighted card or draw." : "Your turn — no playable card, draw from the pile.");
@@ -749,7 +753,8 @@ function renderGame(s) {
     ? s.players.find((p) => p.id === s.catchable) : null;
   $("catchBtn").classList.toggle("hidden", !catchTarget);
   if (catchTarget) $("catchBtn").textContent = "🎯 Catch " + catchTarget.name + "!";
-  $("challengeBtn").classList.toggle("hidden", !(myTurn && s.pend && s.pend.canChallenge && !s.paused));
+  renderChallenge(s, myTurn);
+  renderReveal(s);
   if (me) recordDeviceStats(s, me);
 
   const end = $("endModal");
@@ -764,6 +769,13 @@ function renderGame(s) {
     s.ranking.forEach((n, i) => lines.push((i + 1) + ". " + n));
     if (s.loser) lines.push("Last with cards: " + s.loser);
     $("endText").textContent = lines.join("\n");
+    const sc = s.scoring || {};
+    const score = [];
+    if (sc.roundWinner) score.push("🏅 " + sc.roundWinner + " scores " + sc.roundPoints + " point" + (sc.roundPoints === 1 ? "" : "s") + " (the cards left in the others' hands)");
+    const totals = Object.entries(sc.totals || {}).sort((a, b) => b[1] - a[1]);
+    if (totals.length) score.push("Match (first to " + (sc.target || 500) + "): " + totals.map(([n, v]) => n + " " + v).join(" · "));
+    if (sc.matchWinner) score.push("🏆 " + sc.matchWinner + " wins the match! A new match starts with the next game.");
+    $("endScore").textContent = score.join("\n");
     $("playAgain").classList.toggle("hidden", !s.canStart);
     $("toLobby").classList.toggle("hidden", !s.canStart);
     $("endHint").textContent = s.canStart ? "" : "Waiting for the admin to start the next game…";
@@ -1422,7 +1434,47 @@ $("restartBtn").addEventListener("click", () => {
 $("toLobby").addEventListener("click", () => send({ op: "lobby" }));
 $("passBtn").addEventListener("click", () => send({ op: "pass" }));
 $("catchBtn").addEventListener("click", () => send({ op: "catch" }));
-$("challengeBtn").addEventListener("click", () => send({ op: "challenge" }));
+/* ---------- the challenge question for a +2 / +4 ---------- */
+let cqDismissed = ""; // the waiting +2 / +4 the player chose to stack on instead of answering
+const pendKey = (s) => (s.pend ? [s.pend.kind, s.pend.n, s.pend.by, s.turnAt].join("|") : "");
+
+function renderChallenge(s, myTurn) {
+  const box = $("challengeBox");
+  const show = Boolean(myTurn && s.pend && s.pend.canChallenge && !s.paused && !s.over && s.seated && pendKey(s) !== cqDismissed);
+  box.classList.toggle("hidden", !show);
+  if (!show) return;
+  const p = s.pend;
+  const sign = p.kind === "wild4" ? "+4" : "+2";
+  const colour = p.colour || ""; // red, yellow, green or blue
+  $("cqTitle").textContent = "⚔ " + p.by + " played " + sign + (p.n > (p.kind === "wild4" ? 4 : 2) ? " (" + p.n + " in all)" : "");
+  const q = $("cqQuestion");
+  q.textContent = "";
+  const dot = document.createElement("i");
+  dot.className = "cq-dot " + (p.colour || "");
+  q.append("Does " + p.by + " have a ", dot, " " + colour + " card?");
+  $("cqNote").textContent = "Yes: if they do, they draw " + p.n + "; if not, you draw " + p.n + ". No or Skip: you draw " + p.n + " and miss your turn.";
+  $("cqStack").classList.toggle("hidden", !(s.playable && s.playable.length)); // only when a card can be stacked on it
+}
+$("cqYes").addEventListener("click", () => send({ op: "challenge" }));
+$("cqNo").addEventListener("click", () => send({ op: "draw" }));
+$("cqSkip").addEventListener("click", () => send({ op: "draw" }));
+$("cqStack").addEventListener("click", () => { if (state) { cqDismissed = pendKey(state); render(); } });
+
+/** The result of the last challenge, shown to everybody for a few seconds. */
+let lastReveal = 0;
+let revealTimer = null;
+function renderReveal(s) {
+  const r = s.reveal;
+  if (!r || r.id === lastReveal) return;
+  lastReveal = r.id;
+  const box = $("reveal");
+  box.className = r.ok ? "ok" : "fail";
+  box.textContent = r.ok
+    ? "✅ Challenge successful! " + r.target + " had a " + r.colour + " card — they draw " + r.n + "."
+    : "❌ Challenge failed! " + r.target + " had no " + r.colour + " card — " + r.challenger + " draws " + r.n + ".";
+  clearTimeout(revealTimer);
+  revealTimer = setTimeout(() => box.classList.add("hidden"), Math.max(1500, 5000 - (r.age || 0)));
+}
 $("unoBtn").addEventListener("click", () => {
   if (busy || !state) return;
   const before = state;
@@ -1528,10 +1580,11 @@ function recordDeviceStats(s, me) {
 function statsTable(rows) {
   const t = document.createElement("table");
   const head = t.insertRow();
-  ["Player", "Played", "Wins", "Lost"].forEach((h) => { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); });
+  const pts = rows.some((r) => r.points !== undefined);
+  ["Player", "Played", "Wins", "Lost"].concat(pts ? ["Points"] : []).forEach((h) => { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); });
   for (const r of rows) {
     const tr = t.insertRow();
-    [r.name, r.played, r.wins, r.losses].forEach((v) => { tr.insertCell().textContent = String(v); });
+    [r.name, r.played, r.wins, r.losses].concat(pts ? [r.points || 0] : []).forEach((v) => { tr.insertCell().textContent = String(v); });
   }
   return t;
 }

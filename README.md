@@ -274,3 +274,20 @@ the last 30 seconds), and for each room its name, public / private, lobby / play
 it was last seen, with a **Remove** button. Removing a room deletes it; its players are told "This room was closed by the
 admin" (they are not quietly let back in for 2 minutes, and their old sign-in token stops working). Not available to a
 co-admin. Listing uses one Redis scan and one batched read, only while the window is open.
+
+## Following the official UNO rules
+
+- **Deal and first card:** 7 cards each by default (the admin can choose 3–10). A Wild or Wild Draw Four cannot start the pile; if the
+  first card is a Skip the first player is skipped, a Reverse turns play round the other way, a Draw Two makes the first player draw 2.
+- **Skip / Reverse / Draw Two:** Skip misses the next player still in the game; Reverse flips the direction (with two players it
+  acts like Skip); Draw Two makes the next player draw 2 and miss the turn.
+- **GrowX! (UNO) call:** at one card, anyone can tap 🎯 Catch! before the next player moves and the player draws 2.
+- **Challenge a +4 or a +2 (on by default; the admin can switch it off):** the next player is asked "Does <player> have a <colour>
+  card?" about the colour in play before the card. Yes + they do: they draw the cards instead. Yes + they don't: the challenger
+  draws the 4 or 2 (no extra). No / Skip: draw the cards and miss the turn. The result is shown to everybody for a few seconds.
+  A +2 / +4 played as someone's last card makes the next player draw at once and cannot be challenged.
+- **Scoring:** the first player out scores the cards left in the others' hands (numbers face value, Skip / Reverse / Draw Two 20,
+  Wild / Wild Draw Four 50; our extra cards: colour ones 20, wild ones 50). Points add up from game to game; the first to 500 wins
+  the match and the next game starts a new match. The room's stats table shows each player's points. (As before, play goes on after
+  the first player is out and the last player holding cards loses.)
+- **Cards:** Wild cards are black with the four-colour oval, 6 and 9 are underlined, like the real deck.

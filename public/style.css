@@ -833,3 +833,68 @@ body.in-game #sheetPill, body.in-game #cardsPill { bottom: calc(var(--ch) * 1.3 
   body.in-game .actions button { width: auto; flex: 1 1 auto; max-width: 150px; }
   body.in-game #chatDock { width: min(340px, max(70vw, 270px)); }
 }
+
+
+/* =====================================================================================================
+   Challenge question, result banner, the "your turn" message at the top, and cards drawn like real UNO cards
+   ===================================================================================================== */
+
+/* the challenge question: a small panel over the middle of the table (the hand below stays free to read and to play from) */
+#challengeBox {
+  position: absolute; left: 44%; top: 46%; translate: -50% -50%; z-index: 38; width: min(64%, 340px); padding: 10px 12px 8px;
+  display: flex; flex-direction: column; gap: 6px; text-align: center; border-radius: 18px;
+  background: rgba(15,23,42,.92); color: #fff; border: 1px solid rgba(255,255,255,.3); box-shadow: 0 12px 34px rgba(0,0,0,.55);
+  animation: rise .2s ease;
+}
+.cq-title { font-weight: 800; font-size: 15px; }
+.cq-question { font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.cq-dot { display: inline-block; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #fff; background: #888; }
+.cq-dot.red { background: var(--card-red); } .cq-dot.yellow { background: var(--card-yellow); }
+.cq-dot.green { background: var(--card-green); } .cq-dot.blue { background: var(--card-blue); }
+.cq-buttons { display: flex; gap: 8px; }
+.cq-buttons button { flex: 1; min-height: 38px; }
+.cq-sub { display: flex; gap: 8px; justify-content: center; }
+.cq-sub button { padding: 4px 12px; font-size: 12px; min-height: 30px; background: transparent; color: #fff; border-color: rgba(255,255,255,.4); }
+.cq-note { margin: 0; font-size: 11px; line-height: 1.3; color: rgba(255,255,255,.75); }
+#cqYes { background: linear-gradient(135deg, #12b76a, #0e9f5c); }
+#cqNo { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.4); }
+
+/* the result of the challenge, in the middle of the table for a few seconds */
+#reveal {
+  position: absolute; left: 44%; top: 46%; translate: -50% -50%; z-index: 39; max-width: min(78%, 420px); padding: 12px 18px; text-align: center;
+  border-radius: 18px; font-weight: 800; font-size: 16px; color: #fff; box-shadow: 0 12px 34px rgba(0,0,0,.55); animation: pop .35s cubic-bezier(.2,1.4,.4,1);
+}
+#reveal.ok { background: linear-gradient(135deg, #12b76a, #087443); }
+#reveal.fail { background: linear-gradient(135deg, #f04438, #b42318); }
+
+/* "Your turn..." (the message) is a slim pill at the top of the table, never over the cards; the buttons stay at the side */
+body.in-game #status { display: contents; }
+body.in-game #message {
+  position: absolute; top: 36px; left: 50%; translate: -50% 0; z-index: 36; max-width: min(40%, 380px); padding: 4px 14px; text-align: center;
+  border-radius: 14px; background: rgba(0,0,0,.45); color: #fff; font-size: 12px; font-weight: 700; line-height: 1.25;
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+}
+body.in-game #game.myturn #message { background: var(--brand-grad); box-shadow: 0 0 18px rgba(124,92,255,.6); }
+body.in-game .actions {
+  position: absolute; z-index: 35; right: 14px; top: 70%; translate: 0 -50%; width: min(22%, 180px); display: flex; flex-direction: column; gap: 6px;
+}
+body.in-game .actions button { width: 100%; }
+@media (orientation: portrait) {
+  body.in-game #message { top: 80px; max-width: min(92%, 420px); font-size: 13px; }
+  body.in-game .actions {
+    left: 50%; right: auto; top: auto; bottom: calc(var(--ch) * 1.3 + 8px); translate: -50% 0; width: calc(100% - 28px);
+    flex-direction: row; flex-wrap: wrap; justify-content: center;
+  }
+  body.in-game .actions button { width: auto; flex: 1 1 auto; max-width: 150px; }
+  #challengeBox { left: 50%; top: 44%; width: min(92%, 360px); }
+  #reveal { left: 50%; }
+}
+
+/* ---------- cards drawn like the real thing ----------
+   The official Wild cards are black with a four-colour oval; 6 and 9 are underlined so they can't be mixed up. */
+.card.wild { background: #151515; }
+.card.wild::before { background: conic-gradient(var(--card-red) 0 25%, var(--card-blue) 0 50%, var(--card-green) 0 75%, var(--card-yellow) 0); box-shadow: inset 0 0 0 3px rgba(255,255,255,.92); }
+.card.wild .v { color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.75), 0 0 6px rgba(0,0,0,.6); }
+.card.wild .c { color: #fff; }
+.card .v.u { text-decoration: underline; text-underline-offset: .08em; text-decoration-thickness: .07em; }
+#endScore { white-space: pre-line; margin: 4px 0 10px; font-weight: 700; color: var(--brand-ink); font-size: 14px; }
