@@ -7,7 +7,7 @@ const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
 
 // Voice chat connects browsers directly; STUN finds the route. Add a TURN relay for strict networks by setting
 // GAME_TURN_URLS (comma separated), GAME_TURN_USER and GAME_TURN_PASS.
-const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+const STUN = [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
 function iceServers() {
   const urls = (process.env.GAME_TURN_URLS || '').split(',').map((x) => x.trim()).filter(Boolean);
   if (!urls.length) return STUN;

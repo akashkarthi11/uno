@@ -12,7 +12,7 @@ const voice = {
   stream: null,
   peers: new Map(), // playerId -> { pc, queue, audio }
   members: [],
-  ice: [{ urls: "stun:stun.l.google.com:19302" }],
+  ice: [{ urls: "stun:stun.cloudflare.com:3478" }, { urls: "stun:stun.l.google.com:19302" }],
   timer: null,
   ctx: null,
   meters: new Map(), // playerId -> { analyser, buf }

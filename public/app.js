@@ -456,6 +456,7 @@ function renderGame(s) {
   seenCards = nowSeen;
   turn = s.over ? null : { deadline: Date.now() + s.turnLeft, frozen: s.turnLeft, paused: s.paused, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
   $("pausedBanner").classList.toggle("hidden", !(s.paused && !s.over));
+  $("pausedBanner").textContent = s.pauseNote ? "⏸ Game paused — " + s.pauseNote + (s.admin ? " Resume, remove them, or restart." : " Waiting for the admin.") : "⏸ Game paused by the admin";
   $("pauseBtn").classList.toggle("hidden", !(s.admin && !s.over));
   $("pauseBtn").textContent = s.paused ? "▶ Resume" : "⏸ Pause";
   updateTimer();
@@ -464,7 +465,7 @@ function renderGame(s) {
   if (s.pending) msg = "Playing…";
   else if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
   else if (s.over) msg = "Game over.";
-  else if (s.paused) msg = "⏸ Paused by the admin — hang tight.";
+  else if (s.paused) msg = s.pauseNote ? "⏸ Paused — " + s.pauseNote : "⏸ Paused by the admin — hang tight.";
   else if (me && me.finished) msg = "You're out (#" + (s.ranking.indexOf(me.name) + 1) + ")! Watching the rest play…";
   else if (myTurn && me && me.count === 2 && !s.saidUno) msg = "⚠ Press GrowX! before you play your second-to-last card — or you draw 1 extra card!";
   else if (myTurn) msg = s.drawn != null ? "You drew a playable card — play it or press Pass." : (s.playable.length ? "Your turn — play a highlighted card or draw." : "Your turn — no playable card, draw from the pile.");

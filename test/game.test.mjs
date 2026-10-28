@@ -68,7 +68,7 @@ test('wild draw four is refused while holding the current colour', () => {
   assert.throws(() => G.act(s, cur, { op: 'play', cardId: 900, color: 'red' }, now), /Wild Draw Four/);
 });
 
-test('offline player is auto-played so the table never stalls', () => {
+test('a player who goes offline pauses the game instead of being auto-played', () => {
   const s = G.newRoom('t');
   let now = 1000;
   const a = G.join(s, { name: 'A', admin: true }, now);
@@ -76,14 +76,21 @@ test('offline player is auto-played so the table never stalls', () => {
   const c = G.join(s, { name: 'C', admin: false }, now);
   G.act(s, a, { op: 'start' }, now);
   s.cur = s.seats.indexOf(b.id);
-  // plain cards only: a random 🔁 Play Again would legitimately keep the turn with B and make this check flaky
-  b.hand = [{ id: 9990, color: 'red', value: '4' }, { id: 9991, color: 'blue', value: '2' }];
-  s.color = 'red';
+  const handBefore = b.hand.length;
   now += 25000; // B goes quiet; A and C keep polling
   a.lastSeen = now;
   c.lastSeen = now;
   assert.equal(G.tick(s, now), true);
-  assert.notEqual(s.seats[s.cur], b.id);
+  assert.equal(s.paused, true);
+  assert.equal(s.seats[s.cur], b.id, 'nothing was played for B');
+  assert.equal(b.hand.length, handBefore);
+  assert.match(G.view(s, a, now).pauseNote, /B lost connection/);
+  assert.throws(() => G.act(s, c, { op: 'draw' }, now), /paused/);
+  G.act(s, a, { op: 'resume' }, now); // admin decides to wait
+  assert.equal(s.paused, false);
+  assert.equal(G.tick(s, now + 1000), false, 'a moment to act after resuming');
+  G.act(s, a, { op: 'kick', targetId: b.id }, now + 2000);
+  assert.equal(s.seats.includes(b.id), false);
 });
 
 test('admin can choose the special card they pick up; players cannot', () => {
@@ -823,30 +830,14 @@ test('switching public/private clears the chat (setting the same mode does not)'
   assert.equal(s.chat.length, 0);
 });
 
-test('a game survives players being offline for a while, and ends only after the grace period', () => {
+test('a game with too few players connected pauses rather than ending', () => {
   const s = G.newRoom('t');
   let now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
-  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
+  G.join(s, { name: 'B', admin: false, role: 'public' }, now);
   G.act(s, admin, { op: 'start' }, now);
-  now += 60000; // both phones asleep for a minute
+  now += 300000; // both phones asleep for five minutes
   G.tick(s, now);
   assert.equal(s.over, false);
-  now += 70000; // gone for over two minutes
-  G.tick(s, now);
-  assert.equal(s.over, true);
-});
-
-test('a game survives players being offline for a while, and ends only after the grace period', () => {
-  const s = G.newRoom('t');
-  let now = 1000;
-  const admin = G.join(s, { name: 'Boss', admin: true }, now);
-  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
-  G.act(s, admin, { op: 'start' }, now);
-  now += 60000; // both phones asleep for a minute
-  G.tick(s, now);
-  assert.equal(s.over, false);
-  now += 70000; // gone for over two minutes
-  G.tick(s, now);
-  assert.equal(s.over, true);
+  assert.equal(s.paused, true);
 });

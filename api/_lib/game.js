@@ -12,10 +12,8 @@ export const HAND_MAX = 10;
 const MAX_LOG = 40;
 export const ONLINE_MS = 20000; // a player not heard from for this long counts as offline
 export const HEARTBEAT_MS = 8000; // how often an idle client refreshes its presence
-const AUTO_MS = 3000; // wait before playing an offline player's turn
 export const TURN_MS = 30000; // time a player has for their turn before it is played for them
 const PRUNE_MS = 120000; // lobby members unseen this long are dropped (a locked phone must not lose its seat)
-export const GRACE_MS = 120000; // a game only ends for lack of players after they have been gone this long
 const VOICE_GRACE_MS = 60000; // a short drop-out keeps your place in the voice list
 
 const fail = (msg) => {
@@ -221,19 +219,19 @@ function tickGame(s, now) {
   }
   if (s.over) return false;
   if (s.paused) return false; // nothing times out or auto-plays while the admin has the game paused
-  if (active(s).filter((p) => now - p.lastSeen < GRACE_MS).length < 2) {
-    s.over = true;
-    s.winner = null;
-    s.loser = null;
-    s.notice = 'Game ended: not enough players left.';
-    return true;
-  }
+  // Nobody plays for an absent player. If it is their turn, or too few people are left, the game pauses and
+  // the admin decides: wait and resume, remove them, or restart.
   const p = byId(s, s.seats[s.cur]);
-  const idle = now - s.turnAt;
-  if (!online(p, now) && idle > AUTO_MS) {
-    autoPlay(s, p, now);
+  const settled = now - (s.resumedAt || 0) > ONLINE_MS; // after a resume the admin gets a moment to act
+  const fewLeft = active(s).filter((q) => online(q, now)).length < 2;
+  if (settled && (!online(p, now) || fewLeft)) {
+    s.paused = true;
+    s.pausedAt = now;
+    s.pauseNote = fewLeft ? 'Not enough players are connected.' : `${p.name} lost connection.`;
+    addLog(s, 'Game paused: ' + s.pauseNote);
     return true;
   }
+  const idle = now - s.turnAt;
   if (idle > TURN_MS) {
     // time is up: nothing is played for them. If they never picked up a card this turn they get 1 penalty card,
     // then the turn moves to the next player.
@@ -448,10 +446,13 @@ function setPaused(s, p, on, now) {
   if (on) {
     s.paused = true;
     s.pausedAt = now;
+    s.pauseNote = '';
     addLog(s, 'The admin paused the game.');
   } else {
     s.turnAt = Math.min(now, s.turnAt + (now - s.pausedAt));
     s.paused = false;
+    s.pauseNote = '';
+    s.resumedAt = now;
     addLog(s, 'The admin resumed the game.');
   }
 }
@@ -729,38 +730,6 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
   advance(s, skip ? 2 : 1, now);
 }
 
-/* ---------------- offline players ---------------- */
-
-function commonColor(p) {
-  const count = Object.fromEntries(COLORS.map((c) => [c, 0]));
-  p.hand.forEach((c) => {
-    if (c.color !== 'wild') count[c.color]++;
-  });
-  return COLORS.reduce((a, b) => (count[b] > count[a] ? b : a), COLORS[0]);
-}
-
-/** Plays a card for an automatic turn; Swap Hands needs someone to swap with, so pick a random opponent. */
-function autoCard(s, p, c, now) {
-  const opponents = active(s).filter((o) => o !== p);
-  if (c.value === 'master') return doPlay(s, p, c, commonColor(p), now, p, 'sweep'); // harmless: sweeps their own colour
-  const swapWith = c.value === 'swap' && opponents.length ? opponents[rnd(opponents.length)] : null;
-  return doPlay(s, p, c, commonColor(p), now, swapWith);
-}
-
-/** An offline player's turn is played automatically so the table never stalls. */
-function autoPlay(s, p, now) {
-  if (p.hand.length <= 2) p.saidUno = true; // automatic turns never earn the GrowX! penalty
-  if (s.drawnId != null) {
-    // already drew this turn: the only legal card is the one just drawn
-    return autoCard(s, p, p.hand.find((c) => c.id === s.drawnId), now);
-  }
-  const options = p.hand.filter((c) => playable(s, c, p)).sort((a, b) => (a.color === 'wild') - (b.color === 'wild'));
-  if (options.length) return autoCard(s, p, options[0], now);
-  drawOne(s, p, now);
-  if (s.drawnId != null) autoCard(s, p, p.hand.find((c) => c.id === s.drawnId), now);
-  return undefined;
-}
-
 /* ---------------- output ---------------- */
 
 /** What one player is allowed to see (own hand only). */
@@ -784,7 +753,7 @@ export function view(s, me, now) {
   return {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
-    paused: Boolean(s.paused),
+    paused: Boolean(s.paused), pauseNote: s.paused ? s.pauseNote || '' : '',
     turnMs: TURN_MS, turnLeft: s.over ? 0 : Math.max(0, TURN_MS - ((s.paused ? s.pausedAt : now) - s.turnAt)),
     hand: [...me.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)),
     playable: myTurn && !s.paused
