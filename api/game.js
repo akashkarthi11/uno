@@ -5,7 +5,10 @@ import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark } fr
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
 const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
-const TOKEN_SALT = ADMIN_PASSWORD + '|' + PLAYER_PASSWORD + '|' + PRIVATE_PASSWORD; // new passwords sign everyone out
+// Anyone who signs in with this password is a co-admin straight away (shown as "admin", can start / configure / pause / restart
+// the game), in a public or a private game, without the real admin appointing them.
+const COADMIN_PASSWORD = process.env.GAME_COADMIN_PASSWORD || '12345678';
+const TOKEN_SALT = ADMIN_PASSWORD + '|' + PLAYER_PASSWORD + '|' + PRIVATE_PASSWORD + '|' + COADMIN_PASSWORD; // new passwords sign everyone out
 
 // Voice chat connects browsers directly; STUN finds the route. Add a TURN relay for strict networks by setting
 // GAME_TURN_URLS (comma separated), GAME_TURN_USER and GAME_TURN_PASS.
@@ -103,7 +106,8 @@ export default async function handler(req, res) {
     if (b.op === 'join') {
       const pw = String(b.password ?? '');
       const admin = pw === ADMIN_PASSWORD;
-      if (!admin) {
+      const coadmin = !admin && pw === COADMIN_PASSWORD; // admitted to any game, as a co-admin
+      if (!admin && !coadmin) {
         // The admin decides whether a game is public or private. Public games admit public players (123456)
         // only; private games admit private players (281101) only.
         const existing = await readRoom(code);
@@ -118,9 +122,10 @@ export default async function handler(req, res) {
       let claim;
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
-        const role = admin ? 'admin' : pw === PRIVATE_PASSWORD ? 'private' : 'public';
-        const me = G.join(s, { name: b.name, admin, role, playerId: b.playerId }, now);
-        claim = { r: code, p: me.id, role, n: me.name };
+        // a co-admin by password takes the kind of the game they walk into (public or private)
+        const role = admin ? 'admin' : coadmin ? (s.private ? 'private' : 'public') : pw === PRIVATE_PASSWORD ? 'private' : 'public';
+        const me = G.join(s, { name: b.name, admin, role, playerId: b.playerId, coadmin }, now);
+        claim = { r: code, p: me.id, role, n: me.name, co: coadmin };
         return G.view(s, me, now);
       });
       return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
@@ -138,7 +143,7 @@ export default async function handler(req, res) {
         return res.status(401).json({ error: 'You left this game — sign in again to join.', denied: true });
       }
       // The same rule as a fresh sign-in: a private game admits private players only, a public one public players only.
-      if (claim.role !== 'admin' && (claim.role === 'private') !== Boolean(existing && existing.private)) {
+      if (claim.role !== 'admin' && !claim.co && (claim.role === 'private') !== Boolean(existing && existing.private)) {
         return res.status(401).json({
           error: claim.role === 'public' ? 'Ask the admin to start the game and share the private password.' : 'This game is public now — sign in again.',
           denied: true,
@@ -147,8 +152,9 @@ export default async function handler(req, res) {
       let renewed;
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
-        const me = G.join(s, { name: claim.n, admin: claim.role === 'admin', role: claim.role, playerId: claim.p }, now);
-        renewed = { r: code, p: me.id, role: claim.role, n: me.name };
+        const role = claim.co ? (s.private ? 'private' : 'public') : claim.role;
+        const me = G.join(s, { name: claim.n, admin: claim.role === 'admin', role, playerId: claim.p, coadmin: Boolean(claim.co) }, now);
+        renewed = { r: code, p: me.id, role, n: me.name, co: Boolean(claim.co) };
         return G.view(s, me, now);
       });
       return res.json({ state: withIce(state), token: signToken(renewed, now, TOKEN_SALT) });

@@ -255,3 +255,12 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
   super cards, public / private, relay, public voice). Cards, turn time, house rules and super cards lock while a game runs.
 - **See-through icons** (semi-transparent circles over the table): Settings, Pause / Resume, Restart, Mic, Mute.
 - **Chat** opens as a side panel, so the table stays in view.
+
+## The co-admin password
+
+Besides the admin password (110299), public (123456) and private (281101), the password **12345678** signs a player in as a
+**co-admin straight away** (`GAME_COADMIN_PASSWORD` to change it): shown to everyone as "admin", with the rights of an appointed
+co-admin (start games, game settings, pause / resume / restart) and the same limits (no relay / public voice / public-private
+switch, no removing players). It works in public and in private games and survives the admin switching between them (the
+player takes the kind of the current game, so in a private game they count as a private player for voice). A refresh keeps it;
+the real admin can still drop it, and it returns the next time that player signs in with the password.

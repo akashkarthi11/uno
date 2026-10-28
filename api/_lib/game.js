@@ -160,7 +160,7 @@ function advance(s, steps, now) {
 
 /* ---------------- membership ---------------- */
 
-export function join(s, { name, admin, role, playerId }, now) {
+export function join(s, { name, admin, role, playerId, coadmin }, now) {
   let p = playerId ? byId(s, playerId) : null;
   if (!p) {
     p = { id: randomUUID(), name: cleanName(name), admin: false, lastSeen: now, hand: [], saidUno: false, finished: false };
@@ -171,6 +171,13 @@ export function join(s, { name, admin, role, playerId }, now) {
   }
   p.admin = !!admin;
   p.role = admin ? 'admin' : role || 'public'; // which password they used: admin | public | private
+  if (coadmin && !admin) {
+    p.starter = true; // the co-admin password: the same rights as a co-admin the admin appointed
+    p.auto = true;
+  } else if (p.auto) {
+    p.auto = false; // signed in again with an ordinary password: no longer a co-admin
+    p.starter = false;
+  }
   p.lastSeen = now;
   return p;
 }
@@ -406,6 +413,10 @@ function setPrivate(s, p, on, now) {
   addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
   const want = on ? 'private' : 'public';
   for (const m of [...s.members]) {
+    if (m.auto) { // a co-admin by password belongs in both kinds of game: they stay, and take the new kind
+      m.role = want;
+      continue;
+    }
     if (!m.admin && (m.role ?? 'public') !== want) {
       removeMember(s, m, now);
       addLog(s, `${m.name} was removed (this game is now ${want}).`);
