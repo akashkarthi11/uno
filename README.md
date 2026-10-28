@@ -163,7 +163,7 @@ The room store can use either or both of:
 
 | Kind | Environment variables | Notes |
 |---|---|---|
-| `tcp` | `MUMREDIS_URL` (a `redis://` / `rediss://` address, e.g. Redis Cloud) | uses the `ioredis` package |
+| `tcp` | `MUMREDIS_REDIS_URL` (a `redis://` / `rediss://` address, e.g. Redis Cloud) | uses the `ioredis` package |
 | `rest` | `MUM_KV_REST_API_*`, else `UPSTASH_REDIS_REST_*` / `KV_REST_API_*` (Upstash) | uses `@upstash/redis` |
 
 With both configured, `tcp` is primary unless `GAME_PRIMARY=rest`. If the primary errors or takes over 3 s, the other

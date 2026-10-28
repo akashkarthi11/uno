@@ -3,11 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { newRoom } from './game.js';
 
 // Which databases exist (either, or both):
-//   tcp   MUMREDIS_URL          a standard redis:// / rediss:// address (e.g. a free Redis Cloud database)
+//   tcp   MUMREDIS_REDIS_URL    a standard redis:// / rediss:// address (e.g. a free Redis Cloud database)
 //   rest  MUM_KV_REST_API_* (an Upstash database added with the prefix MUM_), else UPSTASH_REDIS_REST_* / KV_REST_API_*
 // With both, GAME_PRIMARY ("tcp" or "rest") says which one is used; the other takes over while the primary is failing.
 // With neither (local runs and tests) rooms live in memory.
-const TCP_URL = process.env.MUMREDIS_URL;
+const TCP_URL = process.env.MUMREDIS_REDIS_URL || process.env.MUMREDIS_URL;
 const URL = process.env.MUM_KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const TOKEN = process.env.MUM_KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 const KINDS = [TCP_URL && 'tcp', URL && TOKEN && 'rest'].filter(Boolean);
