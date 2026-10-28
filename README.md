@@ -214,4 +214,4 @@ in), and **Join voice** brings them back. If the microphone is refused the page 
 
 Voice is for the admin and private players. The admin's **🎙 Public voice** button in the top bar (also for a player the
 admin allowed to start games) lets public players use it as well; turning it off again drops public players from the
-call. It is stored with the room settings (`settings.publicVoice`, default off).
+call. It is shown only while the game is public (a private game has no public players). It is stored with the room settings (`settings.publicVoice`, default off).

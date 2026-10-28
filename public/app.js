@@ -393,7 +393,7 @@ $("pubVoiceBtn").addEventListener("click", togglePublicVoice);
 
 function renderRelayBtn(s) {
   const pv = $("pubVoiceBtn");
-  pv.classList.toggle("hidden", !s.canStart);
+  pv.classList.toggle("hidden", !s.canStart || s.private); // a private game has no public players, so the switch is not needed there
   const pvOn = Boolean(s.settings && s.settings.publicVoice);
   pv.textContent = "🎙 Public voice: " + (pvOn ? "on" : "off");
   pv.classList.toggle("on", pvOn);
