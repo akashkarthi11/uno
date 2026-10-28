@@ -377,7 +377,7 @@ function setPrivate(s, p, on, now) {
 
 /**
  * The admin (110299) lets any public or private player start games, or takes that back at any time.
- * A co-admin can start a game and nothing else: no settings, no public/private switch, no pause, restart or removal,
+ * On screen that player is labelled "admin" and the real admin carries no label. A co-admin can start a game and nothing else: no settings, no public/private switch, no pause, restart or removal,
  * no special-card pick-up, and no voice chat unless they joined with the private password.
  */
 function setStarter(s, admin, targetId, on) {
@@ -763,7 +763,7 @@ export function view(s, me, now) {
     seated: s.started && s.seats.includes(me.id),
     players: (s.started ? seated(s) : s.members.filter((m) => online(m, now))).map((p) => ({
       id: p.id, name: p.name, count: p.hand.length, finished: s.started && p.finished, connected: online(p, now),
-      isAdmin: Boolean(p.admin), starter: Boolean(p.starter),
+      isAdmin: me.admin ? Boolean(p.admin) : undefined, starter: Boolean(p.starter), // who the real admin is stays private
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),

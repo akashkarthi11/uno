@@ -374,7 +374,7 @@ function renderLobby(s) {
     if (s.admin && p.id !== s.you && !p.isAdmin) {
       const c = document.createElement("button");
       c.className = "ghost cadm-lobby";
-      c.textContent = p.starter ? "Drop co-admin" : "Make co-admin";
+      c.textContent = p.starter ? "Drop admin" : "Make admin";
       c.title = p.starter ? "They can no longer start games" : "Lets them start games, nothing else";
       c.addEventListener("click", () => toggleStarter(p));
       li.appendChild(c);
@@ -386,15 +386,11 @@ function renderLobby(s) {
       x.addEventListener("click", () => removePlayer(p));
       li.appendChild(x);
     }
-    if (p.id === s.host) {
+    // Players see the person allowed to start games as "admin"; the real admin carries no label.
+    if (p.starter) {
       const b = document.createElement("span");
       b.className = "badge";
       b.textContent = "admin";
-      li.appendChild(b);
-    } else if (p.starter) {
-      const b = document.createElement("span");
-      b.className = "badge";
-      b.textContent = "co-admin";
       li.appendChild(b);
     }
     ul.appendChild(li);
@@ -433,7 +429,7 @@ function renderGame(s) {
     if (s.admin && !p.isAdmin) {
       const c = document.createElement("button");
       c.className = "ghost cadm" + (p.starter ? " on" : "");
-      c.title = p.starter ? "Drop co-admin (can start games)" : "Make co-admin (can start games)";
+      c.title = p.starter ? "Drop admin (can start games)" : "Make admin (can start games)";
       c.textContent = "★";
       c.addEventListener("click", () => toggleStarter(p));
       d.appendChild(c);
