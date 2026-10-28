@@ -439,6 +439,7 @@ function render() {
   if (!inGame) {
     seenCards = null;
     lastTopId = null;
+    wasMyTurn = null;
     turn = null;
     updateTimer();
     $("endModal").classList.add("hidden");
@@ -534,6 +535,11 @@ function renderGame(s) {
     opp.appendChild(d);
   }
 
+  // One light tap when the turn arrives (not on the first screen after a refresh, and never while paused).
+  if (myTurn && wasMyTurn === false && !s.paused && s.turnLeft > 0) {
+    try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) { /* vibration not allowed here */ }
+  }
+  wasMyTurn = myTurn;
   $("game").classList.toggle("myturn", myTurn);
   $("status").classList.toggle("mine", myTurn);
 
@@ -639,6 +645,7 @@ let turn = null; // { deadline, total, mine, name } while a game is running
 const URGENT_SECS = 10;
 const BUZZ_SECS = 5;
 let buzzed = false;
+let wasMyTurn = null; // null until the first game screen, so a refresh does not buzz
 
 function updateTimer() {
   const bar = $("turnBar");
