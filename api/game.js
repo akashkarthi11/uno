@@ -76,14 +76,16 @@ export default async function handler(req, res) {
       if (!me) return res.json(s && (s.kicked || []).includes(b.playerId) ? { kicked: true } : { gone: true });
       const stale = now - me.lastSeen > G.HEARTBEAT_MS;
       if (!stale && !G.tick(structuredClone(s), now)) {
-        if (b.since === s.version) return res.json({ unchanged: true });
+        if (b.since === s.version && b.ps === G.presenceSig(s, now)) return res.json({ unchanged: true });
         return res.json({ state: withIce(G.view(s, me, now)) });
       }
       const result = await withRoom(code, (r) => {
         const self = r.members.find((m) => m.id === b.playerId);
         if (!self) return (r.kicked || []).includes(b.playerId) ? { kicked: true } : { gone: true };
+        const wasOnline = G.online(self, now);
         self.lastSeen = now;
-        G.tick(r, now);
+        const changed = G.tick(r, now);
+        if (wasOnline && !changed) r.version -= 1; // a heartbeat alone is not news: other players' quiet polls stay quiet
         return { state: G.view(r, self, now) };
       });
       if (result.state) withIce(result.state);

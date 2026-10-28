@@ -244,7 +244,9 @@ async function sigLoop() {
   sigBusy = false;
   if (!voice.active) return;
   // poll quickly while connections are being made, slowly once everyone is connected
-  const settled = voice.peers.size > 0 && [...voice.peers.values()].every((p) => p.pc.connectionState === "connected");
+  // Alone in voice, or everyone connected: look rarely (a new arrival triggers an immediate look anyway).
+  const alone = voice.members.filter((id) => id !== (state && state.you)).length === 0;
+  const settled = alone || (voice.peers.size > 0 && [...voice.peers.values()].every((p) => p.pc.connectionState === "connected"));
   voice.timer = setTimeout(sigLoop, settled ? 5000 : 1000);
 }
 

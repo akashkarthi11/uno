@@ -77,7 +77,7 @@ test('a player who goes offline pauses the game instead of being auto-played', (
   G.act(s, a, { op: 'start' }, now);
   s.cur = s.seats.indexOf(b.id);
   const handBefore = b.hand.length;
-  now += 25000; // B goes quiet; A and C keep polling
+  now += 30000; // B goes quiet; A and C keep polling
   a.lastSeen = now;
   c.lastSeen = now;
   assert.equal(G.tick(s, now), true);
@@ -790,7 +790,7 @@ test('API answers are never cacheable and always carry the deployed build id', a
   assert.equal(denied.body.build, gone.body.build, 'the same build id on every answer');
 
   const joined = await call({ op: 'join', room, name: 'A', password: '110299' });
-  const poll = await call({ op: 'state', room, playerId: joined.body.state.you, since: joined.body.state.version });
+  const poll = await call({ op: 'state', room, playerId: joined.body.state.you, since: joined.body.state.version, ps: joined.body.state.ps });
   assert.equal(poll.body.unchanged, true);
   assert.equal(poll.body.build, gone.body.build, "even the tiny 'nothing changed' answer says which build it is");
 
@@ -813,7 +813,7 @@ test('API: password gate and admin start', async () => {
   const ok = await call({ op: 'start', room: 'api1', playerId: a.body.state.you });
   assert.equal(ok.code, 200);
   assert.equal(ok.body.state.hand.length, 5);
-  const poll = await call({ op: 'state', room: 'api1', playerId: a.body.state.you, since: ok.body.state.version });
+  const poll = await call({ op: 'state', room: 'api1', playerId: a.body.state.you, since: ok.body.state.version, ps: ok.body.state.ps });
   assert.equal(poll.body.unchanged, true);
 });
 
@@ -840,4 +840,16 @@ test('a game with too few players connected pauses rather than ending', () => {
   G.tick(s, now);
   assert.equal(s.over, false);
   assert.equal(s.paused, true);
+});
+
+test('quiet polls: a heartbeat alone does not change the version, a change in who is online does', async () => {
+  const room = 'qp' + Math.floor(Math.random() * 1e6);
+  const a = await call({ op: 'join', room, name: 'A', password: '110299' });
+  const b = await call({ op: 'join', room, name: 'B', password: '123456' });
+  const A = a.body.state.you;
+  const quiet = await call({ op: 'state', room, playerId: A, since: b.body.state.version, ps: b.body.state.ps });
+  assert.equal(quiet.body.unchanged, true);
+  // a stale ps (somebody's online status moved) is answered with a fresh state, not "unchanged"
+  const moved = await call({ op: 'state', room, playerId: A, since: b.body.state.version, ps: '10' });
+  assert.ok(moved.body.state, 'presence changed → full state');
 });

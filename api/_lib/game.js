@@ -10,8 +10,8 @@ const DEFAULT_HAND = 5;
 export const HAND_MIN = 3;
 export const HAND_MAX = 10;
 const MAX_LOG = 40;
-export const ONLINE_MS = 20000; // a player not heard from for this long counts as offline
-export const HEARTBEAT_MS = 8000; // how often an idle client refreshes its presence
+export const ONLINE_MS = 27000; // a player not heard from for this long counts as offline (kept under the 30 s turn)
+export const HEARTBEAT_MS = 12000; // how often an idle client refreshes its presence (each refresh is a few database commands)
 export const TURN_MS = 30000; // time a player has for their turn before it is played for them
 const PRUNE_MS = 120000; // lobby members unseen this long are dropped (a locked phone must not lose its seat)
 const VOICE_GRACE_MS = 60000; // a short drop-out keeps your place in the voice list
@@ -29,6 +29,9 @@ function shuffle(a) {
 }
 
 export const online = (p, now) => now - p.lastSeen < ONLINE_MS;
+
+/** Who is online right now, as a short string: lets a quiet poll tell "nothing changed" without a database write. */
+export const presenceSig = (s, now) => s.members.map((m) => (online(m, now) ? 1 : 0)).join('');
 
 export function newRoom(code) {
   return {
@@ -450,7 +453,8 @@ function setPaused(s, p, on, now) {
     s.pauseNote = '';
     addLog(s, 'The admin paused the game.');
   } else {
-    s.turnAt = Math.min(now, s.turnAt + (now - s.pausedAt));
+    // after an automatic pause (someone dropped) the player gets a fresh turn; after a manual one, the time they had left
+    s.turnAt = s.pauseNote ? now : Math.min(now, s.turnAt + (now - s.pausedAt));
     s.paused = false;
     s.pauseNote = '';
     s.resumedAt = now;
@@ -736,7 +740,7 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
 /** What one player is allowed to see (own hand only). */
 export function view(s, me, now) {
   const out = {
-    room: s.code, version: s.version, you: me.id, admin: me.admin, private: !!s.private,
+    room: s.code, version: s.version, ps: presenceSig(s, now), you: me.id, admin: me.admin, private: !!s.private,
     host: me.admin ? me.id : (s.members.find((m) => m.admin && online(m, now)) || {}).id || null,
     started: s.started, over: s.over, winner: s.winner, loser: s.loser, ranking: s.ranking, notice: s.notice,
     seated: s.started && s.seats.includes(me.id),

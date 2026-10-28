@@ -2,9 +2,12 @@
 
 const LABEL = { skip: "⊘", reverse: "⇄", draw2: "+2", wild: "W", wild4: "+4", again: "🔁", sweep: "🧹", blast: "💥", swap: "🔄", gift: "🎁", master: "✨" };
 const SUPER = new Set(["again", "sweep", "blast", "swap", "gift", "master"]); // super cards get a golden look
-const POLL_MS = 1500; // lobby / results screen
-const POLL_GAME_MS = 1000; // while a game is running
-const POLL_HIDDEN_MS = 4000; // tab not visible (still well inside the 20 s "online" window)
+// Every poll is one database read, so calm screens slow down: the delay grows while nothing changes and snaps back on news.
+const POLL_MS = 2000; // lobby / results screen, first polls
+const POLL_QUIET_MS = 6000; // lobby / results / paused after a long quiet spell
+const POLL_GAME_MS = 1500; // while a game is running
+const POLL_GAME_QUIET_MS = 2500; // game running but nothing has moved for a while
+const POLL_HIDDEN_MS = 8000; // tab not visible (still well inside the 27 s "online" window)
 const REQUEST_TIMEOUT_MS = 8000;
 const HEARTBEAT_MS = 8000;
 const $ = (id) => document.getElementById(id);
@@ -158,6 +161,7 @@ async function join() {
 }
 
 let inFlight = false;
+let quiet = 0; // polls in a row that brought nothing new
 let lastOk = Date.now();
 let removed = false;
 
@@ -190,7 +194,7 @@ async function pollOnce() {
   if (busy || inFlight || removed) return;
   inFlight = true;
   try {
-    const data = await api({ op: "state", since: state ? state.version : undefined });
+    const data = await api({ op: "state", since: state ? state.version : undefined, ps: state ? state.ps : undefined });
     if (data.kicked) {
       removedByAdmin();
     } else if (data.gone) {
@@ -199,7 +203,10 @@ async function pollOnce() {
       state = null;
       apply(await api({ op: "join", name: myName, password: myPassword }));
     } else if (!data.unchanged) {
+      quiet = 0;
       apply(data);
+    } else {
+      quiet++;
     }
     lastOk = Date.now();
   } catch (e) {
@@ -229,12 +236,14 @@ function startPolling() {
 /** Poll faster while a game is running (that is when waiting for someone's move is felt), slower in a hidden tab. */
 function pollDelay() {
   if (document.hidden) return POLL_HIDDEN_MS;
-  return state && state.started && !state.over && !state.paused ? POLL_GAME_MS : POLL_MS;
+  if (state && state.started && !state.over && !state.paused) return quiet > 20 ? POLL_GAME_QUIET_MS : POLL_GAME_MS;
+  return quiet > 10 ? POLL_QUIET_MS : POLL_MS;
 }
 
 async function send(body, onFail) {
   if (busy) return; // ignore a second click while the first action is still on its way
   busy = true;
+  quiet = 0;
   try {
     apply(await api(body));
   } catch (e) {
