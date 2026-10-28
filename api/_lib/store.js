@@ -60,7 +60,8 @@ export async function readRoom(code) {
   return typeof v === 'string' ? JSON.parse(v) : v;
 }
 
-async function writeRoom(code, s) {
+async function writeRoom(code, saved) {
+  const { log, ...s } = saved; // the event log is never stored anywhere
   if (!usingRedis) {
     mem.set(code, structuredClone(s));
     return;

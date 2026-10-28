@@ -35,7 +35,7 @@ export function newRoom(code) {
     code, version: 0, members: [], seats: [], started: false, over: false,
     winner: null, loser: null, ranking: [], notice: null,
     deck: [], discard: [], color: null, dir: 1, cur: 0, drawnId: null,
-    log: [], turnAt: 0,
+    turnAt: 0,
   };
 }
 
@@ -46,8 +46,9 @@ const seated = (s) => s.seats.map((id) => byId(s, id));
 const active = (s) => seated(s).filter((p) => !p.finished);
 const top = (s) => s.discard[s.discard.length - 1];
 
+/** The event log lives only for the length of one request (for tests and debugging); the store never saves it. */
 function addLog(s, msg) {
-  s.log.push(msg);
+  (s.log ||= []).push(msg);
   while (s.log.length > MAX_LOG) s.log.shift();
 }
 
