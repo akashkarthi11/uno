@@ -79,6 +79,12 @@ button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 }
 #lobbyPlayers li .avatar { width: 34px; height: 34px; font-size: 13px; }
 #lobbyPlayers li .who { flex: 1; font-weight: 600; }
+/* BGMI-style ping: a coloured dot and the delay to the game server in ms */
+.ping { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; border: 1px solid var(--brand-line); background: var(--brand-soft); color: var(--muted); }
+.ping i { width: 9px; height: 9px; border-radius: 50%; background: #98a2b3; flex: none; }
+.ping.good { color: #12b76a; } .ping.good i { background: #12b76a; box-shadow: 0 0 6px #12b76a; }
+.ping.mid { color: #f79009; } .ping.mid i { background: #f79009; box-shadow: 0 0 6px #f79009; }
+.ping.bad { color: #f04438; } .ping.bad i { background: #f04438; box-shadow: 0 0 6px #f04438; }
 .badge { font-size: 11px; background: var(--brand-soft); color: var(--brand-ink); border: 1px solid var(--brand-line); padding: 2px 10px; border-radius: 999px; font-weight: 700; }
 
 .avatar {

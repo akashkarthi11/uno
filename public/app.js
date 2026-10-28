@@ -45,10 +45,28 @@ function store(key, value) {
 
 /* ---------- server calls ---------- */
 
+/** Ping badge: the middle value of the last 5 quiet checks (so one slow start does not show), green/orange/red like a game. */
+const pingSamples = [];
+function notePing(ms) {
+  const el = $("ping");
+  if (ms === null) { // the last check did not get through
+    pingSamples.length = 0;
+    el.className = "ping bad";
+    el.lastChild.textContent = "offline";
+    return;
+  }
+  pingSamples.push(ms);
+  if (pingSamples.length > 5) pingSamples.shift();
+  const mid = [...pingSamples].sort((a, b) => a - b)[Math.floor(pingSamples.length / 2)];
+  el.className = "ping " + (mid <= 100 ? "good" : mid <= 200 ? "mid" : "bad");
+  el.lastChild.textContent = Math.round(mid) + " ms";
+}
+
 async function api(body) {
   // A request that hangs must not freeze the game, so every call has a timeout.
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+  const t0 = performance.now();
   let r;
   try {
     r = await fetch("/api/game", {
@@ -61,6 +79,7 @@ async function api(body) {
   } finally {
     clearTimeout(timer);
   }
+  if (body.op === "state" && !document.hidden) notePing(performance.now() - t0); // polls are the same small request every time
   let data = {};
   try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
   if (data.build) noteBuild(data.build);
@@ -254,6 +273,7 @@ async function pollOnce() {
     }
     lastOk = Date.now();
   } catch (e) {
+    notePing(null);
     if (Date.now() - lastOk > HEARTBEAT_MS) toast("Connection problem — retrying…");
   } finally {
     inFlight = false;
