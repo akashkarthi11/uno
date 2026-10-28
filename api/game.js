@@ -114,9 +114,9 @@ export default async function handler(req, res) {
         const existing = await readRoom(code);
         const isPrivate = Boolean(existing && existing.private);
         if (pw !== (isPrivate ? PRIVATE_PASSWORD : PLAYER_PASSWORD)) {
-          const msg = isPrivate && pw === PLAYER_PASSWORD
-            ? 'Ask the admin to start the game and share the private password.'
-            : 'Wrong password.';
+          // A public player (123456) must never learn that a game is private: in a private game their password just gets
+          // "System down" (the co-admin password gets the same). Any other wrong password is "Wrong password."
+          const msg = isPrivate && pw === PLAYER_PASSWORD ? 'System down' : 'Wrong password.';
           return res.status(401).json({ error: msg, denied: true });
         }
       } else if (coadmin) {
@@ -154,7 +154,7 @@ export default async function handler(req, res) {
       // The same rule as a fresh sign-in: a private game admits private players only, a public one public players only.
       if (claim.role !== 'admin' && (claim.co ? Boolean(existing && existing.private) : (claim.role === 'private') !== Boolean(existing && existing.private))) {
         return res.status(401).json({
-          error: claim.co ? 'System down' : claim.role === 'public' ? 'Ask the admin to start the game and share the private password.' : 'This game is public now — sign in again.',
+          error: claim.role === 'public' ? 'System down' : 'This game is public now — sign in again.', // public and co-admin tokens: no hint that the game is private
           denied: true,
         });
       }

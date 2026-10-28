@@ -769,7 +769,8 @@ test('API: public games admit public players, private games admit private player
 
   const refused = await call({ op: 'join', room, name: 'New', password: '123456' });
   assert.equal(refused.code, 401, 'player password no longer enough');
-  assert.equal(refused.body.error, 'Ask the admin to start the game and share the private password.');
+  assert.equal(refused.body.error, 'System down', 'a public player is not told the game is private');
+  assert.doesNotMatch(refused.body.error, /private|password|admin/i);
   assert.equal((await call({ op: 'join', room, name: 'New', password: 'nope' })).body.error, 'Wrong password.');
   const joined = await call({ op: 'join', room, name: 'New', password: '281101' });
   assert.equal(joined.code, 200);

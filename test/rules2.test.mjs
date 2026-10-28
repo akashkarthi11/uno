@@ -392,7 +392,7 @@ test('co-admin password: a private game admits only 110299 and 281101 — not 12
   assert.doesNotMatch(refused.body.error, /private|password|admin/i);
   const pub = await call({ op: 'join', room, name: 'Pat', password: '123456' });
   assert.equal(pub.code, 401, 'as is the public password');
-  assert.equal(pub.body.error, 'Ask the admin to start the game and share the private password.', 'which keeps its own message');
+  assert.equal(pub.body.error, 'System down', 'the public password gets the same answer as the co-admin password');
   assert.equal((await call({ op: 'join', room, name: 'Priv', password: '281101' })).code, 200, 'the private password works');
   assert.equal((await call({ op: 'join', room, name: 'Boss2', password: '110299' })).code, 200, 'and so does the admin password');
 
