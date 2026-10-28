@@ -20,6 +20,11 @@ const voice = {
   meterTimer: null,
 };
 
+// Voice starts by itself for everyone allowed to use it. Leaving voice yourself is remembered for this tab, so a
+// refresh does not pull you back in; the button joins again. If the microphone is refused we ask only once.
+let autoJoinTried = false;
+const voiceOffKey = () => "uno-voice-off-" + room;
+
 /** Called by app.js whenever a fresh game state arrives. */
 function voiceSync(s) {
   const btn = $("voiceBtn");
@@ -27,7 +32,12 @@ function voiceSync(s) {
   if (!s.canVoice) {
     if (voice.active) voiceStopLocal();
     $("muteBtn").classList.add("hidden");
+    autoJoinTried = false; // allowed again later (e.g. the room became private): join then
     return;
+  }
+  if (!voice.active && !autoJoinTried && !session(voiceOffKey())) {
+    autoJoinTried = true;
+    voiceJoin();
   }
   if (s.iceServers) voice.ice = s.iceServers;
   const relayNow = Boolean(s.settings && s.settings.voiceRelay);
@@ -72,6 +82,7 @@ async function voiceJoin() {
   await send({ op: "voiceJoin" });
   if (!state || !state.voice.includes(state.you)) {
     stopStream();
+    setTimeout(() => { autoJoinTried = false; }, 3000); // maybe another request was still in flight: the next update tries again
     return; // the server refused (the error toast is already shown)
   }
   voice.active = true;
@@ -123,6 +134,7 @@ document.addEventListener("visibilitychange", () => {
 window.addEventListener("online", () => { if (voice.active) { unlockAudio(); pollSignals(); } });
 
 async function voiceLeave() {
+  session(voiceOffKey(), "1"); // the player chose to leave: no automatic re-join in this tab
   voiceStopLocal();
   await send({ op: "voiceLeave" });
   if (state) voiceSync(state);
@@ -299,5 +311,9 @@ function paintSpeaking() {
   $("voiceBtn").classList.toggle("speaking", Boolean(state && voice.speaking.has(state.you)));
 }
 
-$("voiceBtn").addEventListener("click", () => (voice.active ? voiceLeave() : voiceJoin()));
+$("voiceBtn").addEventListener("click", () => {
+  if (voice.active) return voiceLeave();
+  session(voiceOffKey(), null);
+  return voiceJoin();
+});
 $("muteBtn").addEventListener("click", toggleMute);

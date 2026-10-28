@@ -203,3 +203,9 @@ lasts 12 hours (renewed on each resume), and cannot be changed or made without t
 `GAME_TOKEN_SECRET` if you set one (a long random string; recommended), otherwise from the Redis connection string/token
 the server already has. A resume still follows the rules: removed players and players of the wrong public/private mode
 are refused and see the password form. Changing any of the three game passwords (or the signing secret) signs everyone out.
+
+### Voice joins by itself
+
+Everyone who may use voice (the admin and private players) joins it automatically when they enter the room; the
+browser asks for the microphone once. **Leave voice** is remembered for that tab (a refresh does not pull the player back
+in), and **Join voice** brings them back. If the microphone is refused the page asks only once; the button tries again.
