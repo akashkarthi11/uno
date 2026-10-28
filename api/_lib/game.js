@@ -413,10 +413,6 @@ function setPrivate(s, p, on, now) {
   addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
   const want = on ? 'private' : 'public';
   for (const m of [...s.members]) {
-    if (m.auto) { // a co-admin by password belongs in both kinds of game: they stay, and take the new kind
-      m.role = want;
-      continue;
-    }
     if (!m.admin && (m.role ?? 'public') !== want) {
       removeMember(s, m, now);
       addLog(s, `${m.name} was removed (this game is now ${want}).`);

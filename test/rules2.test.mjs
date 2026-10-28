@@ -348,7 +348,7 @@ test('co-admin: can pause, resume and restart the game (back to the lobby), an o
 
 /* ---------- the co-admin password (12345678) ---------- */
 
-test('co-admin password: signing in with 12345678 makes a co-admin at once, in a public or a private game', async () => {
+test('co-admin password: signing in with 12345678 makes a co-admin at once in a public game', async () => {
   const room = 'ca' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
   const A = admin.body.state.you;
@@ -371,29 +371,40 @@ test('co-admin password: signing in with 12345678 makes a co-admin at once, in a
     assert.equal((await call({ room, playerId: C, ...body })).code, 400, JSON.stringify(body) + ' is refused');
   }
   assert.equal((await call({ op: 'lobby', room, playerId: C })).body.state.started, false, 'restart works');
-
-  // the admin makes the game private: the password co-admin stays (an ordinary public player would be removed)
-  await call({ op: 'private', room, playerId: A, on: true });
-  const inPrivate = await call({ op: 'state', room, playerId: C });
-  assert.equal(inPrivate.body.state.canStart, true, 'still a co-admin after the switch');
-  assert.equal(inPrivate.body.state.canVoice, true, 'and in a private game they count as a private player (voice)');
-  const lateJoin = await call({ op: 'join', room, name: 'Late', password: '12345678' });
-  assert.equal(lateJoin.code, 200, 'the password also opens a private game');
-  assert.equal((await call({ op: 'join', room, name: 'Nope', password: '123456' })).code, 401, 'an ordinary public player still cannot');
-
-  await call({ op: 'private', room, playerId: A, on: false }); // and back to public: still there
-  assert.equal((await call({ op: 'state', room, playerId: C })).body.state.canStart, true);
 });
 
-test('co-admin password: a refresh keeps the co-admin, the admin can drop it, a normal sign-in loses it', async () => {
+test('co-admin password: a private game admits only 110299 and 281101 — not 12345678', async () => {
+  const room = 'ca' + Math.floor(Math.random() * 1e6);
+  const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
+  const A = admin.body.state.you;
+  const co = await call({ op: 'join', room, name: 'Co', password: '12345678' });
+  const C = co.body.state.you;
+
+  await call({ op: 'private', room, playerId: A, on: true }); // a password co-admin in the room is sent out, like any public player
+  const told = await call({ op: 'state', room, playerId: C });
+  assert.equal(told.body.kicked, true, 'removed when the game went private');
+  const resume = await call({ op: 'session', room, token: co.body.token });
+  assert.equal(resume.code, 401, 'and the refresh token does not get them back in');
+
+  const refused = await call({ op: 'join', room, name: 'Co', password: '12345678' });
+  assert.equal(refused.code, 401, 'the co-admin password is refused in a private game');
+  assert.match(refused.body.error, /private password/);
+  assert.equal((await call({ op: 'join', room, name: 'Pat', password: '123456' })).code, 401, 'as is the public password');
+  assert.equal((await call({ op: 'join', room, name: 'Priv', password: '281101' })).code, 200, 'the private password works');
+  assert.equal((await call({ op: 'join', room, name: 'Boss2', password: '110299' })).code, 200, 'and so does the admin password');
+
+  await call({ op: 'private', room, playerId: A, on: false }); // public again: the password works again
+  assert.equal((await call({ op: 'join', room, name: 'Co', password: '12345678' })).body.state.canStart, true);
+});
+
+test('co-admin password: a refresh keeps the co-admin in a public game, the admin can drop it, a normal sign-in loses it', async () => {
   const room = 'ca' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
   const co = await call({ op: 'join', room, name: 'Co', password: '12345678' });
   const C = co.body.state.you;
 
-  await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
-  const resumed = await call({ op: 'session', room, token: co.body.token }); // token issued in a public game, used in a private one
-  assert.equal(resumed.code, 200, 'a refresh works in the other kind of game too');
+  const resumed = await call({ op: 'session', room, token: co.body.token });
+  assert.equal(resumed.code, 200, 'a refresh keeps them in');
   assert.equal(resumed.body.state.canStart, true);
   assert.equal(resumed.body.state.you, C);
 
@@ -401,7 +412,6 @@ test('co-admin password: a refresh keeps the co-admin, the admin can drop it, a 
   assert.equal(dropped.code, 200, 'the real admin can still take it away');
   assert.equal((await call({ op: 'state', room, playerId: C })).body.state.canStart, false);
 
-  await call({ op: 'private', room, playerId: admin.body.state.you, on: false });
   const again = await call({ op: 'join', room, name: 'Co', password: '12345678', playerId: C });
   assert.equal(again.body.state.canStart, true, 'signing in with the password gives it back');
   const normal = await call({ op: 'join', room, name: 'Co', password: '123456', playerId: C });
