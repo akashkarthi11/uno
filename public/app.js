@@ -537,7 +537,7 @@ function renderGame(s) {
 
   // One light tap when the turn arrives (not on the first screen after a refresh, and never while paused).
   if (myTurn && wasMyTurn === false && !s.paused && s.turnLeft > 0) {
-    try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) { /* vibration not allowed here */ }
+    try { if (navigator.vibrate) navigator.vibrate(90); } catch (e) { /* vibration not allowed here */ }
   }
   wasMyTurn = myTurn;
   $("game").classList.toggle("myturn", myTurn);
