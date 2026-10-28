@@ -126,8 +126,8 @@ export default async function handler(req, res) {
       return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
     }
 
-    // A refresh: the browser shows the token it got when it signed in instead of typing the password again.
-    if (b.op === 'resume') {
+    // A refresh (op "session", not "resume": that one is the admin's un-pause): the browser shows the token it got when it signed in instead of typing the password again.
+    if (b.op === 'session') {
       const claim = verifyToken(b.token, code, now, TOKEN_SALT);
       if (!claim) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
       const existing = await readRoom(code);

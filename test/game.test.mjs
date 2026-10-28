@@ -933,7 +933,7 @@ test('refresh: a signed token puts the same player back at the table, and cannot
   assert.equal(typeof admin.body.token, 'string');
 
   // refresh as the admin: same seat, still the admin, no password involved
-  const back = await call({ op: 'resume', room, token: admin.body.token });
+  const back = await call({ op: 'session', room, token: admin.body.token });
   assert.equal(back.code, 200);
   assert.equal(back.body.state.you, admin.body.state.you);
   assert.equal(back.body.state.admin, true);
@@ -942,10 +942,10 @@ test('refresh: a signed token puts the same player back at the table, and cannot
   // forged, damaged, empty, or for another room
   const [body, sig] = pub.body.token.split('.');
   const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body, 'base64url')), role: 'admin' })).toString('base64url') + '.' + sig;
-  assert.equal((await call({ op: 'resume', room, token: forged })).code, 401, 'a changed role is rejected');
-  assert.equal((await call({ op: 'resume', room, token: pub.body.token + 'x' })).code, 401);
-  assert.equal((await call({ op: 'resume', room })).code, 401);
-  assert.equal((await call({ op: 'resume', room: room + 'z', token: pub.body.token })).code, 401, 'a token is for its own room');
+  assert.equal((await call({ op: 'session', room, token: forged })).code, 401, 'a changed role is rejected');
+  assert.equal((await call({ op: 'session', room, token: pub.body.token + 'x' })).code, 401);
+  assert.equal((await call({ op: 'session', room })).code, 401);
+  assert.equal((await call({ op: 'session', room: room + 'z', token: pub.body.token })).code, 401, 'a token is for its own room');
 
   // expired
   const claim = { r: room, p: pub.body.state.you, role: 'public', n: 'Pub' };
@@ -956,7 +956,7 @@ test('refresh: a signed token puts the same player back at the table, and cannot
   // removed players cannot come back with their old token
   const kicked = await call({ op: 'kick', room, playerId: admin.body.state.you, targetId: pub.body.state.you });
   assert.equal(kicked.code, 200);
-  const denied = await call({ op: 'resume', room, token: pub.body.token });
+  const denied = await call({ op: 'session', room, token: pub.body.token });
   assert.equal(denied.code, 401);
   assert.match(denied.body.error, /removed/);
 });
@@ -966,12 +966,25 @@ test('refresh respects public/private: a public token is refused once the game i
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
   const pub = await call({ op: 'join', room, name: 'Pub', password: '123456' });
   await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
-  const r = await call({ op: 'resume', room, token: pub.body.token });
+  const r = await call({ op: 'session', room, token: pub.body.token });
   assert.equal(r.code, 401);
   assert.match(r.body.error, /removed by the admin|private password/);
   const priv = await call({ op: 'join', room, name: 'Priv', password: '281101' });
-  assert.equal((await call({ op: 'resume', room, token: priv.body.token })).code, 200);
+  assert.equal((await call({ op: 'session', room, token: priv.body.token })).code, 200);
   await call({ op: 'private', room, playerId: admin.body.state.you, on: false });
-  assert.equal((await call({ op: 'resume', room, token: priv.body.token })).code, 401, 'and the reverse');
-  assert.equal((await call({ op: 'resume', room, token: admin.body.token })).code, 200, 'the admin works either way');
+  assert.equal((await call({ op: 'session', room, token: priv.body.token })).code, 401, 'and the reverse');
+  assert.equal((await call({ op: 'session', room, token: admin.body.token })).code, 200, 'the admin works either way');
+});
+
+test('API: the admin can pause and resume a game (resume must not be mistaken for a session check)', async () => {
+  const room = 'ps' + Math.floor(Math.random() * 1e6);
+  const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
+  await call({ op: 'join', room, name: 'B', password: '123456' });
+  const A = admin.body.state.you;
+  assert.equal((await call({ op: 'start', room, playerId: A })).code, 200);
+  const paused = await call({ op: 'pause', room, playerId: A });
+  assert.equal(paused.body.state.paused, true);
+  const resumed = await call({ op: 'resume', room, playerId: A });
+  assert.equal(resumed.code, 200, 'the un-pause works');
+  assert.equal(resumed.body.state.paused, false);
 });

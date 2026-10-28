@@ -208,7 +208,7 @@ async function resumeSession() {
   resetScreenCaches();
   try {
     playerId = store("uno-id-" + room) || null;
-    apply(await api({ op: "resume", token }));
+    apply(await api({ op: "session", token }));
     const me = state && state.players.find((p) => p.id === state.you);
     myName = (me && me.name) || store("uno-name") || "";
     enterRoom();
@@ -264,7 +264,7 @@ async function pollOnce() {
       state = null;
       apply(myPassword
         ? await api({ op: "join", name: myName, password: myPassword })
-        : await api({ op: "resume", token: session(tokenKey()) }));
+        : await api({ op: "session", token: session(tokenKey()) }));
     } else if (!data.unchanged) {
       quiet = 0;
       apply(data);
