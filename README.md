@@ -235,5 +235,9 @@ call. It is shown only while the game is public (a private game has no public pl
 - **🔔 Alerts** shows a notification when your turn starts while the page is in the background (and flashes the tab title).
   It needs the page to stay open: there is no push server, so a closed page cannot be notified. Uses a tiny service worker
   (`public/sw.js`) that caches nothing. Not available on iPhones in a normal browser tab.
-- **📊 Stats**: this room's wins / losses table and its last 10 games (stored with the room, so they go when the room expires,
-  a few hours after the last move), plus totals kept on the device (played, wins, losses, streaks).
+- **📊 Stats**: this room's wins / losses table and its last 10 games, plus totals kept on the device (played, wins, losses,
+  streaks). **Public and private games are kept completely apart**: each game is filed under the kind it was started as, a
+  public player sees only public stats, a private player only private, and the admin sees both on separate tabs. The room's
+  stats live with the room (they go a few hours after the last move); device totals stay on the device, also one set per kind.
+- **Alerts are per kind of game:** a separate switch for public and for private games, and the notifications carry the kind of game
+  ("Public game: it's your turn!") and never replace each other.

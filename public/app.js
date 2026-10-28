@@ -478,6 +478,7 @@ function render() {
   const s = state;
   $("privateChip").classList.toggle("hidden", !s.private);
   renderRelayBtn(s);
+  renderNotifyBtn(); // the alerts switch belongs to the kind of game on screen (public or private)
   applyTheme(s.settings && s.settings.theme); // every update carries the room's theme, so a change shows for everyone
   const inGame = s.started;
   // the sheet is only useful while it is still your turn and the card is still in your hand
@@ -1332,8 +1333,13 @@ $("copyLink").addEventListener("click", () => {
 
 /* ---------- alerts: a notification when it is my turn and this page is in the background ---------- */
 
+// Public and private games are separate everywhere: each has its own alerts switch, its own notifications (they never
+// replace each other) and its own stats.
 const BASE_TITLE = document.title;
-const notifyOn = () => store("uno-notify") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
+const modeOf = (s) => (s && s.private ? "private" : "public");
+const modeName = (m) => (m === "private" ? "Private game" : "Public game");
+const notifyKey = () => "uno-notify-" + modeOf(state);
+const notifyOn = () => store(notifyKey()) === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
 
 function renderNotifyBtn() {
   const btn = $("notifyBtn");
@@ -1341,19 +1347,19 @@ function renderNotifyBtn() {
   btn.classList.toggle("on", notifyOn());
   btn.title = typeof Notification === "undefined"
     ? "This browser cannot show notifications."
-    : "A notification when it is your turn while this page is in the background (keep the page open).";
+    : "A notification when it is your turn in a " + modeName(modeOf(state)).toLowerCase() + ", while this page is in the background (keep the page open). Public and private games have separate switches.";
 }
 
 async function toggleNotify() {
   if (typeof Notification === "undefined") { toast("This browser cannot show notifications."); return; }
   if (notifyOn()) {
-    store("uno-notify", "0");
+    store(notifyKey(), "0");
   } else {
     const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
     if (perm !== "granted") { toast("Notifications are blocked — allow them in the browser's site settings."); renderNotifyBtn(); return; }
-    store("uno-notify", "1");
+    store(notifyKey(), "1");
     registerAlertWorker();
-    toast("Alerts on: you'll get a notification on your turn.");
+    toast("Alerts on for " + modeName(modeOf(state)).toLowerCase() + "s.");
   }
   renderNotifyBtn();
 }
@@ -1366,26 +1372,40 @@ function registerAlertWorker() {
 /** Called when a new turn of mine starts. Only does anything while the page is hidden. */
 function notifyTurn() {
   if (!document.hidden || !notifyOn()) return;
-  document.title = "🔔 Your turn · " + BASE_TITLE;
-  const opts = { body: "It's your turn!", tag: "turn", renotify: true, vibrate: [120, 60, 120] };
-  const fallback = () => { try { new Notification(BASE_TITLE, opts); } catch (e) { /* e.g. Android needs the worker */ } };
+  const mode = modeOf(state);
+  const label = modeName(mode);
+  document.title = "🔔 Your turn · " + label;
+  // a different tag per kind of game and room, so a public and a private notification never replace each other
+  const opts = { body: label + ": it's your turn!", tag: "turn-" + mode + "-" + room, renotify: true, vibrate: [120, 60, 120] };
+  const title = BASE_TITLE + " · " + label;
+  const fallback = () => { try { new Notification(title, opts); } catch (e) { /* e.g. Android needs the worker */ } };
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.getRegistration().then((reg) => (reg ? reg.showNotification(BASE_TITLE, opts) : fallback())).catch(fallback);
+    navigator.serviceWorker.getRegistration().then((reg) => (reg ? reg.showNotification(title, opts) : fallback())).catch(fallback);
   } else fallback();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) document.title = BASE_TITLE; });
 renderNotifyBtn();
 if (notifyOn()) registerAlertWorker();
 
-/* ---------- stats and history ---------- */
+/* ---------- stats and history (public and private kept apart) ---------- */
 
-/** Totals kept on this device: counted once per finished game I played in. */
+const emptyStats = () => ({ played: 0, wins: 0, losses: 0, streak: 0, best: 0, keys: [] });
+
+/** Totals kept on this device, one set for public games and one for private games. */
+function deviceStatsAll() {
+  let raw;
+  try { raw = JSON.parse(store("uno-stats") || "{}"); } catch (e) { raw = {}; }
+  if (typeof raw.played === "number") raw = { public: raw }; // totals saved before the two were kept apart
+  return { public: { ...emptyStats(), ...(raw.public || {}) }, private: { ...emptyStats(), ...(raw.private || {}) } };
+}
+
+/** Counted once per finished game I played in, under the kind of game it was. */
 function recordDeviceStats(s, me) {
   if (!s.over || !s.gameNo || !s.seated) return;
+  const mode = s.gameMode === "private" ? "private" : "public";
   const key = room + "#" + s.gameNo;
-  let st;
-  try { st = JSON.parse(store("uno-stats") || "{}"); } catch (e) { st = {}; }
-  st = { played: 0, wins: 0, losses: 0, streak: 0, best: 0, keys: [], ...st };
+  const all = deviceStatsAll();
+  const st = all[mode];
   if (st.keys.includes(key)) return;
   st.keys = [...st.keys, key].slice(-30);
   st.played += 1;
@@ -1395,7 +1415,7 @@ function recordDeviceStats(s, me) {
     st.best = Math.max(st.best, st.streak);
   } else st.streak = 0;
   if (s.loser === me.name) st.losses += 1;
-  store("uno-stats", JSON.stringify(st));
+  store("uno-stats", JSON.stringify(all));
 }
 
 function statsTable(rows) {
@@ -1409,34 +1429,56 @@ function statsTable(rows) {
   return t;
 }
 
-function renderStats(stats) {
+let statsData = null; // what the server sent: { current, modes: { public?, private? } }
+let statsMode = "public";
+
+function renderStats() {
+  if (!statsData) return;
+  const modes = Object.keys(statsData.modes);
+  if (!modes.includes(statsMode)) statsMode = modes.includes(statsData.current) ? statsData.current : modes[0];
+  // only the admin can see both kinds; everyone else sees just the kind of game they are in
+  const tabs = $("statsTabs");
+  tabs.textContent = "";
+  tabs.classList.toggle("hidden", modes.length < 2);
+  if (modes.length > 1) {
+    for (const m of modes) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ghost" + (m === statsMode ? " on" : "");
+      b.textContent = m === "private" ? "🔒 Private" : "🌐 Public";
+      b.addEventListener("click", () => { statsMode = m; renderStats(); });
+      tabs.appendChild(b);
+    }
+  }
+  $("statsModeNote").textContent = modeName(statsMode) + "s only — public and private are never mixed.";
+  const d = statsData.modes[statsMode];
   const roomBox = $("statsRoom");
   roomBox.textContent = "";
-  if (!stats.table.length) { roomBox.className = "none"; roomBox.textContent = "No finished games in this room yet."; } else {
+  if (!d.table.length) { roomBox.className = "none"; roomBox.textContent = "No finished " + statsMode + " games in this room yet."; } else {
     roomBox.className = "";
-    roomBox.appendChild(statsTable(stats.table));
+    roomBox.appendChild(statsTable(d.table));
   }
   const hist = $("statsHistory");
   hist.textContent = "";
-  for (const g of stats.history) {
-    const d = document.createElement("div");
-    d.className = "game";
+  for (const g of d.history) {
+    const row = document.createElement("div");
+    row.className = "game";
     const when = new Date(g.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const order = g.ranking.map((n, i) => (i + 1) + ". " + n).join("  ");
     const head = document.createElement("b");
     head.textContent = "#" + g.no + " · " + when;
-    d.append(head, document.createTextNode("  " + (order || "ended early") + (g.loser ? "  — last: " + g.loser : "")));
-    hist.appendChild(d);
+    row.append(head, document.createTextNode("  " + (order || "ended early") + (g.loser ? "  — last: " + g.loser : "")));
+    hist.appendChild(row);
   }
-  if (!stats.history.length) { const n = document.createElement("div"); n.className = "none"; n.textContent = "—"; hist.appendChild(n); }
+  if (!d.history.length) { const n = document.createElement("div"); n.className = "none"; n.textContent = "—"; hist.appendChild(n); }
+  renderDeviceStats(statsMode);
 }
 
-function renderDeviceStats() {
-  let st;
-  try { st = JSON.parse(store("uno-stats") || "{}"); } catch (e) { st = {}; }
+function renderDeviceStats(mode) {
+  const st = deviceStatsAll()[mode];
   const box = $("statsDevice");
   box.textContent = "";
-  if (!st.played) { box.className = "none"; box.textContent = "No games played on this device yet."; return; }
+  if (!st.played) { box.className = "none"; box.textContent = "No " + mode + " games played on this device yet."; return; }
   box.className = "";
   box.appendChild(statsTable([{ name: "You", played: st.played, wins: st.wins, losses: st.losses }]));
   const line = document.createElement("div");
@@ -1447,12 +1489,17 @@ function renderDeviceStats() {
 
 async function openStats() {
   $("statsModal").classList.remove("hidden");
+  statsData = null;
+  statsMode = modeOf(state);
+  $("statsTabs").classList.add("hidden");
+  $("statsModeNote").textContent = "";
   $("statsRoom").className = "none";
   $("statsRoom").textContent = "Loading…";
   $("statsHistory").textContent = "";
-  renderDeviceStats();
+  renderDeviceStats(statsMode);
   try {
-    renderStats((await api({ op: "stats" })).stats);
+    statsData = (await api({ op: "stats" })).stats;
+    renderStats();
   } catch (e) {
     $("statsRoom").textContent = e.message;
   }

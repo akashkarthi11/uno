@@ -344,6 +344,7 @@ function start(s, p, now) {
   s.catchId = null;
   s.gameNo = (s.gameNo || 0) + 1;
   s.gameNames = seated(s).map((m) => m.name);
+  s.gameMode = s.private ? 'private' : 'public'; // which kind of game this is, for its stats and history
   s.turnAt = now;
   s.log = [];
   s.chat = []; // a new game starts with a clean chat
@@ -881,15 +882,21 @@ const canChallenge = (s) => {
 
 /* ---------------- stats and history ---------------- */
 
-/** Called once when a game ends: keeps the last 10 games and a wins / losses table for this room. */
+/**
+ * Called once when a game ends. Public and private games are kept completely apart: each has its own table of wins and
+ * losses and its own last 10 games, filed under the mode the game was started in.
+ */
 function recordGame(s) {
   if (s.recordedNo === s.gameNo) return;
   s.recordedNo = s.gameNo;
+  const mode = s.gameMode === 'private' ? 'private' : 'public';
   const names = s.gameNames || [];
-  s.history = [...(s.history || []), {
+  s.stats = s.stats || {};
+  const bucket = s.stats[mode] || { scores: {}, history: [] };
+  bucket.history = [...bucket.history, {
     no: s.gameNo, at: Date.now(), players: names, ranking: [...s.ranking], loser: s.loser || null, notice: s.notice || null,
   }].slice(-10);
-  const scores = { ...(s.scores || {}) };
+  const scores = { ...bucket.scores };
   for (const name of names) {
     const row = { played: 0, wins: 0, losses: 0, ...(scores[name] || {}) };
     row.played += 1;
@@ -897,15 +904,27 @@ function recordGame(s) {
     if (s.loser === name) row.losses += 1;
     scores[name] = row;
   }
-  s.scores = Object.fromEntries(Object.entries(scores).slice(-30));
+  bucket.scores = Object.fromEntries(Object.entries(scores).slice(-30));
+  s.stats[mode] = bucket;
 }
 
-/** What the Stats window shows: this room's table and its last games (kept as long as the room lives). */
-export function statsView(s) {
-  const table = Object.entries(s.scores || {})
-    .map(([name, r]) => ({ name, ...r }))
-    .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
-  return { table, history: [...(s.history || [])].reverse() };
+/**
+ * What the Stats window shows. A public player sees only public games, a private player only private games; the admin
+ * sees both, each on its own. Kept as long as the room lives.
+ */
+export function statsView(s, me) {
+  const modes = me.admin ? ['public', 'private'] : [me.role === 'private' ? 'private' : 'public'];
+  const out = {};
+  for (const m of modes) {
+    const b = (s.stats && s.stats[m]) || { scores: {}, history: [] };
+    out[m] = {
+      table: Object.entries(b.scores)
+        .map(([name, r]) => ({ name, ...r }))
+        .sort((a, c) => c.wins - a.wins || a.losses - c.losses || a.name.localeCompare(c.name)),
+      history: [...b.history].reverse(),
+    };
+  }
+  return { current: s.private ? 'private' : 'public', modes: out };
 }
 
 /* ---------------- output ---------------- */
@@ -934,6 +953,7 @@ export function view(s, me, now) {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
     gameNo: s.gameNo || 0,
+    gameMode: s.gameMode || (s.private ? 'private' : 'public'),
     pend: s.pend ? { kind: s.pend.kind, n: s.pend.n, by: (byId(s, s.pend.by) || {}).name || '', canChallenge: canChallenge(s) } : null,
     catchable: catchValid(s) ? s.catchId : null, // someone with one card left who did not say GrowX!
     turnAt: s.turnAt, // changes whenever a new turn starts, even when the same player goes again (🔁 Play Again)

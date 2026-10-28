@@ -264,7 +264,7 @@ test('stats: every finished game is kept (last 10) and the room table counts win
     finishWith(s, i === 3 ? b : a, i === 3 ? a : b, now);
     assert.equal(s.over, true);
   }
-  const st = G.statsView(s);
+  const st = G.statsView(s, a).modes.public;
   assert.equal(st.history.length, 3);
   assert.equal(st.history[0].no, 3, 'newest first');
   assert.deepEqual(st.history[0].players.sort(), ['Ann', 'Bob']);
@@ -276,12 +276,12 @@ test('stats: every finished game is kept (last 10) and the room table counts win
   // a game that ends when someone leaves is recorded once; going back to the lobby does not add a game
   G.act(s, a, { op: 'start' }, now);
   G.act(s, b, { op: 'leave' }, now);
-  assert.equal(G.statsView(s).history.length, 4);
+  assert.equal(G.statsView(s, a).modes.public.history.length, 4);
   G.act(s, a, { op: 'lobby' }, now);
-  assert.equal(G.statsView(s).history.length, 4);
+  assert.equal(G.statsView(s, a).modes.public.history.length, 4);
   const bob2 = G.join(s, { name: 'Bob', admin: false }, now);
   for (let i = 0; i < 12; i++) { G.act(s, a, { op: 'start' }, now); finishWith(s, a, bob2, now); }
-  assert.equal(G.statsView(s).history.length, 10, 'only the last 10 games are kept');
+  assert.equal(G.statsView(s, a).modes.public.history.length, 10, 'only the last 10 games are kept');
 });
 
 test('API: stats are available to members of the room only', async () => {
@@ -289,6 +289,38 @@ test('API: stats are available to members of the room only', async () => {
   const a = await call({ op: 'join', room, name: 'Boss', password: '110299' });
   const r = await call({ op: 'stats', room, playerId: a.body.state.you });
   assert.equal(r.code, 200);
-  assert.deepEqual(r.body.stats, { table: [], history: [] });
+  assert.deepEqual(r.body.stats, { current: 'public', modes: { public: { table: [], history: [] }, private: { table: [], history: [] } } }, 'the admin sees both, each empty');
   assert.equal((await call({ op: 'stats', room, playerId: 'nobody' })).code, 400);
+});
+
+test('stats: public and private games are kept apart, and each kind of player sees only their own', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const pub = G.join(s, { name: 'Pub', admin: false, role: 'public' }, now);
+
+  G.act(s, admin, { op: 'start' }, now); // a public game, won by Boss
+  assert.equal(G.view(s, admin, now).gameMode, 'public');
+  finishWith(s, admin, pub, now);
+
+  G.act(s, admin, { op: 'lobby' }, now);
+  G.act(s, admin, { op: 'private', on: true }, now); // the public player is removed
+  const priv = G.join(s, { name: 'Priv', admin: false, role: 'private' }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  assert.equal(G.view(s, admin, now).gameMode, 'private');
+  finishWith(s, priv, admin, now); // a private game, won by Priv
+
+  const both = G.statsView(s, admin);
+  assert.equal(both.current, 'private');
+  assert.deepEqual(both.modes.public.table.map((r) => [r.name, r.wins, r.losses]), [['Boss', 1, 0], ['Pub', 0, 1]]);
+  assert.deepEqual(both.modes.private.table.map((r) => [r.name, r.wins, r.losses]), [['Priv', 1, 0], ['Boss', 0, 1]]);
+  assert.equal(both.modes.public.history.length, 1);
+  assert.equal(both.modes.private.history.length, 1);
+  assert.equal(both.modes.public.history[0].players.includes('Priv'), false, 'nothing from the private game leaks into public');
+  assert.equal(both.modes.private.history[0].players.includes('Pub'), false);
+
+  const asPriv = G.statsView(s, priv);
+  assert.deepEqual(Object.keys(asPriv.modes), ['private'], 'a private player sees private games only');
+  const asPub = G.statsView(s, G.join(s, { name: 'Pub2', admin: false, role: 'public' }, now));
+  assert.deepEqual(Object.keys(asPub.modes), ['public'], 'a public player sees public games only');
 });

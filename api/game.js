@@ -180,8 +180,9 @@ export default async function handler(req, res) {
     // Stats window: this room's table and its last games (read-only, any member of the room).
     if (b.op === 'stats') {
       const s = await readRoom(code);
-      if (!s || !s.members.some((m) => m.id === b.playerId)) throw new G.GameError('You are not in this room — rejoin.');
-      return res.json({ stats: G.statsView(s) });
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      if (!me) throw new G.GameError('You are not in this room — rejoin.');
+      return res.json({ stats: G.statsView(s, me) });
     }
 
     // Voice-chat signalling: tiny messages passed between two people who are both in the voice list.
