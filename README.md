@@ -10,7 +10,7 @@ in Upstash Redis.
   Draw Two, Wild, Wild Draw Four only when you hold no card of the current colour). With 2 cards in hand, press
   **GrowX!** before playing the second-to-last card or draw 1 extra card.
 - Play continues after someone empties their hand. **The last player still holding cards loses.**
-- A turn left idle for 30 s: the player draws 1 penalty card and the turn moves to the next player
+- A turn left idle for the turn time (30 s by default; the admin sets 15-120 s in the lobby): the player draws 1 penalty card and the turn moves to the next player
   (if they had already drawn a card that turn, it just passes).
 - Three passwords: `110299` = admin (only the admin can start a game), `123456` = public player,
   `281101` = private player.

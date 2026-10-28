@@ -12,7 +12,9 @@ export const HAND_MAX = 10;
 const MAX_LOG = 40;
 export const ONLINE_MS = 27000; // a player not heard from for this long counts as offline (kept under the 30 s turn)
 export const HEARTBEAT_MS = 12000; // how often an idle client refreshes its presence (each refresh is a few database commands)
-export const TURN_MS = 30000; // time a player has for their turn before it is played for them
+export const TURN_MS = 30000; // default time a player has for their turn; the admin can change it in the lobby
+export const TURN_MIN_SECS = 15;
+export const TURN_MAX_SECS = 120;
 const PRUNE_MS = 120000; // lobby members unseen this long are dropped (a locked phone must not lose its seat)
 const VOICE_GRACE_MS = 60000; // a short drop-out keeps your place in the voice list
 
@@ -67,6 +69,7 @@ export const SUPER_KINDS = ['again', 'sweep', 'blast', 'swap', 'gift', 'master']
 export const THEMES = ['growx', 'classic', 'midnight'];
 /** How many cards each player is dealt (the admin sets it in the lobby; 5 unless changed). */
 const handSizeOf = (s) => (s.settings && Number.isInteger(s.settings.handSize) ? s.settings.handSize : DEFAULT_HAND);
+const turnMsOf = (s) => (s.settings && Number.isInteger(s.settings.turnSecs) ? s.settings.turnSecs * 1000 : TURN_MS);
 const voiceRelayOf = (s) => Boolean(s.settings && s.settings.voiceRelay);
 const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
@@ -237,7 +240,7 @@ function tickGame(s, now) {
     return true;
   }
   const idle = now - s.turnAt;
-  if (idle > TURN_MS) {
+  if (idle > turnMsOf(s)) {
     // time is up: nothing is played for them. If they never picked up a card this turn they get 1 penalty card,
     // then the turn moves to the next player.
     if (s.drawnId == null) {
@@ -335,15 +338,18 @@ function start(s, p, now) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
-  const { supers, theme, handSize, voiceRelay } = b || {};
+  const { supers, theme, handSize, voiceRelay, turnSecs } = b || {};
   const hasSupers = supers && typeof supers === 'object';
-  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined) fail('Bad settings.');
+  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined) fail('Bad settings.');
+  if (turnSecs !== undefined && !(Number.isInteger(turnSecs) && turnSecs >= TURN_MIN_SECS && turnSecs <= TURN_MAX_SECS)) {
+    fail(`Turn time must be a whole number of seconds from ${TURN_MIN_SECS} to ${TURN_MAX_SECS}.`);
+  }
   if (voiceRelay !== undefined && typeof voiceRelay !== 'boolean') fail('Bad settings.');
   if (theme !== undefined && !THEMES.includes(theme)) fail('Unknown theme.');
   if (handSize !== undefined && !(Number.isInteger(handSize) && handSize >= HAND_MIN && handSize <= HAND_MAX)) {
     fail(`Cards per player must be a whole number from ${HAND_MIN} to ${HAND_MAX}.`);
   }
-  if ((hasSupers || handSize !== undefined) && s.started && !s.over) fail('Game settings can only be changed in the lobby.');
+  if ((hasSupers || handSize !== undefined || turnSecs !== undefined) && s.started && !s.over) fail('Game settings can only be changed in the lobby.');
   const next = superSettings(s);
   if (hasSupers) {
     for (const kind of SUPER_KINDS) {
@@ -353,6 +359,7 @@ function setConfig(s, p, b) {
   // the theme and the voice route can be changed at any time, even during a game
   s.settings = {
     voiceRelay: voiceRelay !== undefined ? voiceRelay : voiceRelayOf(s),
+    turnSecs: turnSecs !== undefined ? turnSecs : turnMsOf(s) / 1000,
     supers: next,
     theme: theme !== undefined ? theme : themeOf(s),
     handSize: handSize !== undefined ? handSize : handSizeOf(s),
@@ -770,7 +777,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s) },
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), turnSecs: turnMsOf(s) / 1000 },
     canVoice: canVoice(me),
     voice: canVoice(me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };
@@ -780,7 +787,7 @@ export function view(s, me, now) {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
     paused: Boolean(s.paused), pauseNote: s.paused ? s.pauseNote || '' : '',
-    turnMs: TURN_MS, turnLeft: s.over ? 0 : Math.max(0, TURN_MS - ((s.paused ? s.pausedAt : now) - s.turnAt)),
+    turnMs: turnMsOf(s), turnLeft: s.over ? 0 : Math.max(0, turnMsOf(s) - ((s.paused ? s.pausedAt : now) - s.turnAt)),
     hand: [...me.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)),
     playable: myTurn && !s.paused
       ? me.hand.filter((c) => (s.drawnId == null || c.id === s.drawnId) && playable(s, c, me)).map((c) => c.id)

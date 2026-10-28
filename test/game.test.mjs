@@ -897,3 +897,30 @@ test('co-admin: can start games and choose settings, nothing else; only the admi
   s.over = true; // game over: the dropped co-admin can no longer start the next one
   assert.throws(() => G.act(s, pub, { op: 'start' }, now), /Only the admin/);
 });
+
+test('turn time: the admin sets it in the lobby (15-120 s), it is used for the timeout and shown to everyone', () => {
+  const s = G.newRoom('t');
+  let now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const b = G.join(s, { name: 'B', admin: false, role: 'public' }, now);
+  assert.equal(G.view(s, b, now).settings.turnSecs, 30, 'default is 30 seconds');
+  assert.throws(() => G.act(s, b, { op: 'config', turnSecs: 20 }, now), /Only the admin/);
+  for (const bad of [14, 121, 22.5, '30', null]) {
+    assert.throws(() => G.act(s, admin, { op: 'config', turnSecs: bad }, now), /Turn time must be|Bad settings/);
+  }
+  G.act(s, admin, { op: 'config', turnSecs: 15 }, now);
+  G.act(s, admin, { op: 'config', theme: 'classic' }, now); // other changes keep it
+  assert.equal(G.view(s, b, now).settings.turnSecs, 15);
+
+  G.act(s, admin, { op: 'start' }, now);
+  assert.equal(G.view(s, b, now).turnMs, 15000);
+  assert.throws(() => G.act(s, admin, { op: 'config', turnSecs: 60 }, now), /only be changed in the lobby/);
+  const cur = s.members.find((m) => m.id === s.seats[s.cur]);
+  const before = cur.hand.length;
+  s.turnAt = now - 14000; // 14 s into a 15 s turn: still theirs
+  admin.lastSeen = b.lastSeen = now;
+  assert.equal(G.tick(s, now), false);
+  s.turnAt = now - 16000; // 16 s: out of time
+  assert.equal(G.tick(s, now), true);
+  assert.equal(cur.hand.length, before + 1, 'penalty card after the shorter time');
+});

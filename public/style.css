@@ -596,6 +596,10 @@ html[data-theme="midnight"] .opp .avatar, html[data-theme="midnight"] .avatar { 
 /* admin-only settings panel: small labels and the cards-per-player stepper */
 .set-label { font-size: 13px; font-weight: 700; color: var(--muted); margin: 0 0 6px; text-transform: none; }
 #superList { margin-top: 2px; }
+#turnRow { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+#turnRow b { min-width: 40px; text-align: center; font-size: 22px; }
+#turnRow small { color: var(--muted); }
+#turnRow button.icon { width: 40px; height: 40px; }
 #handSizeRow { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 #handSizeRow b { min-width: 32px; text-align: center; font-size: 22px; }
 #handSizeRow small { color: var(--muted); }

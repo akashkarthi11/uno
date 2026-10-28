@@ -874,6 +874,19 @@ function setHandSize(n) {
   render();
   send({ op: "config", handSize: next }, () => { state = before; render(); });
 }
+/** Seconds each player gets per turn: − / + in steps of 5 (admin only, lobby only). */
+function setTurnSecs(n) {
+  if (busy || !state || !state.canStart) return;
+  const cur = (state.settings && state.settings.turnSecs) || 30;
+  const next = Math.max(15, Math.min(120, n));
+  if (next === cur) return;
+  const before = state;
+  state = { ...state, settings: { ...state.settings, turnSecs: next } };
+  render();
+  send({ op: "config", turnSecs: next }, () => { state = before; render(); });
+}
+$("turnMinus").addEventListener("click", () => setTurnSecs(((state && state.settings && state.settings.turnSecs) || 30) - 5));
+$("turnPlus").addEventListener("click", () => setTurnSecs(((state && state.settings && state.settings.turnSecs) || 30) + 5));
 $("handMinus").addEventListener("click", () => setHandSize(((state && state.settings && state.settings.handSize) || 5) - 1));
 $("handPlus").addEventListener("click", () => setHandSize(((state && state.settings && state.settings.handSize) || 5) + 1));
 
@@ -885,6 +898,10 @@ function renderSettings(s) {
   $("handSizeVal").textContent = hs;
   $("handMinus").disabled = hs <= 3;
   $("handPlus").disabled = hs >= 10;
+  const ts = (s.settings && s.settings.turnSecs) || 30;
+  $("turnSecsVal").textContent = ts;
+  $("turnMinus").disabled = ts <= 15;
+  $("turnPlus").disabled = ts >= 120;
   renderThemePicker(s);
   const list = $("superList");
   if (!list.children.length) {
