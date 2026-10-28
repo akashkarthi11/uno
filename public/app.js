@@ -822,7 +822,7 @@ function renderThemePicker(s) {
       b.children[1].textContent = t.name;
       b.querySelector("small").textContent = t.note;
       b.addEventListener("click", () => {
-        if (busy || !state || !state.admin || ((state.settings && state.settings.theme) || "growx") === t.k) return;
+        if (busy || !state || !state.canStart || ((state.settings && state.settings.theme) || "growx") === t.k) return;
         const before = state;
         state = { ...state, settings: { ...state.settings, theme: t.k } }; // the new look appears at once
         applyTheme(t.k);
@@ -834,13 +834,13 @@ function renderThemePicker(s) {
   }
   for (const b of list.children) {
     b.setAttribute("aria-pressed", String(b.dataset.k === current));
-    b.disabled = !s.admin; // only the admin can change it; everyone else sees what is in use
+    b.disabled = !s.canStart; // only the admin can change it; everyone else sees what is in use
   }
 }
 
 /** How many cards each player is dealt: a − / + stepper (admin only, lobby only). */
 function setHandSize(n) {
-  if (busy || !state || !state.admin) return;
+  if (busy || !state || !state.canStart) return;
   const cur = (state.settings && state.settings.handSize) || 5;
   const next = Math.max(3, Math.min(10, n));
   if (next === cur) return;
@@ -854,8 +854,8 @@ $("handPlus").addEventListener("click", () => setHandSize(((state && state.setti
 
 function renderSettings(s) {
   // these are the admin's controls: public and private players don't see the panel at all (the theme still applies to them)
-  $("settings").classList.toggle("hidden", !s.admin);
-  if (!s.admin) return;
+  $("settings").classList.toggle("hidden", !s.canStart);
+  if (!s.canStart) return;
   const hs = (s.settings && s.settings.handSize) || 5;
   $("handSizeVal").textContent = hs;
   $("handMinus").disabled = hs <= 3;
@@ -883,13 +883,13 @@ function renderSettings(s) {
     const row = list.querySelector('[data-k="' + info.k + '"]');
     const box = row.querySelector("input");
     box.checked = on;
-    box.disabled = !s.admin; // only the admin can change it; everyone else sees what is in play
+    box.disabled = !s.canStart; // only the admin can change it; everyone else sees what is in play
     row.classList.toggle("off", !on);
     if (on) total += info.n;
   }
   $("deckCount").textContent = "Deck: " + total + " cards";
-  $("supersAll").classList.toggle("hidden", !s.admin);
-  $("supersNone").classList.toggle("hidden", !s.admin);
+  $("supersAll").classList.toggle("hidden", !s.canStart);
+  $("supersNone").classList.toggle("hidden", !s.canStart);
 }
 
 $("supersAll").addEventListener("click", () => sendSupers(Object.fromEntries(SUPER_INFO.map((i) => [i.k, true]))));

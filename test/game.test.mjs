@@ -854,7 +854,7 @@ test('quiet polls: a heartbeat alone does not change the version, a change in wh
   assert.ok(moved.body.state, 'presence changed → full state');
 });
 
-test('co-admin: can start games and nothing else; only the admin grants or drops it, any time', () => {
+test('co-admin: can start games and choose settings, nothing else; only the admin grants or drops it, any time', () => {
   const s = G.newRoom('t');
   let now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
@@ -873,7 +873,15 @@ test('co-admin: can start games and nothing else; only the admin grants or drops
 
   // nothing but starting
   assert.throws(() => G.act(s, pub, { op: 'private', on: true }, now), /Only the admin/);
-  assert.throws(() => G.act(s, pub, { op: 'config', handSize: 7 }, now), /Only the admin/);
+  // ...except the game settings: super cards, cards per player and theme
+  G.act(s, pub, { op: 'config', handSize: 7 }, now);
+  G.act(s, pub, { op: 'config', theme: 'midnight' }, now);
+  G.act(s, pub, { op: 'config', supers: { blast: false } }, now);
+  assert.equal(G.view(s, pub, now).settings.handSize, 7);
+  assert.equal(G.view(s, pub, now).settings.theme, 'midnight');
+  assert.equal(G.view(s, pub, now).settings.supers.blast, false);
+  assert.throws(() => G.act(s, priv, { op: 'config', handSize: 6 }, now), /Only the admin/, 'an ordinary player still cannot');
+  G.act(s, admin, { op: 'config', handSize: 5, theme: 'growx', supers: { blast: true } }, now);
   assert.throws(() => G.act(s, pub, { op: 'kick', targetId: priv.id }, now), /Only the admin/);
   assert.equal(G.canVoice(pub), false, 'a public co-admin gets no voice chat');
 

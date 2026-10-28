@@ -333,7 +333,7 @@ function start(s, p, now) {
 
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
-  if (!p.admin) fail('Only the admin can do that.');
+  if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
   const { supers, theme, handSize } = b || {};
   const hasSupers = supers && typeof supers === 'object';
   if (!hasSupers && theme === undefined && handSize === undefined) fail('Bad settings.');
