@@ -1,5 +1,5 @@
 import * as G from './_lib/game.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -45,6 +45,12 @@ export default async function handler(req, res) {
   const now = Date.now();
 
   try {
+    // Admin-only speed check of each configured database, measured from this function (see README).
+    if (b.op === 'bench') {
+      if (String(b.password ?? '') !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Admin only.', denied: true });
+      return res.json({ region: process.env.VERCEL_REGION || 'local', ...(await benchmark()) });
+    }
+
     if (b.op === 'join') {
       const pw = String(b.password ?? '');
       const admin = pw === ADMIN_PASSWORD;

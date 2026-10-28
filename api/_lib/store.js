@@ -2,24 +2,110 @@
 import { randomUUID } from 'node:crypto';
 import { newRoom } from './game.js';
 
-// A second database added with the prefix MUM_ (e.g. a Mumbai one created next to the original) wins automatically;
-// otherwise the original Upstash variables are used. Switching databases needs no code change.
+// Which databases exist (either, or both):
+//   tcp   MUMREDIS_URL          a standard redis:// / rediss:// address (e.g. a free Redis Cloud database)
+//   rest  MUM_KV_REST_API_* (an Upstash database added with the prefix MUM_), else UPSTASH_REDIS_REST_* / KV_REST_API_*
+// With both, GAME_PRIMARY ("tcp" or "rest") says which one is used; the other takes over while the primary is failing.
+// With neither (local runs and tests) rooms live in memory.
+const TCP_URL = process.env.MUMREDIS_URL;
 const URL = process.env.MUM_KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const TOKEN = process.env.MUM_KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-export const usingRedis = Boolean(URL && TOKEN);
+const KINDS = [TCP_URL && 'tcp', URL && TOKEN && 'rest'].filter(Boolean);
+if (KINDS.length === 2 && process.env.GAME_PRIMARY === 'rest') KINDS.reverse();
+export const usingRedis = KINDS.length > 0;
 
 const TTL_SECONDS = 6 * 60 * 60;
+const CALL_TIMEOUT_MS = 3000; // a database that does not answer in this time counts as failing
+const DOWN_MS = 30000; // after a failure the other database is used for this long, then the primary gets another try
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const roomKey = (code) => `growx:room:${code}`;
 const lockKey = (code) => `growx:lock:${code}`;
 
-let redis = null;
-async function client() {
-  if (!redis) {
-    const { Redis } = await import('@upstash/redis');
-    redis = new Redis({ url: URL, token: TOKEN });
+const clients = new Map(); // kind -> connection
+const downUntil = new Map(); // kind -> time until which it is skipped
+
+async function connect(kind) {
+  if (!clients.has(kind)) clients.set(kind, kind === 'tcp' ? await tcpClient() : await restClient());
+  return clients.get(kind);
+}
+
+async function restClient() {
+  const { Redis } = await import('@upstash/redis');
+  return new Redis({ url: URL, token: TOKEN });
+}
+
+/** Wraps an ioredis connection so it answers to the same calls the REST client does (the rest of this file uses those). */
+async function tcpClient() {
+  const { default: IORedis } = await import('ioredis');
+  // One connection per warm function instance; it is reused by every request that instance serves.
+  const c = new IORedis(TCP_URL, { maxRetriesPerRequest: 1, connectTimeout: 2500, keepAlive: 10000, enableAutoPipelining: true });
+  c.on('error', () => {}); // a dropped connection is retried by the next command; never crash the function
+  return {
+    get: (key) => c.get(key),
+    set: async (key, val, o = {}) => {
+      const args = [key, val];
+      if (o.ex) args.push('EX', o.ex);
+      if (o.px) args.push('PX', o.px);
+      if (o.nx) args.push('NX');
+      return c.set(...args);
+    },
+    del: (key) => c.del(key),
+    rpush: (key, val) => c.rpush(key, val),
+    expire: (key, secs) => c.expire(key, secs),
+    lpop: (key, count) => c.lpop(key, count),
+  };
+}
+
+const withTimeout = (p) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('database timeout')), CALL_TIMEOUT_MS))]);
+
+/** Runs one command on the primary; if that fails, marks it down for a while and runs it on the other database. */
+async function run(name, ...args) {
+  const now = Date.now();
+  const order = KINDS.filter((k) => (downUntil.get(k) || 0) <= now);
+  let lastErr;
+  for (const kind of order.length ? order : KINDS) {
+    try {
+      const c = await connect(kind);
+      return await withTimeout(c[name](...args));
+    } catch (e) {
+      lastErr = e;
+      if (KINDS.length > 1) downUntil.set(kind, Date.now() + DOWN_MS);
+    }
   }
-  return redis;
+  throw lastErr;
+}
+
+/** Same calls as the REST client; every one goes through run() so failover applies everywhere. */
+const db = {
+  get: (...a) => run('get', ...a),
+  set: (...a) => run('set', ...a),
+  del: (...a) => run('del', ...a),
+  rpush: (...a) => run('rpush', ...a),
+  expire: (...a) => run('expire', ...a),
+  lpop: (...a) => run('lpop', ...a),
+};
+async function client() {
+  return db;
+}
+
+/** Median time of a few reads on each configured database, measured from where this code runs (the Vercel function). */
+export async function benchmark(rounds = 15) {
+  const out = {};
+  for (const kind of KINDS) {
+    const times = [];
+    let errors = 0;
+    try {
+      const c = await connect(kind);
+      await withTimeout(c.get('growx:bench')); // connection set-up is not counted
+      for (let n = 0; n < rounds; n++) {
+        const t0 = Date.now();
+        try { await withTimeout(c.get('growx:bench')); times.push(Date.now() - t0); } catch { errors++; }
+      }
+    } catch { errors = rounds; }
+    times.sort((a, b) => a - b);
+    out[kind] = { medianMs: times.length ? times[Math.floor(times.length / 2)] : null, bestMs: times[0] ?? null, errors };
+  }
+  return { primary: KINDS[0] || 'memory', results: out };
 }
 
 const mem = new Map();

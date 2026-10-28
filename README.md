@@ -156,3 +156,23 @@ name in `THEMES` (`api/_lib/game.js`) and an entry in `THEME_INFO` (`public/app.
 The lobby's **Admin settings** panel is shown to the admin only (public and private players never see it, though the chosen
 theme and card choices apply to them). It controls: the **table theme**, the **cards dealt to each player** (3–10, default 5,
 lobby only) and which **super cards** are in the deck (lobby only). The server refuses these changes from anyone else.
+
+## Two databases: fastest first, the other as backup
+
+The room store can use either or both of:
+
+| Kind | Environment variables | Notes |
+|---|---|---|
+| `tcp` | `MUMREDIS_URL` (a `redis://` / `rediss://` address, e.g. Redis Cloud) | uses the `ioredis` package |
+| `rest` | `MUM_KV_REST_API_*`, else `UPSTASH_REDIS_REST_*` / `KV_REST_API_*` (Upstash) | uses `@upstash/redis` |
+
+With both configured, `tcp` is primary unless `GAME_PRIMARY=rest`. If the primary errors or takes over 3 s, the other
+database serves requests for 30 s, then the primary is tried again. The two databases do not copy each other, so a
+switch means the table starts empty and players rejoin; it keeps the game available, it does not carry a game over.
+
+To pick the primary, ask the live function to time both (admin password required):
+
+    curl -s -X POST https://<your-site>/api/game -H 'Content-Type: application/json' \
+      -d '{"op":"bench","room":"main","password":"<admin password>"}'
+
+It answers with the function's region and each database's median read time in ms; make the lower one primary.
