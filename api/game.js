@@ -1,9 +1,11 @@
 import * as G from './_lib/game.js';
+import { signToken, verifyToken } from './_lib/token.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
 const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
+const TOKEN_SALT = ADMIN_PASSWORD + '|' + PLAYER_PASSWORD + '|' + PRIVATE_PASSWORD; // new passwords sign everyone out
 
 // Voice chat connects browsers directly; STUN finds the route. Add a TURN relay for strict networks by setting
 // GAME_TURN_URLS (comma separated), GAME_TURN_USER and GAME_TURN_PASS.
@@ -113,13 +115,40 @@ export default async function handler(req, res) {
           return res.status(401).json({ error: msg, denied: true });
         }
       }
+      let claim;
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
         const role = admin ? 'admin' : pw === PRIVATE_PASSWORD ? 'private' : 'public';
         const me = G.join(s, { name: b.name, admin, role, playerId: b.playerId }, now);
+        claim = { r: code, p: me.id, role, n: me.name };
         return G.view(s, me, now);
       });
-      return res.json({ state: withIce(state) });
+      return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
+    }
+
+    // A refresh: the browser shows the token it got when it signed in instead of typing the password again.
+    if (b.op === 'resume') {
+      const claim = verifyToken(b.token, code, now, TOKEN_SALT);
+      if (!claim) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      const existing = await readRoom(code);
+      if (existing && (existing.kicked || []).includes(claim.p)) {
+        return res.status(401).json({ error: 'You were removed by the admin.', denied: true });
+      }
+      // The same rule as a fresh sign-in: a private game admits private players only, a public one public players only.
+      if (claim.role !== 'admin' && (claim.role === 'private') !== Boolean(existing && existing.private)) {
+        return res.status(401).json({
+          error: claim.role === 'public' ? 'Ask the admin to start the game and share the private password.' : 'This game is public now — sign in again.',
+          denied: true,
+        });
+      }
+      let renewed;
+      const state = await withRoom(code, (s) => {
+        G.tick(s, now);
+        const me = G.join(s, { name: claim.n, admin: claim.role === 'admin', role: claim.role, playerId: claim.p }, now);
+        renewed = { r: code, p: me.id, role: claim.role, n: me.name };
+        return G.view(s, me, now);
+      });
+      return res.json({ state: withIce(state), token: signToken(renewed, now, TOKEN_SALT) });
     }
 
     if (b.op === 'state') {

@@ -21,6 +21,20 @@ let polling = false;
 let busy = false;
 let toastTimer = null;
 
+/**
+ * The sign-in token lives in sessionStorage: it survives a refresh of this tab and is gone when the tab is closed,
+ * so a shared computer never keeps someone's seat (or admin rights) around.
+ */
+function session(key, value) {
+  try {
+    if (value === undefined) return sessionStorage.getItem(key);
+    if (value === null) sessionStorage.removeItem(key);
+    else sessionStorage.setItem(key, value);
+  } catch (e) { /* storage may be blocked */ }
+  return null;
+}
+const tokenKey = () => "uno-token-" + room;
+
 function store(key, value) {
   try {
     if (value === undefined) return localStorage.getItem(key);
@@ -122,6 +136,7 @@ function resetScreenCaches() {
 }
 
 function apply(data) {
+  if (data.token) session(tokenKey(), data.token); // renewed on every sign-in / resume
   if (data.state) {
     // Responses can arrive out of order; never replace newer state with older.
     if (state && data.state.you === state.you && data.state.version < state.version) return;
@@ -153,11 +168,37 @@ async function join() {
   }
   $("joinBtn").disabled = false;
   store("uno-name", myName);
+  enterRoom();
+}
+
+function enterRoom() {
   history.replaceState(null, "", "?room=" + encodeURIComponent(room));
   $("roomName").textContent = room;
   $("roomInfo").classList.remove("hidden");
   $("joinScreen").classList.add("hidden");
   startPolling();
+}
+
+/** After a refresh: show the token from the earlier sign-in; the server checks it and puts this player back at the table. */
+async function resumeSession() {
+  const token = session(tokenKey());
+  if (!token) return;
+  $("joinScreen").classList.add("hidden"); // no flash of the sign-in form while the check runs
+  toast("Reconnecting…");
+  removed = false;
+  resetScreenCaches();
+  try {
+    playerId = store("uno-id-" + room) || null;
+    apply(await api({ op: "resume", token }));
+    const me = state && state.players.find((p) => p.id === state.you);
+    myName = (me && me.name) || store("uno-name") || "";
+    enterRoom();
+  } catch (e) {
+    // expired, signed out by a password change, or removed: show the normal sign-in form
+    if (e.denied || /Session expired/.test(e.message)) session(tokenKey(), null);
+    $("joinScreen").classList.remove("hidden");
+    if (e.denied) toast(e.message);
+  }
 }
 
 let inFlight = false;
@@ -185,6 +226,7 @@ function removedByAdmin() {
   state = null;
   playerId = null;
   store("uno-id-" + room, "");
+  session(tokenKey(), null);
   ["game", "lobby", "roomInfo", "endModal", "playSheet", "sheetPill", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
   $("joinScreen").classList.remove("hidden");
   toast("You were removed by the admin.");
@@ -198,10 +240,12 @@ async function pollOnce() {
     if (data.kicked) {
       removedByAdmin();
     } else if (data.gone) {
-      // The table forgot us (idle too long) — quietly rejoin with the same password.
+      // The table forgot us (idle too long) — quietly rejoin: with the password if this page typed it, else with the token.
       playerId = null;
       state = null;
-      apply(await api({ op: "join", name: myName, password: myPassword }));
+      apply(myPassword
+        ? await api({ op: "join", name: myName, password: myPassword })
+        : await api({ op: "resume", token: session(tokenKey()) }));
     } else if (!data.unchanged) {
       quiet = 0;
       apply(data);
@@ -1122,6 +1166,11 @@ $("copyLink").addEventListener("click", () => {
   if (r) $("roomInput").value = r;
   const n = store("uno-name");
   if (n) $("nameInput").value = n;
+  const wanted = (r || "main").trim();
+  if (/^[A-Za-z0-9_-]{1,24}$/.test(wanted)) {
+    room = wanted;
+    resumeSession(); // a refresh goes straight back to the table when this tab already signed in
+  }
 })();
 
 /* ---------- phone helpers: "Desktop site" hint and ?debug=1 diagnostics ---------- */

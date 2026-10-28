@@ -193,3 +193,13 @@ admin allowed to start games — has a **📡 Relay** button in the top bar, in 
 relay servers above as a backup: a call uses them only when a direct route fails, so it uses little relay data. Switching
 it on rebuilds the pairs that are not connected; switching it off restarts every pair so nothing keeps going through the
 relay. The choice is stored with the room's settings (`settings.voiceRelay`, default off) and resets with the room.
+
+## Staying signed in after a refresh
+
+Signing in returns a signed token (`api/_lib/token.js`). The page keeps it in `sessionStorage` (this tab only; closing the
+tab forgets it) and shows it to the server (`op: resume`) when the page loads, so a refresh goes straight back to the
+lobby or table instead of the password form. The token names the room, the player and the role the password granted,
+lasts 12 hours (renewed on each resume), and cannot be changed or made without the signing key. The key is derived from
+`GAME_TOKEN_SECRET` if you set one (a long random string; recommended), otherwise from the Redis connection string/token
+the server already has. A resume still follows the rules: removed players and players of the wrong public/private mode
+are refused and see the password form. Changing any of the three game passwords (or the signing secret) signs everyone out.

@@ -924,3 +924,54 @@ test('turn time: the admin sets it in the lobby (15-120 s), it is used for the t
   assert.equal(G.tick(s, now), true);
   assert.equal(cur.hand.length, before + 1, 'penalty card after the shorter time');
 });
+
+test('refresh: a signed token puts the same player back at the table, and cannot be forged or reused elsewhere', async () => {
+  const { signToken, verifyToken, TOKEN_TTL_MS } = await import('../api/_lib/token.js');
+  const room = 'tk' + Math.floor(Math.random() * 1e6);
+  const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
+  const pub = await call({ op: 'join', room, name: 'Pub', password: '123456' });
+  assert.equal(typeof admin.body.token, 'string');
+
+  // refresh as the admin: same seat, still the admin, no password involved
+  const back = await call({ op: 'resume', room, token: admin.body.token });
+  assert.equal(back.code, 200);
+  assert.equal(back.body.state.you, admin.body.state.you);
+  assert.equal(back.body.state.admin, true);
+  assert.equal(typeof back.body.token, 'string', 'a renewed token comes back');
+
+  // forged, damaged, empty, or for another room
+  const [body, sig] = pub.body.token.split('.');
+  const forged = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body, 'base64url')), role: 'admin' })).toString('base64url') + '.' + sig;
+  assert.equal((await call({ op: 'resume', room, token: forged })).code, 401, 'a changed role is rejected');
+  assert.equal((await call({ op: 'resume', room, token: pub.body.token + 'x' })).code, 401);
+  assert.equal((await call({ op: 'resume', room })).code, 401);
+  assert.equal((await call({ op: 'resume', room: room + 'z', token: pub.body.token })).code, 401, 'a token is for its own room');
+
+  // expired
+  const claim = { r: room, p: pub.body.state.you, role: 'public', n: 'Pub' };
+  assert.equal(verifyToken(signToken(claim, 1000, 'salt'), room, 1000 + TOKEN_TTL_MS + 1, 'salt'), null);
+  assert.ok(verifyToken(signToken(claim, 1000, 'salt'), room, 1000 + 5000, 'salt'));
+  assert.equal(verifyToken(signToken(claim, 1000, 'salt'), room, 2000, 'other salt'), null, 'a different key does not validate');
+
+  // removed players cannot come back with their old token
+  const kicked = await call({ op: 'kick', room, playerId: admin.body.state.you, targetId: pub.body.state.you });
+  assert.equal(kicked.code, 200);
+  const denied = await call({ op: 'resume', room, token: pub.body.token });
+  assert.equal(denied.code, 401);
+  assert.match(denied.body.error, /removed/);
+});
+
+test('refresh respects public/private: a public token is refused once the game is private (the player was removed)', async () => {
+  const room = 'tk' + Math.floor(Math.random() * 1e6);
+  const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
+  const pub = await call({ op: 'join', room, name: 'Pub', password: '123456' });
+  await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
+  const r = await call({ op: 'resume', room, token: pub.body.token });
+  assert.equal(r.code, 401);
+  assert.match(r.body.error, /removed by the admin|private password/);
+  const priv = await call({ op: 'join', room, name: 'Priv', password: '281101' });
+  assert.equal((await call({ op: 'resume', room, token: priv.body.token })).code, 200);
+  await call({ op: 'private', room, playerId: admin.body.state.you, on: false });
+  assert.equal((await call({ op: 'resume', room, token: priv.body.token })).code, 401, 'and the reverse');
+  assert.equal((await call({ op: 'resume', room, token: admin.body.token })).code, 200, 'the admin works either way');
+});
