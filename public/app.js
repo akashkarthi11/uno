@@ -165,6 +165,7 @@ function buzzIfMyTurnStarted(prev, s) {
   if (!prev || !prev.started || prev.over || prev.paused || !s.started || s.over || s.paused) return;
   if (s.cur !== s.you || !(s.turnLeft > 0)) return;
   if (prev.cur === s.you && prev.turnAt === s.turnAt) return; // the same turn is still running
+  notifyTurn(); // a notification (only when this page is in the background and alerts are on)
   try { if (navigator.vibrate) navigator.vibrate(90); } catch (e) { /* vibration not allowed here */ }
 }
 
@@ -252,7 +253,7 @@ async function keepAwake() {
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && polling) keepAwake(); });
 
-function removedByAdmin() {
+function removedByAdmin(message = "You were removed by the admin.") {
   removed = true;
   applyTheme("growx"); // back on the sign-in screen: default look
   document.body.classList.remove("in-game");
@@ -264,8 +265,22 @@ function removedByAdmin() {
   session(tokenKey(), null);
   ["game", "lobby", "roomInfo", "endModal", "playSheet", "sheetPill", "cheatModal", "chatToggle", "chatDock"].forEach((id) => $(id).classList.add("hidden"));
   $("joinScreen").classList.remove("hidden");
-  toast("You were removed by the admin.");
+  toast(message);
 }
+
+/** The Leave button: out of the game for good; signing in again joins as a new player. */
+async function leaveGame() {
+  if (!state) return;
+  if (!confirm(state.started && !state.over ? "Leave the game? Your cards go back into the pile." : "Leave this room?")) return;
+  try {
+    await api({ op: "leave" });
+  } catch (e) {
+    toast(e.message);
+    return;
+  }
+  removedByAdmin("You left the game.");
+}
+$("leaveBtn").addEventListener("click", leaveGame);
 
 async function pollOnce() {
   if (busy || inFlight || removed) return;
@@ -274,6 +289,8 @@ async function pollOnce() {
     const data = await api({ op: "state", since: state ? state.version : undefined, ps: state ? state.ps : undefined });
     if (data.kicked) {
       removedByAdmin();
+    } else if (data.left) {
+      removedByAdmin("You left the game.");
     } else if (data.gone) {
       // The table forgot us (idle too long) — quietly rejoin: with the password if this page typed it, else with the token.
       playerId = null;
@@ -317,7 +334,7 @@ function startPolling() {
 function pollDelay() {
   // In voice chat a newcomer must be noticed quickly, so the quiet-screen slowdown is off and a hidden tab still checks often.
   const inVoice = typeof voice !== "undefined" && voice.active;
-  if (document.hidden) return inVoice ? 3000 : POLL_HIDDEN_MS;
+  if (document.hidden) return inVoice || notifyOn() ? 3000 : POLL_HIDDEN_MS;
   if (state && state.started && !state.over && !state.paused) return quiet > 20 && !inVoice ? POLL_GAME_QUIET_MS : POLL_GAME_MS;
   return quiet > 10 && !inVoice ? POLL_QUIET_MS : POLL_MS;
 }
@@ -650,7 +667,7 @@ function renderGame(s) {
   }
   lastTopId = s.top.id;
   $("colorDot").style.background = "var(--" + (s.color === "yellow" ? "card-yellow" : s.color) + ")";
-  $("drawCount").textContent = s.deck + " in pile";
+  $("drawCount").textContent = s.pend && myTurn ? "tap to draw " + s.pend.n : s.deck + " in pile";
   $("dirInfo").textContent = s.dir === 1 ? "↻" : "↺";
 
   const hand = $("hand");
@@ -694,7 +711,12 @@ function renderGame(s) {
   else if (s.over) msg = "Game over.";
   else if (s.paused) msg = s.pauseNote ? "⏸ Paused — " + s.pauseNote : "⏸ Paused by the admin — hang tight.";
   else if (me && me.finished) msg = "You're out (#" + (s.ranking.indexOf(me.name) + 1) + ")! Watching the rest play…";
-  else if (myTurn && me && me.count === 2 && !s.saidUno) msg = "⚠ Press GrowX! before you play your second-to-last card — or you draw 1 extra card!";
+  else if (s.catchable === s.you) msg = "🚨 One card left — press GrowX! before someone catches you!";
+  else if (myTurn && s.pend) {
+    msg = "+" + s.pend.n + " is waiting — " + (s.playable.length ? "play a " + (s.pend.kind === "wild4" ? "+4" : "+2") + " to stack it, " : "") +
+      (s.pend.canChallenge ? "challenge it, " : "") + "or tap the pile to draw " + s.pend.n + ".";
+  } else if (s.pend) msg = (curPlayer ? curPlayer.name : "?") + "'s turn… (+" + s.pend.n + " waiting)";
+  else if (myTurn && me && me.count === 2 && !s.saidUno) msg = "⚠ Press GrowX! before you play your second-to-last card — or others can catch you (+2)!";
   else if (myTurn) msg = s.drawn != null ? "You drew a playable card — play it or press Pass." : (s.playable.length ? "Your turn — play a highlighted card or draw." : "Your turn — no playable card, draw from the pile.");
   else msg = (curPlayer ? curPlayer.name : "?") + "'s turn…";
   $("message").textContent = msg;
@@ -709,7 +731,13 @@ function renderGame(s) {
   const canUno = s.seated && !s.over && me && me.count > 0 && me.count <= 2 && !s.saidUno;
   $("unoBtn").disabled = !canUno;
   $("unoBtn").textContent = s.saidUno && me && me.count <= 2 ? "GrowX! ✓" : "GrowX!";
-  $("unoBtn").classList.toggle("pulse", canUno && myTurn);
+  $("unoBtn").classList.toggle("pulse", canUno && (myTurn || s.catchable === s.you));
+  const catchTarget = s.catchable && s.catchable !== s.you && s.seated && me && !me.finished && !s.paused && !s.over
+    ? s.players.find((p) => p.id === s.catchable) : null;
+  $("catchBtn").classList.toggle("hidden", !catchTarget);
+  if (catchTarget) $("catchBtn").textContent = "🎯 Catch " + catchTarget.name + "!";
+  $("challengeBtn").classList.toggle("hidden", !(myTurn && s.pend && s.pend.canChallenge && !s.paused));
+  if (me) recordDeviceStats(s, me);
 
   const end = $("endModal");
   if (s.over) {
@@ -1064,6 +1092,13 @@ $("turnPlus").addEventListener("click", () => setTurnSecs(((state && state.setti
 $("handMinus").addEventListener("click", () => setHandSize(((state && state.settings && state.settings.handSize) || 5) - 1));
 $("handPlus").addEventListener("click", () => setHandSize(((state && state.settings && state.settings.handSize) || 5) + 1));
 
+function sendRule(body) {
+  if (busy || !state || !state.canStart) return;
+  send({ op: "config", ...body }, () => render());
+}
+$("stackingBox").addEventListener("change", (e) => sendRule({ stacking: e.target.checked }));
+$("challengeBox").addEventListener("change", (e) => sendRule({ challenge: e.target.checked }));
+
 function renderSettings(s) {
   // these are the admin's controls: public and private players don't see the panel at all (the theme still applies to them)
   $("settings").classList.toggle("hidden", !s.canStart);
@@ -1072,6 +1107,8 @@ function renderSettings(s) {
   $("handSizeVal").textContent = hs;
   $("handMinus").disabled = hs <= 3;
   $("handPlus").disabled = hs >= 10;
+  $("stackingBox").checked = Boolean(s.settings && s.settings.stacking);
+  $("challengeBox").checked = Boolean(s.settings && s.settings.challenge);
   const ts = (s.settings && s.settings.turnSecs) || 30;
   $("turnSecsVal").textContent = ts;
   $("turnMinus").disabled = ts <= 15;
@@ -1276,6 +1313,8 @@ $("restartBtn").addEventListener("click", () => {
 });
 $("toLobby").addEventListener("click", () => send({ op: "lobby" }));
 $("passBtn").addEventListener("click", () => send({ op: "pass" }));
+$("catchBtn").addEventListener("click", () => send({ op: "catch" }));
+$("challengeBtn").addEventListener("click", () => send({ op: "challenge" }));
 $("unoBtn").addEventListener("click", () => {
   if (busy || !state) return;
   const before = state;
@@ -1290,6 +1329,137 @@ $("copyLink").addEventListener("click", () => {
   (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
     .then(() => toast("Invite link copied"), () => toast(link));
 });
+
+/* ---------- alerts: a notification when it is my turn and this page is in the background ---------- */
+
+const BASE_TITLE = document.title;
+const notifyOn = () => store("uno-notify") === "1" && typeof Notification !== "undefined" && Notification.permission === "granted";
+
+function renderNotifyBtn() {
+  const btn = $("notifyBtn");
+  btn.textContent = "🔔 Alerts: " + (notifyOn() ? "on" : "off");
+  btn.classList.toggle("on", notifyOn());
+  btn.title = typeof Notification === "undefined"
+    ? "This browser cannot show notifications."
+    : "A notification when it is your turn while this page is in the background (keep the page open).";
+}
+
+async function toggleNotify() {
+  if (typeof Notification === "undefined") { toast("This browser cannot show notifications."); return; }
+  if (notifyOn()) {
+    store("uno-notify", "0");
+  } else {
+    const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (perm !== "granted") { toast("Notifications are blocked — allow them in the browser's site settings."); renderNotifyBtn(); return; }
+    store("uno-notify", "1");
+    registerAlertWorker();
+    toast("Alerts on: you'll get a notification on your turn.");
+  }
+  renderNotifyBtn();
+}
+$("notifyBtn").addEventListener("click", toggleNotify);
+
+function registerAlertWorker() {
+  try { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); } catch (e) { /* not available */ }
+}
+
+/** Called when a new turn of mine starts. Only does anything while the page is hidden. */
+function notifyTurn() {
+  if (!document.hidden || !notifyOn()) return;
+  document.title = "🔔 Your turn · " + BASE_TITLE;
+  const opts = { body: "It's your turn!", tag: "turn", renotify: true, vibrate: [120, 60, 120] };
+  const fallback = () => { try { new Notification(BASE_TITLE, opts); } catch (e) { /* e.g. Android needs the worker */ } };
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistration().then((reg) => (reg ? reg.showNotification(BASE_TITLE, opts) : fallback())).catch(fallback);
+  } else fallback();
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) document.title = BASE_TITLE; });
+renderNotifyBtn();
+if (notifyOn()) registerAlertWorker();
+
+/* ---------- stats and history ---------- */
+
+/** Totals kept on this device: counted once per finished game I played in. */
+function recordDeviceStats(s, me) {
+  if (!s.over || !s.gameNo || !s.seated) return;
+  const key = room + "#" + s.gameNo;
+  let st;
+  try { st = JSON.parse(store("uno-stats") || "{}"); } catch (e) { st = {}; }
+  st = { played: 0, wins: 0, losses: 0, streak: 0, best: 0, keys: [], ...st };
+  if (st.keys.includes(key)) return;
+  st.keys = [...st.keys, key].slice(-30);
+  st.played += 1;
+  if (s.ranking[0] === me.name) {
+    st.wins += 1;
+    st.streak += 1;
+    st.best = Math.max(st.best, st.streak);
+  } else st.streak = 0;
+  if (s.loser === me.name) st.losses += 1;
+  store("uno-stats", JSON.stringify(st));
+}
+
+function statsTable(rows) {
+  const t = document.createElement("table");
+  const head = t.insertRow();
+  ["Player", "Played", "Wins", "Lost"].forEach((h) => { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); });
+  for (const r of rows) {
+    const tr = t.insertRow();
+    [r.name, r.played, r.wins, r.losses].forEach((v) => { tr.insertCell().textContent = String(v); });
+  }
+  return t;
+}
+
+function renderStats(stats) {
+  const roomBox = $("statsRoom");
+  roomBox.textContent = "";
+  if (!stats.table.length) { roomBox.className = "none"; roomBox.textContent = "No finished games in this room yet."; } else {
+    roomBox.className = "";
+    roomBox.appendChild(statsTable(stats.table));
+  }
+  const hist = $("statsHistory");
+  hist.textContent = "";
+  for (const g of stats.history) {
+    const d = document.createElement("div");
+    d.className = "game";
+    const when = new Date(g.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const order = g.ranking.map((n, i) => (i + 1) + ". " + n).join("  ");
+    const head = document.createElement("b");
+    head.textContent = "#" + g.no + " · " + when;
+    d.append(head, document.createTextNode("  " + (order || "ended early") + (g.loser ? "  — last: " + g.loser : "")));
+    hist.appendChild(d);
+  }
+  if (!stats.history.length) { const n = document.createElement("div"); n.className = "none"; n.textContent = "—"; hist.appendChild(n); }
+}
+
+function renderDeviceStats() {
+  let st;
+  try { st = JSON.parse(store("uno-stats") || "{}"); } catch (e) { st = {}; }
+  const box = $("statsDevice");
+  box.textContent = "";
+  if (!st.played) { box.className = "none"; box.textContent = "No games played on this device yet."; return; }
+  box.className = "";
+  box.appendChild(statsTable([{ name: "You", played: st.played, wins: st.wins, losses: st.losses }]));
+  const line = document.createElement("div");
+  line.className = "none";
+  line.textContent = "Win rate " + Math.round((100 * st.wins) / st.played) + "% · current streak " + (st.streak || 0) + " · best streak " + (st.best || 0);
+  box.appendChild(line);
+}
+
+async function openStats() {
+  $("statsModal").classList.remove("hidden");
+  $("statsRoom").className = "none";
+  $("statsRoom").textContent = "Loading…";
+  $("statsHistory").textContent = "";
+  renderDeviceStats();
+  try {
+    renderStats((await api({ op: "stats" })).stats);
+  } catch (e) {
+    $("statsRoom").textContent = e.message;
+  }
+}
+$("statsBtn").addEventListener("click", openStats);
+["statsX", "statsClose"].forEach((id) => $(id).addEventListener("click", () => $("statsModal").classList.add("hidden")));
+$("statsModal").addEventListener("click", (e) => { if (e.target === $("statsModal")) $("statsModal").classList.add("hidden"); });
 
 (function init() {
   const r = new URLSearchParams(location.search).get("room");

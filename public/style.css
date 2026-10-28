@@ -289,7 +289,20 @@ button.kick {
 /* lobby: which super cards are in the deck */
 #settings { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--surface-soft); }
 #settings h3 { margin: 0 0 8px; font-size: 14px; }
-#superList { display: flex; flex-direction: column; gap: 6px; }
+#superList, #ruleList { display: flex; flex-direction: column; gap: 6px; }
+#ruleList { margin-bottom: 12px; }
+.rule-row { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: var(--ink); }
+.rule-row small { color: var(--muted); font-weight: 400; margin-left: auto; text-align: right; }
+.rule-row input { width: 18px; height: 18px; padding: 0; accent-color: var(--brand); }
+#catchBtn { background: #f04438; border-color: #f04438; color: #fff; animation: pulse .5s infinite alternate; }
+#challengeBtn { background: #f79009; border-color: #f79009; color: #fff; }
+.stats-h { margin: 14px 0 6px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+#statsModal table { width: 100%; border-collapse: collapse; font-size: 14px; }
+#statsModal th, #statsModal td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--line); }
+#statsModal th:first-child, #statsModal td:first-child { text-align: left; font-weight: 700; }
+#statsModal .game { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--label); }
+#statsModal .game b { color: var(--ink); }
+#statsModal .none { color: var(--muted); font-size: 13px; }
 #superList label { display: flex; flex-direction: row; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: var(--ink); }
 #superList label small { color: var(--muted); font-weight: 400; margin-left: auto; text-align: right; }
 #superList input { width: 18px; height: 18px; padding: 0; accent-color: var(--brand); }

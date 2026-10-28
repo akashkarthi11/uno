@@ -219,3 +219,21 @@ in), and **Join voice** brings them back. If the microphone is refused the page 
 Voice is for the admin and private players. The admin's **🎙 Public voice** button in the top bar (also for a player the
 admin allowed to start games) lets public players use it as well; turning it off again drops public players from the
 call. It is shown only while the game is public (a private game has no public players): making a game private switches it off, and it cannot be switched on while private. It is stored with the room settings (`settings.publicVoice`, default off).
+
+## More rules and tools
+
+- **Catch a missed GrowX!** Playing your second-to-last card without pressing GrowX! no longer costs a card at once: anyone
+  can tap 🎯 Catch! until the next player plays, draws or passes, and you draw 2. Pressing GrowX! in time (even right after
+  playing) saves you.
+- **Stacking** (admin switch, lobby only): a +2 can be answered with a +2 and a +4 with a +4 (only the same kind). The total goes
+  to the first player who cannot stack and loses the turn. Timing out takes the cards too.
+- **Challenge +4** (admin switch, lobby only): a Wild Draw Four may be played any time. The next player can ⚔ Challenge it: if the
+  player held the current colour (a bluff) they draw the +4 and the challenger plays on; if not, the challenger draws +2 more
+  (6 in total) and loses the turn. A +4 played as someone's last card cannot be challenged.
+- **🚪 Leave** takes a player out for good (cards back into the pile); their old tab and token no longer work, and signing in
+  again joins as a new player.
+- **🔔 Alerts** shows a notification when your turn starts while the page is in the background (and flashes the tab title).
+  It needs the page to stay open: there is no push server, so a closed page cannot be notified. Uses a tiny service worker
+  (`public/sw.js`) that caches nothing. Not available on iPhones in a normal browser tab.
+- **📊 Stats**: this room's wins / losses table and its last 10 games (stored with the room, so they go when the room expires,
+  a few hours after the last move), plus totals kept on the device (played, wins, losses, streaks).

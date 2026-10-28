@@ -7,10 +7,11 @@ const src = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8'
 const body = /function buzzIfMyTurnStarted\(prev, s\) \{[\s\S]*?\n\}\n/.exec(src)[0];
 let buzzes = 0;
 const navigator = { vibrate: () => { buzzes++; return true; } };
-const buzz = new Function('navigator', `${body}; return buzzIfMyTurnStarted;`)(navigator);
+let notified = 0;
+const buzz = new Function('navigator', 'notifyTurn', `${body}; return buzzIfMyTurnStarted;`)(navigator, () => { notified++; });
 
 const st = (o) => ({ started: true, over: false, paused: false, you: 'me', cur: 'x', turnAt: 1000, turnLeft: 20000, ...o });
-const run = (prev, next) => { buzzes = 0; buzz(prev, next); return buzzes; };
+const run = (prev, next) => { buzzes = 0; notified = 0; buzz(prev, next); assert.equal(notified, buzzes, 'a notification is attempted exactly when there is a buzz'); return buzzes; };
 
 test('buzz when a turn of mine starts', () => {
   assert.equal(run(st({ cur: 'x' }), st({ cur: 'me', turnAt: 2000 })), 1, 'the turn passed to me');

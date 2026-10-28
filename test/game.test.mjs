@@ -220,11 +220,16 @@ function twoCardSetup() {
   return { s, p, now };
 }
 
-test('GrowX! button: playing the second-to-last card without pressing it costs 1 extra card', () => {
+test('GrowX! button: playing the second-to-last card without pressing it can be caught (+2)', () => {
   const { s, p, now } = twoCardSetup();
   G.act(s, p, { op: 'play', cardId: 8001 }, now);
-  assert.equal(p.hand.length, 2, 'one card left + 1 penalty card');
-  assert.ok(s.log.some((l) => /forgot to press GrowX/.test(l)));
+  assert.equal(p.hand.length, 1, 'no automatic penalty any more');
+  const other = s.members.find((m) => m !== p);
+  assert.equal(G.view(s, other, now).catchable, p.id, 'everyone can see who can be caught');
+  G.act(s, other, { op: 'catch' }, now);
+  assert.equal(p.hand.length, 3, 'caught: 1 card + 2');
+  assert.ok(s.log.some((l) => /caught .* without GrowX/.test(l)));
+  assert.equal(G.view(s, other, now).catchable, null);
 });
 
 test('GrowX! button: pressing it before the second-to-last card avoids the penalty', () => {

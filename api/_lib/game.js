@@ -70,6 +70,8 @@ export const THEMES = ['growx', 'classic', 'midnight'];
 /** How many cards each player is dealt (the admin sets it in the lobby; 5 unless changed). */
 const handSizeOf = (s) => (s.settings && Number.isInteger(s.settings.handSize) ? s.settings.handSize : DEFAULT_HAND);
 const turnMsOf = (s) => (s.settings && Number.isInteger(s.settings.turnSecs) ? s.settings.turnSecs * 1000 : TURN_MS);
+const stackingOf = (s) => Boolean(s.settings && s.settings.stacking);
+const challengeOf = (s) => Boolean(s.settings && s.settings.challenge);
 const voiceRelayOf = (s) => Boolean(s.settings && s.settings.voiceRelay);
 const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
@@ -136,7 +138,8 @@ function give(s, p, n) {
 }
 
 function playable(s, c, p) {
-  if (c.value === 'wild4') return !p.hand.some((h) => h.color === s.color);
+  if (s.pend) return stackingOf(s) && c.value === s.pend.kind; // a penalty is waiting: only a card that stacks on it
+  if (c.value === 'wild4') return challengeOf(s) || !p.hand.some((h) => h.color === s.color); // with challenges on, a +4 may be bluffed
   if (c.color === 'wild') return true;
   return c.color === s.color || c.value === top(s).value;
 }
@@ -242,6 +245,12 @@ function tickGame(s, now) {
   }
   const idle = now - s.turnAt;
   if (idle > turnMsOf(s)) {
+    s.catchId = null;
+    if (s.pend) {
+      addLog(s, p.name + ' ran out of time.');
+      takePend(s, p, now);
+      return true;
+    }
     // time is up: nothing is played for them. If they never picked up a card this turn they get 1 penalty card,
     // then the turn moves to the next player.
     if (s.drawnId == null) {
@@ -289,6 +298,9 @@ function dispatch(s, me, b, now) {
     case 'voiceJoin': return voiceJoin(s, me);
     case 'voiceLeave': return voiceLeave(s, me);
     case 'kick': return kick(s, me, String(b.targetId ?? ''), now);
+    case 'challenge': return challenge(s, me, now);
+    case 'catch': return catchUno(s, me);
+    case 'leave': return leave(s, me, now);
     case 'starter': return setStarter(s, me, String(b.targetId ?? ''), b.on === true);
     default: return fail('Unknown action.');
   }
@@ -328,6 +340,10 @@ function start(s, p, now) {
   s.notice = null;
   s.started = true;
   s.over = false;
+  s.pend = null;
+  s.catchId = null;
+  s.gameNo = (s.gameNo || 0) + 1;
+  s.gameNames = seated(s).map((m) => m.name);
   s.turnAt = now;
   s.log = [];
   s.chat = []; // a new game starts with a clean chat
@@ -339,9 +355,11 @@ function start(s, p, now) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
-  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice } = b || {};
+  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, stacking, challenge: challengeOpt } = b || {};
   const hasSupers = supers && typeof supers === 'object';
-  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined) fail('Bad settings.');
+  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
+  if (stacking !== undefined && typeof stacking !== 'boolean') fail('Bad settings.');
+  if (challengeOpt !== undefined && typeof challengeOpt !== 'boolean') fail('Bad settings.');
   if (publicVoice !== undefined && typeof publicVoice !== 'boolean') fail('Bad settings.');
   if (publicVoice === true && s.private) fail('Public voice is only for public games.');
   if (turnSecs !== undefined && !(Number.isInteger(turnSecs) && turnSecs >= TURN_MIN_SECS && turnSecs <= TURN_MAX_SECS)) {
@@ -352,7 +370,7 @@ function setConfig(s, p, b) {
   if (handSize !== undefined && !(Number.isInteger(handSize) && handSize >= HAND_MIN && handSize <= HAND_MAX)) {
     fail(`Cards per player must be a whole number from ${HAND_MIN} to ${HAND_MAX}.`);
   }
-  if ((hasSupers || handSize !== undefined || turnSecs !== undefined) && s.started && !s.over) fail('Game settings can only be changed in the lobby.');
+  if ((hasSupers || handSize !== undefined || turnSecs !== undefined || stacking !== undefined || challengeOpt !== undefined) && s.started && !s.over) fail('Game settings can only be changed in the lobby.');
   const next = superSettings(s);
   if (hasSupers) {
     for (const kind of SUPER_KINDS) {
@@ -363,6 +381,8 @@ function setConfig(s, p, b) {
   s.settings = {
     voiceRelay: voiceRelay !== undefined ? voiceRelay : voiceRelayOf(s),
     publicVoice: publicVoice !== undefined ? publicVoice : publicVoiceOf(s),
+    stacking: stacking !== undefined ? stacking : stackingOf(s),
+    challenge: challengeOpt !== undefined ? challengeOpt : challengeOf(s),
     turnSecs: turnSecs !== undefined ? turnSecs : turnMsOf(s) / 1000,
     supers: next,
     theme: theme !== undefined ? theme : themeOf(s),
@@ -416,8 +436,10 @@ function kick(s, admin, targetId, now) {
 }
 
 /** Takes a player out of the room, lobby or mid-game. Their cards go back into the draw pile. */
-function removeMember(s, t, now) {
+function removeMember(s, t, now, left = false) {
   s.voice = (s.voice || []).filter((id) => id !== t.id);
+  s.pend = null; // a waiting +2 / +4 or catch does not survive a change of players
+  s.catchId = null;
   const idx = s.seats.indexOf(t.id);
   if (s.started && !s.over && idx !== -1) {
     s.deck.unshift(...t.hand); // bottom of the pile (cards are drawn from the end)
@@ -432,6 +454,7 @@ function removeMember(s, t, now) {
       s.winner = s.ranking[0] ?? null;
       s.loser = s.ranking.length && left.length ? left[0].name : null;
       s.notice = s.loser ? null : 'Game ended: not enough players left.';
+      recordGame(s);
     } else {
       if (idx < s.cur) s.cur -= 1;
       if (wasCurrent) s.cur = s.dir === 1 ? idx % n : (idx - 1 + n) % n;
@@ -445,7 +468,8 @@ function removeMember(s, t, now) {
     s.seats = s.seats.filter((id) => id !== t.id);
     s.members = s.members.filter((m) => m.id !== t.id);
   }
-  s.kicked = [...(s.kicked || []), t.id].slice(-50);
+  if (left) s.left = [...(s.left || []), t.id].slice(-50);
+  else s.kicked = [...(s.kicked || []), t.id].slice(-50);
 }
 
 /** Admin ends the current game (running or finished) and sends everyone back to the lobby. */
@@ -467,6 +491,8 @@ function toLobby(s, p) {
   s.ranking = [];
   s.notice = null;
   s.drawnId = null;
+  s.pend = null;
+  s.catchId = null;
   s.log = [];
   s.chat = []; // restart clears the chat
   s.paused = false;
@@ -505,9 +531,11 @@ function play(s, p, cardId, chosen, now, targetId = '', ruleId = '') {
   if (!c) fail('That card is not in your hand.');
   if (s.drawnId != null && c.id !== s.drawnId) fail('You may only play the card you just drew.');
   if (!playable(s, c, p)) {
-    fail(c.value === 'wild4'
-      ? 'Wild Draw Four is only legal when you hold no card of the current colour.'
-      : "You can't play that card.");
+    fail(s.pend
+      ? (stackingOf(s) ? `Play another +${s.pend.kind === 'wild4' ? 4 : 2} to stack it, or draw ${s.pend.n}.` : `Draw ${s.pend.n}.`)
+      : c.value === 'wild4'
+        ? 'Wild Draw Four is only legal when you hold no card of the current colour.'
+        : "You can't play that card.");
   }
   if (c.color === 'wild' && !COLORS.includes(chosen)) fail('Choose a colour.');
   let swapWith = null;
@@ -527,14 +555,72 @@ function play(s, p, cardId, chosen, now, targetId = '', ruleId = '') {
     if (!swapWith || !s.seats.includes(swapWith.id) || swapWith.finished) fail('Choose a player for the Master card.');
     if (swapWith === p && !['again', 'sweep'].includes(rule)) fail('That rule needs another player — choose someone else.');
   }
+  s.catchId = null; // whoever acts after the catchable player closes the catching window
   doPlay(s, p, c, chosen, now, swapWith, rule);
 }
 
 function draw(s, p, now, b = {}) {
   requireTurn(s, p);
   if (s.drawnId != null) fail('You already drew a card this turn.');
+  if (s.pend) {
+    s.catchId = null;
+    return takePend(s, p, now); // a +2 / +4 is waiting for you and you did not stack it: take the cards
+  }
   const chosen = b.value ? chosenCard(s, p, b) : null; // validates before anything changes
+  s.catchId = null;
   drawOne(s, p, now, chosen);
+}
+
+/** A waiting +2 / +4 is taken: the player draws everything stacked so far and loses the turn. */
+function takePend(s, p, now) {
+  const n = s.pend.n;
+  s.pend = null;
+  give(s, p, n);
+  addLog(s, `${p.name} draws ${n}.`);
+  advance(s, 1, now);
+}
+
+/** Wild Draw Four challenge (when the admin allowed it): was the +4 a bluff? */
+function challenge(s, p, now) {
+  requireTurn(s, p);
+  const pd = s.pend;
+  if (!pd || pd.kind !== 'wild4' || !challengeOf(s)) fail('There is nothing to challenge.');
+  const by = byId(s, pd.by);
+  if (!by || by.finished || !s.seats.includes(by.id)) fail('That player is already out of the game — nothing to challenge.');
+  s.pend = null;
+  s.catchId = null;
+  if (pd.bluff) {
+    give(s, by, pd.n);
+    s.drawnId = null;
+    s.turnAt = now; // the challenger plays on, with a fresh clock
+    addLog(s, `⚔ ${p.name} challenged ${by.name}'s +4 — it was a bluff! ${by.name} draws ${pd.n}.`);
+  } else {
+    give(s, p, pd.n + 2);
+    addLog(s, `⚔ ${p.name} challenged ${by.name}'s +4 — it was legal! ${p.name} draws ${pd.n + 2}.`);
+    advance(s, 1, now);
+  }
+}
+
+/** Anyone else may catch a player who is down to one card without having said GrowX!: they draw 2. */
+function catchUno(s, p) {
+  if (!s.started || s.over || !s.seats.includes(p.id) || p.finished) fail('No game running.');
+  if (s.paused) fail('The game is paused by the admin.');
+  const t = catchValid(s) ? byId(s, s.catchId) : null;
+  if (!t) fail('Nobody to catch right now.');
+  if (t.id === p.id) fail('You cannot catch yourself — press GrowX!');
+  s.catchId = null;
+  give(s, t, 2);
+  addLog(s, `🎯 ${p.name} caught ${t.name} without GrowX! — ${t.name} draws 2.`);
+}
+const catchValid = (s) => {
+  const t = s.catchId ? byId(s, s.catchId) : null;
+  return Boolean(t && !s.over && !t.finished && t.hand.length === 1 && !t.saidUno);
+};
+
+/** A player leaves the game for good (their cards go back into the pile). They can sign in again as a new player. */
+function leave(s, p, now) {
+  addLog(s, `${p.name} left the game.`);
+  removeMember(s, p, now, true);
 }
 
 function drawOne(s, p, now, card = null) {
@@ -548,6 +634,7 @@ function drawOne(s, p, now, card = null) {
 function pass(s, p, now) {
   requireTurn(s, p);
   if (s.drawnId == null) fail('Draw a card before passing.');
+  s.catchId = null;
   addLog(s, p.name + ' passes.');
   advance(s, 1, now);
 }
@@ -556,6 +643,7 @@ function sayUno(s, p) {
   if (!s.started || s.over || !s.seats.includes(p.id)) fail('No game running.');
   if (p.hand.length > 2) fail('You can call GrowX when you have 2 or fewer cards.');
   p.saidUno = true;
+  if (s.catchId === p.id) s.catchId = null; // said in time: nothing left to catch
   addLog(s, p.name + ' says GrowX!');
 }
 
@@ -593,6 +681,7 @@ function finishPlayer(s, t) {
   s.loser = left.length ? left[0].name : null;
   s.notice = null;
   addLog(s, s.loser ? `${s.loser} is left holding cards and loses!` : 'Game over.');
+  recordGame(s);
   return true;
 }
 
@@ -660,6 +749,7 @@ function masterEffect(s, p, t, rule, now) {
 }
 
 function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
+  const hadColor = p.hand.some((h) => h.color === s.color); // for a +4: did they hold the current colour (a bluff)?
   const hadTwo = p.hand.length === 2; // playing from two cards is the moment GrowX! must already have been pressed
   p.hand = p.hand.filter((h) => h !== c && h.id !== c.id);
   let swept = [];
@@ -680,8 +770,8 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
     if (finishPlayer(s, p)) return;
   } else if (p.hand.length === 1) {
     if (hadTwo && !p.saidUno) {
-      give(s, p, 1);
-      addLog(s, p.name + ' forgot to press GrowX! — draws 1 extra card.');
+      s.catchId = p.id; // anyone may catch it until the next player acts
+      addLog(s, p.name + ' has one card left and did not say GrowX!');
     } else {
       addLog(s, p.name + ' has one card left!');
     }
@@ -744,14 +834,22 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
       addLog(s, 'Direction reversed.');
       break;
     case 'draw2':
-      give(s, target, 2);
-      skip = true;
-      addLog(s, target.name + ' draws 2.');
+      if (stackingOf(s)) {
+        setPend(s, 'draw2', 2, p, false, target);
+      } else {
+        give(s, target, 2);
+        skip = true;
+        addLog(s, target.name + ' draws 2.');
+      }
       break;
     case 'wild4':
-      give(s, target, 4);
-      skip = true;
-      addLog(s, target.name + ' draws 4.');
+      if (stackingOf(s) || challengeOf(s)) {
+        setPend(s, 'wild4', 4, p, hadColor, target);
+      } else {
+        give(s, target, 4);
+        skip = true;
+        addLog(s, target.name + ' draws 4.');
+      }
       break;
     default:
   }
@@ -764,6 +862,50 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
     return;
   }
   advance(s, skip ? 2 : 1, now);
+}
+
+/**
+ * A +2 / +4 that waits for the next player (stacking and/or challenges are on): they may stack the same card, challenge
+ * a +4, or draw everything stacked so far. Only the same kind stacks (+2 on +2, +4 on +4).
+ */
+function setPend(s, kind, add, p, bluff, target) {
+  const prior = s.pend && s.pend.kind === kind ? s.pend.n : 0;
+  s.pend = { kind, n: prior + add, by: p.id, bluff: kind === 'wild4' && bluff };
+  addLog(s, `${target.name} must stack a +${add} or draw ${s.pend.n}.`);
+}
+
+const canChallenge = (s) => {
+  const by = s.pend && s.pend.kind === 'wild4' && challengeOf(s) ? byId(s, s.pend.by) : null;
+  return Boolean(by && !by.finished && s.seats.includes(by.id));
+};
+
+/* ---------------- stats and history ---------------- */
+
+/** Called once when a game ends: keeps the last 10 games and a wins / losses table for this room. */
+function recordGame(s) {
+  if (s.recordedNo === s.gameNo) return;
+  s.recordedNo = s.gameNo;
+  const names = s.gameNames || [];
+  s.history = [...(s.history || []), {
+    no: s.gameNo, at: Date.now(), players: names, ranking: [...s.ranking], loser: s.loser || null, notice: s.notice || null,
+  }].slice(-10);
+  const scores = { ...(s.scores || {}) };
+  for (const name of names) {
+    const row = { played: 0, wins: 0, losses: 0, ...(scores[name] || {}) };
+    row.played += 1;
+    if (s.ranking[0] === name) row.wins += 1;
+    if (s.loser === name) row.losses += 1;
+    scores[name] = row;
+  }
+  s.scores = Object.fromEntries(Object.entries(scores).slice(-30));
+}
+
+/** What the Stats window shows: this room's table and its last games (kept as long as the room lives). */
+export function statsView(s) {
+  const table = Object.entries(s.scores || {})
+    .map(([name, r]) => ({ name, ...r }))
+    .sort((a, b) => b.wins - a.wins || a.losses - b.losses || a.name.localeCompare(b.name));
+  return { table, history: [...(s.history || [])].reverse() };
 }
 
 /* ---------------- output ---------------- */
@@ -782,7 +924,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), turnSecs: turnMsOf(s) / 1000 },
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
     canVoice: canVoice(s, me),
     voice: canVoice(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };
@@ -791,6 +933,9 @@ export function view(s, me, now) {
   return {
     ...out,
     top: top(s), color: s.color, dir: s.dir, cur: s.seats[s.cur], deck: s.deck.length, drawn: s.drawnId,
+    gameNo: s.gameNo || 0,
+    pend: s.pend ? { kind: s.pend.kind, n: s.pend.n, by: (byId(s, s.pend.by) || {}).name || '', canChallenge: canChallenge(s) } : null,
+    catchable: catchValid(s) ? s.catchId : null, // someone with one card left who did not say GrowX!
     turnAt: s.turnAt, // changes whenever a new turn starts, even when the same player goes again (🔁 Play Again)
     paused: Boolean(s.paused), pauseNote: s.paused ? s.pauseNote || '' : '',
     turnMs: turnMsOf(s), turnLeft: s.over ? 0 : Math.max(0, turnMsOf(s) - ((s.paused ? s.pausedAt : now) - s.turnAt)),

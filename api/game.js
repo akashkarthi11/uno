@@ -134,6 +134,9 @@ export default async function handler(req, res) {
       if (existing && (existing.kicked || []).includes(claim.p)) {
         return res.status(401).json({ error: 'You were removed by the admin.', denied: true });
       }
+      if (existing && (existing.left || []).includes(claim.p)) {
+        return res.status(401).json({ error: 'You left this game — sign in again to join.', denied: true });
+      }
       // The same rule as a fresh sign-in: a private game admits private players only, a public one public players only.
       if (claim.role !== 'admin' && (claim.role === 'private') !== Boolean(existing && existing.private)) {
         return res.status(401).json({
@@ -155,7 +158,7 @@ export default async function handler(req, res) {
       // Cheap read-only path: one Redis GET, no write unless presence/auto-play needs one.
       const s = await readRoom(code);
       const me = s && s.members.find((m) => m.id === b.playerId);
-      if (!me) return res.json(s && (s.kicked || []).includes(b.playerId) ? { kicked: true } : { gone: true });
+      if (!me) return res.json(s && (s.kicked || []).includes(b.playerId) ? { kicked: true } : s && (s.left || []).includes(b.playerId) ? { left: true } : { gone: true });
       const stale = now - me.lastSeen > G.HEARTBEAT_MS;
       if (!stale && !G.tick(structuredClone(s), now)) {
         if (b.since === s.version && b.ps === G.presenceSig(s, now)) return res.json({ unchanged: true });
@@ -163,7 +166,7 @@ export default async function handler(req, res) {
       }
       const result = await withRoom(code, (r) => {
         const self = r.members.find((m) => m.id === b.playerId);
-        if (!self) return (r.kicked || []).includes(b.playerId) ? { kicked: true } : { gone: true };
+        if (!self) return (r.kicked || []).includes(b.playerId) ? { kicked: true } : (r.left || []).includes(b.playerId) ? { left: true } : { gone: true };
         const wasOnline = G.online(self, now);
         self.lastSeen = now;
         const changed = G.tick(r, now);
@@ -172,6 +175,13 @@ export default async function handler(req, res) {
       });
       if (result.state) withIce(result.state);
       return res.json(result);
+    }
+
+    // Stats window: this room's table and its last games (read-only, any member of the room).
+    if (b.op === 'stats') {
+      const s = await readRoom(code);
+      if (!s || !s.members.some((m) => m.id === b.playerId)) throw new G.GameError('You are not in this room — rejoin.');
+      return res.json({ stats: G.statsView(s) });
     }
 
     // Voice-chat signalling: tiny messages passed between two people who are both in the voice list.

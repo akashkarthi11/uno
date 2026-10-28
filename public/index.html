@@ -20,6 +20,9 @@
     <button id="muteBtn" class="ghost hidden">🎙 Mute</button>
     <button id="copyLink" class="ghost">Copy invite link</button>
     <button id="rulesBtn" class="ghost">Rules</button>
+    <button id="statsBtn" class="ghost" type="button">📊 Stats</button>
+    <button id="notifyBtn" class="ghost" type="button">🔔 Alerts: off</button>
+    <button id="leaveBtn" class="ghost" type="button">🚪 Leave</button>
   </div>
 </header>
 
@@ -54,6 +57,11 @@
       <b id="turnSecsVal">30</b>
       <button id="turnPlus" class="ghost icon" type="button" aria-label="Longer turn">+</button>
       <small>seconds (15–120)</small>
+    </div>
+    <div class="set-label">House rules</div>
+    <div id="ruleList">
+      <label class="rule-row"><input type="checkbox" id="stackingBox"><span class="t">Stacking</span><small>+2 on +2, +4 on +4; the total goes to whoever cannot stack</small></label>
+      <label class="rule-row"><input type="checkbox" id="challengeBox"><span class="t">Challenge +4</span><small>a +4 can be bluffed; the next player may challenge it</small></label>
     </div>
     <div class="set-label">Super cards in this game</div>
     <div id="superList"></div>
@@ -102,6 +110,8 @@
     <div class="actions">
       <button id="pauseBtn" class="ghost hidden">⏸ Pause</button>
       <button id="restartBtn" class="ghost hidden">Restart</button>
+      <button id="challengeBtn" class="hidden" type="button">⚔ Challenge</button>
+      <button id="catchBtn" class="hidden" type="button">🎯 Catch!</button>
       <button id="passBtn" disabled>Pass</button>
       <button id="unoBtn" disabled>GrowX!</button>
     </div>
@@ -158,6 +168,23 @@
   </div>
 </div>
 
+<div id="statsModal" class="modal hidden">
+  <div class="box sheet">
+    <div class="sheet-head">
+      <h2>📊 Stats</h2>
+      <button id="statsX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
+    </div>
+    <h3 class="stats-h">This room</h3>
+    <div id="statsRoom">Loading…</div>
+    <h3 class="stats-h">Recent games</h3>
+    <div id="statsHistory"></div>
+    <h3 class="stats-h">On this device</h3>
+    <div id="statsDevice"></div>
+    <p class="hint">The room's table and games are kept while the room is in use (they disappear a few hours after the last move). The device totals stay on this phone or computer.</p>
+    <button id="statsClose" class="ghost" type="button">Close</button>
+  </div>
+</div>
+
 <div id="rulesModal" class="modal hidden">
   <div class="box rules">
     <h2>Game rules</h2>
@@ -169,8 +196,11 @@
       <li><b>Skip</b> skips the next player. <b>Reverse</b> flips direction (acts as Skip with 2 players). <b>Draw Two</b> / <b>Wild Draw Four</b> make the next player draw 2 / 4 and lose the turn.</li>
       <li>No playable card? Click the draw pile. If the drawn card fits you may play it, otherwise press Pass.</li>
       <li><b>Turn timer</b> (30 seconds unless the admin changed it in the lobby): if you haven't picked up or played a card in time, you draw 1 extra card and the turn moves to the next player.</li>
-      <li><b>GrowX! button:</b> when you hold 2 cards, press <b>GrowX!</b> before you play your second-to-last card. If you play it without pressing, you draw 1 extra card.</li>
-      <li>If a player's connection drops, their turns are played automatically; they can rejoin by reopening the link.</li>
+      <li><b>GrowX! button:</b> when you hold 2 cards, press <b>GrowX!</b> before you play your second-to-last card. If you play it without pressing, anyone can tap <b>🎯 Catch!</b> before the next player moves and you draw 2 cards. Pressing GrowX! right after playing still saves you.</li>
+      <li><b>Stacking</b> (if the admin switched it on): a +2 can be answered with another +2, a +4 with another +4. The total goes to the first player who cannot stack.</li>
+      <li><b>Challenge +4</b> (if switched on): a Wild Draw Four may be played at any time. The next player can <b>⚔ Challenge</b> it: if the player did hold the current colour, they draw the 4 instead; if not, the challenger draws 6 and loses the turn.</li>
+      <li>If a player's connection drops, the game pauses and the admin decides: wait, remove them, or restart. <b>🚪 Leave</b> takes you out of the game; you can sign in again to join as a new player.</li>
+      <li><b>🔔 Alerts</b> shows a notification when it is your turn while this page is in the background (the page must stay open). <b>📊 Stats</b> shows this room's wins and losses and its recent games.</li>
       <li><b>Losing:</b> play continues after someone empties their hand — they are out and ranked. The last player still holding cards loses.</li>
     </ul>
     <button id="closeRules">Close</button>
