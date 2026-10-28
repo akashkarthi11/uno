@@ -53,6 +53,8 @@ async function tcpClient() {
     rpush: (key, val) => c.rpush(key, val),
     expire: (key, secs) => c.expire(key, secs),
     lpop: (key, count) => c.lpop(key, count),
+    scan: (cursor, o = {}) => c.scan(cursor, 'MATCH', o.match || '*', 'COUNT', o.count || 100),
+    mget: (...keys) => c.mget(...keys),
   };
 }
 
@@ -83,6 +85,8 @@ const db = {
   rpush: (...a) => run('rpush', ...a),
   expire: (...a) => run('expire', ...a),
   lpop: (...a) => run('lpop', ...a),
+  scan: (...a) => run('scan', ...a),
+  mget: (...a) => run('mget', ...a),
 };
 async function client() {
   return db;
@@ -134,6 +138,52 @@ export async function takeSignals(code, id) {
   }
   const v = await (await client()).lpop(sigKey(code, id), 100);
   return (v || []).map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
+}
+
+const closedKey = (code) => `growx:closed:${code}`;
+const closedMem = new Map();
+const CLOSED_SECONDS = 120; // players of a closed room are told so for this long (instead of quietly rejoining it)
+
+/** Every room that exists right now, for the admin's Rooms window (up to `limit`; one scan and one batched read). */
+export async function listRooms(limit = 200) {
+  if (!usingRedis) return [...mem.entries()].slice(0, limit).map(([code, v]) => ({ code, room: structuredClone(v) }));
+  const r = await client();
+  const keys = [];
+  let cursor = '0';
+  do {
+    const [next, batch] = await r.scan(cursor, { match: 'growx:room:*', count: 200 });
+    cursor = String(next);
+    keys.push(...batch);
+  } while (cursor !== '0' && keys.length < limit);
+  const picked = [...new Set(keys)].slice(0, limit);
+  if (!picked.length) return [];
+  const vals = await r.mget(...picked);
+  const out = [];
+  picked.forEach((k, i) => {
+    let v = vals[i];
+    try { if (typeof v === 'string') v = JSON.parse(v); } catch { v = null; }
+    if (v && typeof v === 'object') out.push({ code: k.slice('growx:room:'.length), room: v });
+  });
+  return out;
+}
+
+/** Removes a room. Its players find out on their next check (they are not quietly let back in for a couple of minutes). */
+export function closeRoom(code) {
+  return locked(code, async () => {
+    if (!usingRedis) {
+      mem.delete(code);
+      closedMem.set(code, Date.now() + CLOSED_SECONDS * 1000);
+      return;
+    }
+    const r = await client();
+    await r.del(roomKey(code));
+    await r.set(closedKey(code), '1', { ex: CLOSED_SECONDS });
+  });
+}
+
+export async function wasClosed(code) {
+  if (!usingRedis) return (closedMem.get(code) || 0) > Date.now();
+  return Boolean(await (await client()).get(closedKey(code)));
 }
 
 export async function readRoom(code) {

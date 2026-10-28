@@ -298,6 +298,13 @@ button.kick {
 .rule-row input { width: 18px; height: 18px; padding: 0; accent-color: var(--brand); }
 #catchBtn { background: #f04438; border-color: #f04438; color: #fff; animation: pulse .5s infinite alternate; }
 #challengeBtn { background: #f79009; border-color: #f79009; color: #fff; }
+#roomsList { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.room-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); }
+.room-row .info { flex: 1; min-width: 0; font-size: 13px; color: var(--label); }
+.room-row .info b { font-size: 15px; color: var(--ink); }
+.room-row .info .badge { margin-left: 6px; }
+.room-row .info .who { display: block; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-row.live { border-color: var(--green); }
 #statsTabs { display: flex; gap: 8px; margin: 4px 0 2px; }
 #statsTabs button.on { background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand-ink); font-weight: 800; }
 .stats-h { margin: 14px 0 6px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }

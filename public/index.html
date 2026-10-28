@@ -109,6 +109,7 @@
         <button id="statsBtn" class="ghost" type="button">📊 Stats</button>
         <button id="rulesBtn" class="ghost" type="button">📖 Rules</button>
         <button id="copyLink" class="ghost" type="button">🔗 Copy invite link</button>
+        <button id="roomsBtn" class="ghost hidden" type="button">🗂 Rooms</button>
         <button id="leaveBtn" class="ghost" type="button">🚪 Leave</button>
       </div>
     </div>
@@ -188,6 +189,19 @@
     <button id="playAgain">Play again</button>
     <button id="toLobby" class="ghost">Back to lobby</button>
     <p id="endHint" class="hint"></p>
+  </div>
+</div>
+
+<div id="roomsModal" class="modal hidden">
+  <div class="box sheet">
+    <div class="sheet-head">
+      <h2>🗂 Rooms</h2>
+      <button id="roomsRefresh" class="icon ghost" type="button" title="Refresh" aria-label="Refresh">↻</button>
+      <button id="roomsX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
+    </div>
+    <p id="roomsSummary" class="hint">Loading…</p>
+    <div id="roomsList"></div>
+    <p class="hint">"Active now" means somebody in that room was seen in the last 30 seconds. Removing a room sends everyone in it out; they can sign in again after a couple of minutes.</p>
   </div>
 </div>
 

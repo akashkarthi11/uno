@@ -1,6 +1,6 @@
 import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -136,6 +136,9 @@ export default async function handler(req, res) {
       const claim = verifyToken(b.token, code, now, TOKEN_SALT);
       if (!claim) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
       const existing = await readRoom(code);
+      if (!existing && (await wasClosed(code))) {
+        return res.status(401).json({ error: 'This room was closed by the admin.', denied: true });
+      }
       if (existing && (existing.kicked || []).includes(claim.p)) {
         return res.status(401).json({ error: 'You were removed by the admin.', denied: true });
       }
@@ -164,7 +167,11 @@ export default async function handler(req, res) {
       // Cheap read-only path: one Redis GET, no write unless presence/auto-play needs one.
       const s = await readRoom(code);
       const me = s && s.members.find((m) => m.id === b.playerId);
-      if (!me) return res.json(s && (s.kicked || []).includes(b.playerId) ? { kicked: true } : s && (s.left || []).includes(b.playerId) ? { left: true } : { gone: true });
+      if (!me) {
+        if (s && (s.kicked || []).includes(b.playerId)) return res.json({ kicked: true });
+        if (s && (s.left || []).includes(b.playerId)) return res.json({ left: true });
+        return res.json((await wasClosed(code)) ? { closed: true } : { gone: true });
+      }
       const stale = now - me.lastSeen > G.HEARTBEAT_MS;
       if (!stale && !G.tick(structuredClone(s), now)) {
         if (b.since === s.version && b.ps === G.presenceSig(s, now)) return res.json({ unchanged: true });
@@ -179,8 +186,25 @@ export default async function handler(req, res) {
         if (wasOnline && !changed) r.version -= 1; // a heartbeat alone is not news: other players' quiet polls stay quiet
         return { state: G.view(r, self, now) };
       });
+      if (result.gone && (await wasClosed(code))) return res.json({ closed: true });
       if (result.state) withIce(result.state);
       return res.json(result);
+    }
+
+    // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.
+    // The admin is whoever signed in with the admin password in the room they are in now.
+    if (b.op === 'rooms' || b.op === 'closeRoom') {
+      const here = await readRoom(code);
+      const who = here && here.members.find((m) => m.id === b.playerId);
+      if (!who || !who.admin) throw new G.GameError('Only the admin can do that.');
+      if (b.op === 'rooms') {
+        const rooms = (await listRooms()).map(({ code: c, room }) => G.roomSummary(room, c, now)).sort((x, y) => y.last - x.last);
+        return res.json({ rooms, total: rooms.length, active: rooms.filter((r) => r.online > 0).length });
+      }
+      const target = String(b.target ?? '');
+      if (!/^[A-Za-z0-9_-]{1,24}$/.test(target)) throw new G.GameError('Bad room name.');
+      await closeRoom(target);
+      return res.json({ ok: true });
     }
 
     // Stats window: this room's table and its last games (read-only, any member of the room).

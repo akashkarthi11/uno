@@ -291,6 +291,8 @@ async function pollOnce() {
       removedByAdmin();
     } else if (data.left) {
       removedByAdmin("You left the game.");
+    } else if (data.closed) {
+      removedByAdmin("This room was closed by the admin.");
     } else if (data.gone) {
       // The table forgot us (idle too long) — quietly rejoin: with the password if this page typed it, else with the token.
       playerId = null;
@@ -1112,6 +1114,7 @@ $("challengeBox").addEventListener("change", (e) => sendRule({ challenge: e.targ
 
 function renderSettings(s) {
   // The game settings are the admin's: other players only see the "For you" part of the Settings window.
+  $("roomsBtn").classList.toggle("hidden", !s.admin); // the real admin only
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
   $("settings").classList.toggle("hidden", !s.canStart);
@@ -1167,7 +1170,62 @@ const settingsModal = $("settingsModal");
 $("settingsBtn").addEventListener("click", () => settingsModal.classList.remove("hidden"));
 $("settingsX").addEventListener("click", () => settingsModal.classList.add("hidden"));
 settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
-["rulesBtn", "statsBtn", "leaveBtn"].forEach((id) => $(id).addEventListener("click", () => settingsModal.classList.add("hidden")));
+["rulesBtn", "statsBtn", "leaveBtn", "roomsBtn"].forEach((id) => $(id).addEventListener("click", () => settingsModal.classList.add("hidden")));
+
+/* ---------- the real admin's Rooms window ---------- */
+const ago = (t) => {
+  if (!t) return "never";
+  const sec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  return sec < 60 ? sec + "s ago" : sec < 3600 ? Math.round(sec / 60) + " min ago" : Math.round(sec / 3600) + " h ago";
+};
+
+function renderRooms(r) {
+  $("roomsSummary").textContent = r.total + (r.total === 1 ? " room" : " rooms") + " in total · " + r.active + " active now";
+  const list = $("roomsList");
+  list.textContent = "";
+  for (const room of r.rooms) {
+    const row = document.createElement("div");
+    row.className = "room-row" + (room.online > 0 ? " live" : "");
+    const info = document.createElement("div");
+    info.className = "info";
+    const code = document.createElement("b");
+    code.textContent = room.code + (room.code === roomNow() ? " (this room)" : "");
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = (room.mode === "private" ? "🔒 private" : "public") + " · " + room.phase;
+    const stat = document.createElement("div");
+    stat.textContent = room.online + " online of " + room.players + " · last seen " + ago(room.last) + (room.gameNo ? " · game #" + room.gameNo : "");
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = room.names.join(", ") || "—";
+    info.append(code, badge, stat, who);
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "ghost remove";
+    rm.textContent = "Remove";
+    rm.addEventListener("click", () => closeRoomNow(room));
+    row.append(info, rm);
+    list.appendChild(row);
+  }
+  if (!r.rooms.length) { const n = document.createElement("div"); n.className = "none hint"; n.textContent = "No rooms."; list.appendChild(n); }
+}
+const roomNow = () => room;
+
+async function loadRooms() {
+  $("roomsSummary").textContent = "Loading…";
+  try { renderRooms(await api({ op: "rooms" })); } catch (e) { $("roomsSummary").textContent = e.message; }
+}
+async function closeRoomNow(r) {
+  const here = r.code === roomNow();
+  if (!confirm("Remove room " + r.code + "?" + (r.online ? " " + r.online + " online player(s) in it will be sent out." : "") + (here ? " This is the room you are in." : ""))) return;
+  try { await api({ op: "closeRoom", target: r.code }); } catch (e) { toast(e.message); return; }
+  if (here) { removedByAdmin("You removed this room."); $("roomsModal").classList.add("hidden"); return; }
+  loadRooms();
+}
+$("roomsBtn").addEventListener("click", () => { $("roomsModal").classList.remove("hidden"); loadRooms(); });
+$("roomsRefresh").addEventListener("click", loadRooms);
+$("roomsX").addEventListener("click", () => $("roomsModal").classList.add("hidden"));
+$("roomsModal").addEventListener("click", (e) => { if (e.target === $("roomsModal")) $("roomsModal").classList.add("hidden"); });
 
 /* ---------- landscape: the table is laid out wide; on a phone held upright we offer to turn it ---------- */
 const maxBacks = () => (window.innerHeight > window.innerWidth ? 8 : 16); // an upright phone is narrow: fewer backs, then "+n"

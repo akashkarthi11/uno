@@ -407,3 +407,58 @@ test('co-admin password: a refresh keeps the co-admin, the admin can drop it, a 
   const normal = await call({ op: 'join', room, name: 'Co', password: '123456', playerId: C });
   assert.equal(normal.body.state.canStart, false, 'an ordinary sign-in is an ordinary player again');
 });
+
+/* ---------- the real admin's Rooms window ---------- */
+
+test('rooms: the real admin sees every room (total and active now) and can remove one; nobody else can', async () => {
+  const suffix = Math.floor(Math.random() * 1e6);
+  const A = 'rmA' + suffix;
+  const B = 'rmB' + suffix;
+  const admin = await call({ op: 'join', room: A, name: 'Boss', password: '110299' });
+  const aPub = await call({ op: 'join', room: A, name: 'Pat', password: '123456' });
+  const bAdmin = await call({ op: 'join', room: B, name: 'Other', password: '110299' });
+  await call({ op: 'private', room: B, playerId: bAdmin.body.state.you, on: true });
+  const bPriv = await call({ op: 'join', room: B, name: 'Priv', password: '281101' });
+  await call({ op: 'start', room: B, playerId: bAdmin.body.state.you });
+
+  const list = await call({ op: 'rooms', room: A, playerId: admin.body.state.you });
+  assert.equal(list.code, 200);
+  const a = list.body.rooms.find((r) => r.code === A);
+  const b = list.body.rooms.find((r) => r.code === B);
+  assert.deepEqual([a.mode, a.phase, a.players, a.online], ['public', 'lobby', 2, 2]);
+  assert.deepEqual([b.mode, b.phase, b.players], ['private', 'playing', 2]);
+  assert.deepEqual(a.names.sort(), ['Boss', 'Pat']);
+  assert.ok(list.body.total >= 2 && list.body.active >= 2, 'totals count both rooms');
+
+  // an ordinary player, a co-admin by password, and a stranger are all refused
+  assert.equal((await call({ op: 'rooms', room: A, playerId: aPub.body.state.you })).code, 400);
+  const co = await call({ op: 'join', room: A, name: 'Co', password: '12345678' });
+  assert.equal((await call({ op: 'rooms', room: A, playerId: co.body.state.you })).code, 400, 'a co-admin cannot');
+  assert.equal((await call({ op: 'closeRoom', room: A, playerId: co.body.state.you, target: B })).code, 400);
+  assert.equal((await call({ op: 'rooms', room: A, playerId: 'nobody' })).code, 400);
+  assert.equal((await call({ op: 'closeRoom', room: A, playerId: admin.body.state.you, target: 'bad room!' })).code, 400);
+
+  // remove room B: it disappears from the list, its players are told, their old sign-in no longer works
+  assert.equal((await call({ op: 'closeRoom', room: A, playerId: admin.body.state.you, target: B })).code, 200);
+  const after = await call({ op: 'rooms', room: A, playerId: admin.body.state.you });
+  assert.equal(after.body.rooms.some((r) => r.code === B), false);
+  assert.equal(after.body.rooms.some((r) => r.code === A), true, 'the other room is untouched');
+  assert.equal((await call({ op: 'state', room: B, playerId: bPriv.body.state.you })).body.closed, true);
+  const resume = await call({ op: 'session', room: B, token: bPriv.body.token });
+  assert.equal(resume.code, 401);
+  assert.match(resume.body.error, /closed by the admin/);
+  assert.equal((await call({ op: 'state', room: A, playerId: aPub.body.state.you })).body.state.players.length, 3, 'room A carries on');
+});
+
+test('rooms: a room summary says who is online and what the room is doing', () => {
+  const s = G.newRoom('t');
+  const now = 100000;
+  const a = G.join(s, { name: 'Ann', admin: true }, now);
+  const b = G.join(s, { name: 'Bob', admin: false, role: 'public' }, now - 60000); // not seen for a minute: offline
+  assert.deepEqual(G.roomSummary(s, 'x', now), { code: 'x', mode: 'public', phase: 'lobby', players: 2, online: 1, names: ['Ann', 'Bob'], gameNo: 0, last: now });
+  b.lastSeen = now;
+  G.act(s, a, { op: 'start' }, now);
+  assert.equal(G.roomSummary(s, 'x', now).phase, 'playing');
+  G.act(s, a, { op: 'pause' }, now);
+  assert.equal(G.roomSummary(s, 'x', now).phase, 'paused');
+});

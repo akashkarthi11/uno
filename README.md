@@ -264,3 +264,11 @@ co-admin (start games, game settings, pause / resume / restart) and the same lim
 switch, no removing players). It works in public and in private games and survives the admin switching between them (the
 player takes the kind of the current game, so in a private game they count as a private player for voice). A refresh keeps it;
 the real admin can still drop it, and it returns the next time that player signs in with the password.
+
+## Rooms window (real admin)
+
+The real admin (110299) has a **🗂 Rooms** button in Settings: how many rooms exist, how many are active now (somebody was seen in
+the last 30 seconds), and for each room its name, public / private, lobby / playing / paused / finished, who is in it and when
+it was last seen, with a **Remove** button. Removing a room deletes it; its players are told "This room was closed by the
+admin" (they are not quietly let back in for 2 minutes, and their old sign-in token stops working). Not available to a
+co-admin. Listing uses one Redis scan and one batched read, only while the window is open.

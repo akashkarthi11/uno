@@ -894,6 +894,21 @@ const canChallenge = (s) => {
   return Boolean(by && !by.finished && s.seats.includes(by.id));
 };
 
+/** One line about a room for the admin's Rooms window. */
+export function roomSummary(s, code, now) {
+  const members = s.members || [];
+  return {
+    code,
+    mode: s.private ? 'private' : 'public',
+    phase: !s.started ? 'lobby' : s.over ? 'finished' : s.paused ? 'paused' : 'playing',
+    players: members.length,
+    online: members.filter((m) => online(m, now)).length,
+    names: members.slice(0, 8).map((m) => m.name),
+    gameNo: s.gameNo || 0,
+    last: members.reduce((t, m) => Math.max(t, m.lastSeen || 0), 0),
+  };
+}
+
 /* ---------------- stats and history ---------------- */
 
 /**
