@@ -413,7 +413,8 @@ function setPrivate(s, p, on, now) {
 
 /**
  * The admin (110299) lets any public or private player start games, or takes that back at any time.
- * On screen that player is labelled "admin" and the real admin carries no label. A co-admin can start a game and nothing else: no settings, no public/private switch, no pause, restart or removal,
+ * On screen that player is labelled "admin" and the real admin carries no label. A co-admin can start a game, choose the game settings,
+ * pause / resume and restart it (back to the lobby), and nothing else: no public/private switch, no removing players,
  * no special-card pick-up, and no voice chat unless they joined with the private password.
  */
 function setStarter(s, admin, targetId, on) {
@@ -475,7 +476,7 @@ function removeMember(s, t, now, left = false) {
 
 /** Admin ends the current game (running or finished) and sends everyone back to the lobby. */
 function toLobby(s, p) {
-  if (!p.admin) fail('Only the admin can do that.');
+  if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to run the game
   s.started = false;
   s.over = false;
   s.seats = [];
@@ -502,7 +503,7 @@ function toLobby(s, p) {
 
 /** Admin freezes the game (no plays, draws or timeouts); resuming gives the player back the time they had left. */
 function setPaused(s, p, on, now) {
-  if (!p.admin) fail('Only the admin can do that.');
+  if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to run the game
   if (!s.started || s.over) fail('No game running.');
   if (on === Boolean(s.paused)) return;
   if (on) {

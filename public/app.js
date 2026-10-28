@@ -701,8 +701,8 @@ function renderGame(s) {
   seenCards = nowSeen;
   turn = s.over ? null : { deadline: Date.now() + s.turnLeft, frozen: s.turnLeft, paused: s.paused, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
   $("pausedBanner").classList.toggle("hidden", !(s.paused && !s.over));
-  $("pausedBanner").textContent = s.pauseNote ? "⏸ Game paused — " + s.pauseNote + (s.admin ? " Resume, remove them, or restart." : " Waiting for the admin.") : "⏸ Game paused by the admin";
-  $("pauseBtn").classList.toggle("hidden", !(s.admin && !s.over));
+  $("pausedBanner").textContent = s.pauseNote ? "⏸ Game paused — " + s.pauseNote + (s.admin ? " Resume, remove them, or restart." : s.canStart ? " Resume or restart." : " Waiting for the admin.") : "⏸ Game paused by the admin";
+  $("pauseBtn").classList.toggle("hidden", !(s.canStart && !s.over));
   $("pauseBtn").textContent = s.paused ? "▶ Resume" : "⏸ Pause";
   updateTimer();
 
@@ -726,7 +726,7 @@ function renderGame(s) {
   ["passBtn", "unoBtn"].forEach((id) => $(id).classList.toggle("hidden", !s.seated));
   $("hand").classList.remove("hidden"); // the hand area is always there; it explains itself when it has no cards
   $("drawPile").style.cursor = s.seated ? "pointer" : "default";
-  $("restartBtn").classList.toggle("hidden", !s.admin);
+  $("restartBtn").classList.toggle("hidden", !s.canStart);
   $("passBtn").disabled = !(myTurn && s.drawn != null) || s.paused;
   // GrowX! must be pressed while you hold 2 cards, i.e. before playing the second-to-last one.
   const canUno = s.seated && !s.over && me && me.count > 0 && me.count <= 2 && !s.saidUno;
@@ -753,7 +753,7 @@ function renderGame(s) {
     if (s.loser) lines.push("Last with cards: " + s.loser);
     $("endText").textContent = lines.join("\n");
     $("playAgain").classList.toggle("hidden", !s.canStart);
-    $("toLobby").classList.toggle("hidden", !s.admin);
+    $("toLobby").classList.toggle("hidden", !s.canStart);
     $("endHint").textContent = s.canStart ? "" : "Waiting for the admin to start the next game…";
     end.classList.remove("hidden");
     const key = s.ranking.join("|") + "|" + (s.loser || "");

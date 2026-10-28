@@ -230,6 +230,8 @@ call. It is shown only while the game is public (a private game has no public pl
 - **Challenge +4** (admin switch, lobby only): a Wild Draw Four may be played any time. The next player can ⚔ Challenge it: if the
   player held the current colour (a bluff) they draw the +4 and the challenger plays on; if not, the challenger draws +2 more
   (6 in total) and loses the turn. A +4 played as someone's last card cannot be challenged.
+- **The "admin" the admin appoints (a co-admin)** can start games, choose the game settings, pause / resume and restart the game;
+  removing players, the public/private switch, the special-card pick-up and appointing others stay with the real admin.
 - **🚪 Leave** takes a player out for good (cards back into the pile); their old tab and token no longer work, and signing in
   again joins as a new player.
 - **🔔 Alerts** shows a notification when your turn starts while the page is in the background (and flashes the tab title).

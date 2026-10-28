@@ -892,8 +892,14 @@ test('co-admin: can start games and choose settings, nothing else; only the admi
 
   G.act(s, pub, { op: 'start' }, now); // the co-admin starts the game
   assert.equal(s.started, true);
-  assert.throws(() => G.act(s, pub, { op: 'pause' }, now), /Only the admin/);
-  assert.throws(() => G.act(s, pub, { op: 'lobby' }, now), /Only the admin/);
+  G.act(s, pub, { op: 'pause' }, now); // the co-admin can pause, resume and restart
+  assert.equal(s.paused, true);
+  G.act(s, pub, { op: 'resume' }, now);
+  assert.equal(s.paused, false);
+  assert.throws(() => G.act(s, priv, { op: 'pause' }, now), /Only the admin/, 'an ordinary player still cannot');
+  assert.throws(() => G.act(s, priv, { op: 'lobby' }, now), /Only the admin/);
+  assert.throws(() => G.act(s, pub, { op: 'kick', targetId: priv.id }, now), /Only the admin/, 'removing players stays with the admin');
+  assert.throws(() => G.act(s, pub, { op: 'private', on: true }, now), /Only the admin/);
   s.cur = s.seats.indexOf(pub.id);
   assert.throws(() => G.act(s, pub, { op: 'draw', value: 'skip', color: 'red' }, now), /Admin only/);
 

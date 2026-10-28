@@ -324,3 +324,24 @@ test('stats: public and private games are kept apart, and each kind of player se
   const asPub = G.statsView(s, G.join(s, { name: 'Pub2', admin: false, role: 'public' }, now));
   assert.deepEqual(Object.keys(asPub.modes), ['public'], 'a public player sees public games only');
 });
+
+test('co-admin: can pause, resume and restart the game (back to the lobby), an ordinary player cannot', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const co = G.join(s, { name: 'Co', admin: false, role: 'public' }, now);
+  const other = G.join(s, { name: 'Other', admin: false, role: 'public' }, now);
+  G.act(s, admin, { op: 'starter', targetId: co.id, on: true }, now);
+  G.act(s, co, { op: 'start' }, now);
+  G.act(s, co, { op: 'pause' }, now);
+  assert.equal(G.view(s, other, now).paused, true);
+  G.act(s, co, { op: 'resume' }, now);
+  assert.equal(G.view(s, other, now).paused, false);
+  assert.throws(() => G.act(s, other, { op: 'pause' }, now), /Only the admin/);
+  assert.throws(() => G.act(s, other, { op: 'lobby' }, now), /Only the admin/);
+  G.act(s, co, { op: 'lobby' }, now);
+  assert.equal(G.view(s, other, now).started, false, 'restart: everyone is back in the lobby');
+  G.act(s, admin, { op: 'starter', targetId: co.id, on: false }, now);
+  G.act(s, admin, { op: 'start' }, now);
+  assert.throws(() => G.act(s, co, { op: 'pause' }, now), /Only the admin/, 'dropped co-admin loses it at once');
+});
