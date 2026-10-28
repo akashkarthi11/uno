@@ -122,7 +122,8 @@ export default async function handler(req, res) {
       } else if (coadmin) {
         const existing = await readRoom(code);
         if (existing && existing.private) {
-          return res.status(401).json({ error: 'Ask the admin to start the game and share the private password.', denied: true });
+          // the co-admin password is not to be hinted at: in a private game it just looks like the system is down
+          return res.status(401).json({ error: 'System down', denied: true });
         }
       }
       let claim;
@@ -153,7 +154,7 @@ export default async function handler(req, res) {
       // The same rule as a fresh sign-in: a private game admits private players only, a public one public players only.
       if (claim.role !== 'admin' && (claim.co ? Boolean(existing && existing.private) : (claim.role === 'private') !== Boolean(existing && existing.private))) {
         return res.status(401).json({
-          error: claim.role === 'public' ? 'Ask the admin to start the game and share the private password.' : 'This game is public now — sign in again.',
+          error: claim.co ? 'System down' : claim.role === 'public' ? 'Ask the admin to start the game and share the private password.' : 'This game is public now — sign in again.',
           denied: true,
         });
       }

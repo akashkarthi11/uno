@@ -262,7 +262,7 @@ Besides the admin password (110299), public (123456) and private (281101), the p
 **co-admin straight away** (`GAME_COADMIN_PASSWORD` to change it): shown to everyone as "admin", with the rights of an appointed
 co-admin (start games, game settings, pause / resume / restart) and the same limits (no relay / public voice / public-private
 switch, no removing players). It works in **public games only**: a private game admits just 110299 and 281101, so the co-admin
-password is refused there, and a password co-admin who is in a room when the admin makes it private is sent out like any public
+password is refused there (the answer is just "System down", with no hint about private games), and a password co-admin who is in a room when the admin makes it private is sent out like any public
 player (they can sign in again when it is public). A refresh keeps it; the real admin can still drop it, and it returns the
 next time that player signs in with the password.
 
