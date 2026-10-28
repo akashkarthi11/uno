@@ -1015,3 +1015,20 @@ test('public voice switch: off by default; the admin turns it on or off and publ
   assert.equal(G.view(s, pub, now).canVoice, false);
   assert.deepEqual(G.view(s, pub, now).voice, []);
 });
+
+test('going private switches public voice off, and it cannot be switched on in a private game', () => {
+  const s = G.newRoom('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const priv = G.join(s, { name: 'Priv', admin: false, role: 'private' }, now);
+  G.act(s, admin, { op: 'config', publicVoice: true }, now);
+  assert.equal(G.view(s, admin, now).settings.publicVoice, true);
+
+  G.act(s, admin, { op: 'private', on: true }, now);
+  assert.equal(G.view(s, admin, now).settings.publicVoice, false, 'reset when the game goes private');
+  assert.throws(() => G.act(s, admin, { op: 'config', publicVoice: true }, now), /only for public games/);
+  assert.equal(G.view(s, priv, now).canVoice, true, 'private players keep voice as always');
+
+  G.act(s, admin, { op: 'private', on: false }, now);
+  assert.equal(G.view(s, admin, now).settings.publicVoice, false, 'and it stays off when the game is public again');
+});

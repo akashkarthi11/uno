@@ -188,7 +188,7 @@ function chat(s, p, raw, now) {
 
 /** Voice chat is for the admin and private players. */
 export const canVoice = (s, p) => Boolean(p.admin || p.role === 'private' || publicVoiceOf(s));
-export const publicVoiceOf = (s) => Boolean(s.settings && s.settings.publicVoice);
+export const publicVoiceOf = (s) => Boolean(s.settings && s.settings.publicVoice && !s.private); // never in a private game
 
 function voiceJoin(s, p) {
   if (!canVoice(s, p)) fail('Voice chat is for private players and the admin.');
@@ -343,6 +343,7 @@ function setConfig(s, p, b) {
   const hasSupers = supers && typeof supers === 'object';
   if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined) fail('Bad settings.');
   if (publicVoice !== undefined && typeof publicVoice !== 'boolean') fail('Bad settings.');
+  if (publicVoice === true && s.private) fail('Public voice is only for public games.');
   if (turnSecs !== undefined && !(Number.isInteger(turnSecs) && turnSecs >= TURN_MIN_SECS && turnSecs <= TURN_MAX_SECS)) {
     fail(`Turn time must be a whole number of seconds from ${TURN_MIN_SECS} to ${TURN_MAX_SECS}.`);
   }
@@ -377,6 +378,7 @@ function setPrivate(s, p, on, now) {
   if (!p.admin) fail('Only the admin can do that.');
   const changed = !!s.private !== !!on;
   s.private = on;
+  if (on && s.settings) s.settings = { ...s.settings, publicVoice: false }; // a private game has no public voice, and it stays off when the game goes public again
   if (changed) s.chat = []; // switching public/private starts a clean chat
   addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
   const want = on ? 'private' : 'public';
