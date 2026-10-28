@@ -1439,7 +1439,7 @@ let cqDismissed = ""; // the waiting +2 / +4 the player chose to stack on instea
 const pendKey = (s) => (s.pend ? [s.pend.kind, s.pend.n, s.pend.by, s.turnAt].join("|") : "");
 
 function renderChallenge(s, myTurn) {
-  const box = $("challengeBox");
+  const box = $("challengeQ");
   const show = Boolean(myTurn && s.pend && s.pend.canChallenge && !s.paused && !s.over && s.seated && pendKey(s) !== cqDismissed);
   box.classList.toggle("hidden", !show);
   if (!show) return;
