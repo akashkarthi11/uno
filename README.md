@@ -176,3 +176,12 @@ To pick the primary, ask the live function to time both (admin password required
       -d '{"op":"bench","room":"main","password":"<admin password>"}'
 
 It answers with the function's region and each database's median read time in ms; make the lower one primary.
+
+## Voice relay (TURN) — Cloudflare, free
+
+Most voice calls connect directly. For phones that cannot (some mobile-data networks), a relay carries the audio.
+In the Cloudflare dashboard: **Realtime → TURN → Create TURN key**. Then add two private variables to the Vercel project
+(Production): `CF_TURN_KEY_ID` (the key id) and `CF_TURN_API_TOKEN` (its API token). The server mints short-lived
+credentials from them (cached for 12 h per server instance); players never see the token, and public players get no voice
+details at all. Without the variables voice uses STUN only. Check Cloudflare's current free allowance on its pricing page.
+Static credentials from another provider also work via `GAME_TURN_URLS`, `GAME_TURN_USER`, `GAME_TURN_PASS`.

@@ -8,10 +8,51 @@ const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
 // Voice chat connects browsers directly; STUN finds the route. Add a TURN relay for strict networks by setting
 // GAME_TURN_URLS (comma separated), GAME_TURN_USER and GAME_TURN_PASS.
 const STUN = [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
+// Cloudflare Realtime TURN: set CF_TURN_KEY_ID and CF_TURN_API_TOKEN (a TURN key made in the Cloudflare dashboard) and
+// the server mints short-lived relay credentials itself; nothing secret ever reaches the browser except those.
+const CF_KEY = process.env.CF_TURN_KEY_ID;
+const CF_TOKEN = process.env.CF_TURN_API_TOKEN;
+const CF_BASE = process.env.CF_TURN_API || 'https://rtc.live.cloudflare.com';
+const CF_TTL = 86400; // seconds a minted credential lives
+let cfIce = null; // { servers, until }
+let cfPending = null;
+
+async function mintCloudflare() {
+  const r = await fetch(`${CF_BASE}/v1/turn/keys/${CF_KEY}/credentials/generate-ice-servers`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ttl: CF_TTL }),
+    signal: AbortSignal.timeout(2000),
+  });
+  if (!r.ok) throw new Error('turn ' + r.status);
+  const j = await r.json();
+  const list = Array.isArray(j.iceServers) ? j.iceServers : j.iceServers ? [j.iceServers] : [];
+  // keep only the relay entries; our own STUN list stays in front
+  const relay = list.filter((s) => s && s.username && s.credential);
+  if (!relay.length) throw new Error('turn: no relay entries');
+  return relay;
+}
+
+/** Makes sure a relay credential is on hand (refreshed hourly at most). Never throws: without it voice just uses STUN. */
+async function ensureIce() {
+  if (!CF_KEY || !CF_TOKEN) return;
+  const now = Date.now();
+  if (cfIce && cfIce.until > now) return;
+  if (!cfPending) {
+    cfPending = mintCloudflare()
+      .then((servers) => { cfIce = { servers, until: Date.now() + (CF_TTL * 1000) / 2 }; })
+      .catch(() => { cfIce = cfIce && cfIce.until > now - CF_TTL * 500 ? { ...cfIce, until: Date.now() + 60000 } : null; })
+      .finally(() => { cfPending = null; });
+  }
+  if (!cfIce) await cfPending; // first time on this instance: wait (2 s at most)
+}
+
 function iceServers() {
+  const out = [...STUN];
+  if (cfIce) out.push(...cfIce.servers);
   const urls = (process.env.GAME_TURN_URLS || '').split(',').map((x) => x.trim()).filter(Boolean);
-  if (!urls.length) return STUN;
-  return [...STUN, { urls, username: process.env.GAME_TURN_USER || '', credential: process.env.GAME_TURN_PASS || '' }];
+  if (urls.length) out.push({ urls, username: process.env.GAME_TURN_USER || '', credential: process.env.GAME_TURN_PASS || '' });
+  return out;
 }
 const withIce = (state) => {
   if (state && state.canVoice) state.iceServers = iceServers();
@@ -31,6 +72,7 @@ export default async function handler(req, res) {
   res.json = (body) => sendJson({ build: BUILD, ...body });
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only.' });
+  await ensureIce();
   if (process.env.VERCEL && !usingRedis) {
     return res.status(500).json({ error: 'Storage not configured: add Upstash Redis to the Vercel project (KV_REST_API_URL / KV_REST_API_TOKEN).' });
   }
