@@ -312,6 +312,16 @@ button.kick {
 .float-msg.mine b { color: #9be7a1; }
 @keyframes floatIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes floatOut { to { opacity: 0; transform: translateY(-8px); } }
+.korean-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.korean-tabs button { padding: 6px 12px; min-height: 0; }
+.korean-tabs button.on { background: var(--green); color: #fff; }
+.korean-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; margin: 8px 0; }
+.korean-grid button { font-size: 30px; min-height: 64px; padding: 4px; line-height: 1.1; }
+.korean-grid button small { display: block; font-size: 12px; color: var(--muted); }
+.korean-grid button.on { outline: 3px solid var(--green); }
+.korean-detail { display: flex; gap: 14px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); }
+.korean-detail .k-letter { font-size: 64px; line-height: 1; min-width: 80px; text-align: center; }
+.korean-detail .k-info { flex: 1; min-width: 0; font-size: 15px; }
 .room-row .row-actions { display: flex; gap: 6px; }
 #watchPlayers { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 #watchPlayers .wp { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); font-size: 14px; }

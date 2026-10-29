@@ -147,6 +147,8 @@ if (window.visualViewport) window.visualViewport.addEventListener("resize", setA
 /** Forget everything remembered about the previous table (used when joining again or after being removed). */
 function resetScreenCaches() {
   chatSig = "";
+  hangul = null; // the letters are fetched again after a new sign-in, so they never outlive the right to see them
+  $("koreanModal").classList.add("hidden");
   floatSeenT = null;
   seenCards = null;
   lastTopId = null;
@@ -571,6 +573,7 @@ function renderLobby(s) {
     }
     ul.appendChild(li);
   }
+  $("koreanBtn").classList.toggle("hidden", !s.private); // private games only: they hold the real admin and private players, nobody else
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
   $("startBtn").classList.toggle("hidden", !isHost);
   $("startBtn").disabled = s.players.length < 2;
@@ -1670,6 +1673,72 @@ function notifyTurn() {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) document.title = BASE_TITLE; });
 renderNotifyBtn();
 if (notifyOn()) registerAlertWorker();
+
+/* ---------- Learn Korean (private games only): the letters come from the server, which only answers the admin and private players ---------- */
+
+const K_TABS = [["consonants", "Consonants"], ["double", "Double consonants"], ["vowels", "Vowels"], ["compound", "Combined vowels"]];
+let hangul = null;
+let kTab = "consonants";
+
+function renderKorean() {
+  const tabs = $("koreanTabs");
+  tabs.textContent = "";
+  for (const [key, label] of K_TABS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ghost" + (key === kTab ? " on" : "");
+    b.textContent = label;
+    b.addEventListener("click", () => { kTab = key; $("koreanDetail").classList.add("hidden"); renderKorean(); });
+    tabs.appendChild(b);
+  }
+  const grid = $("koreanGrid");
+  grid.textContent = "";
+  for (const row of hangul[kTab]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ghost";
+    b.append(row[0]);
+    const sm = document.createElement("small");
+    sm.textContent = row[1];
+    b.appendChild(sm);
+    b.addEventListener("click", () => {
+      grid.querySelectorAll("button.on").forEach((x) => x.classList.remove("on"));
+      b.classList.add("on");
+      showLetter(row);
+    });
+    grid.appendChild(b);
+  }
+}
+let kSpeech = "";
+function showLetter([ch, roman, sound, word, wordRoman, meaning]) {
+  $("koreanDetail").classList.remove("hidden");
+  $("kLetter").textContent = ch;
+  $("kRoman").textContent = roman;
+  $("kSound").textContent = sound;
+  $("kExample").textContent = word + " (" + wordRoman + ") — " + meaning;
+  kSpeech = ch === "ㅇ" ? "응" : word;
+}
+$("kSpeak").addEventListener("click", () => {
+  try {
+    if (!kSpeech || !window.speechSynthesis) { toast("This browser cannot speak."); return; }
+    const u = new SpeechSynthesisUtterance(kSpeech);
+    u.lang = "ko-KR";
+    u.rate = 0.8;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) { toast("This browser cannot speak."); }
+});
+$("koreanBtn").addEventListener("click", async () => {
+  try {
+    if (!hangul) hangul = (await api({ op: "korean" })).hangul;
+  } catch (e) { toast(e.message); return; }
+  $("koreanDetail").classList.add("hidden");
+  renderKorean();
+  $("koreanModal").classList.remove("hidden");
+});
+const closeKorean = () => $("koreanModal").classList.add("hidden");
+$("koreanX").addEventListener("click", closeKorean);
+$("koreanClose").addEventListener("click", closeKorean);
 
 /* ---------- the real admin: told whenever anybody signs in to any room ---------- */
 

@@ -38,6 +38,7 @@
   <h2>Lobby</h2>
   <ul id="lobbyPlayers"></ul>
   <button id="startBtn">Start game</button>
+  <button id="koreanBtn" class="ghost hidden" type="button">🇰🇷 Learn Korean</button>
   <p id="lobbyHint" class="hint"></p>
   <div id="chat">
     <div id="chatLog"></div>
@@ -218,6 +219,27 @@
     <div id="roomsList"></div>
     <p class="hint">"Active now" means somebody in that room was seen in the last 30 seconds. Removing a room sends everyone in it out; they can sign in again after a couple of minutes.</p>
     <button id="roomsClose" class="ghost sticky-close" type="button">Close</button>
+  </div>
+</div>
+
+<div id="koreanModal" class="modal hidden">
+  <div class="box sheet">
+    <div class="sheet-head">
+      <h2>🇰🇷 Hangul letters</h2>
+      <button id="koreanX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
+    </div>
+    <div id="koreanTabs" class="korean-tabs"></div>
+    <div id="koreanGrid" class="korean-grid"></div>
+    <div id="koreanDetail" class="korean-detail hidden">
+      <div id="kLetter" class="k-letter"></div>
+      <div class="k-info">
+        <div><b id="kRoman"></b> <button id="kSpeak" class="ghost" type="button" title="Hear it">🔊</button></div>
+        <div id="kSound" class="hint"></div>
+        <div id="kExample"></div>
+      </div>
+    </div>
+    <p class="hint">Tap a letter to see how it sounds. 🔊 uses your phone's Korean voice, if it has one.</p>
+    <button id="koreanClose" class="ghost sticky-close" type="button">Close</button>
   </div>
 </div>
 

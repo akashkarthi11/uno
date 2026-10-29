@@ -467,6 +467,17 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal((await call({ op: 'peek', room: A, playerId: aPub.body.state.you, target: B })).code, 400);
   assert.equal((await call({ op: 'peek', room: A, playerId: admin.body.state.you, target: 'nonexistentroom' })).code, 400);
 
+  // Learn Korean: the real admin and private players only; a public player or co-admin gets what a made-up action gets
+  const kAdmin = await call({ op: 'korean', room: B, playerId: bAdmin.body.state.you });
+  assert.equal(kAdmin.code, 200);
+  assert.ok(kAdmin.body.hangul.consonants.length === 14 && kAdmin.body.hangul.vowels.length === 10);
+  assert.equal((await call({ op: 'korean', room: B, playerId: bPriv.body.state.you })).code, 200, 'private player');
+  const kPub = await call({ op: 'korean', room: A, playerId: aPub.body.state.you });
+  const kNone = await call({ op: 'nonsense', room: A, playerId: aPub.body.state.you });
+  assert.deepEqual([kPub.code, kPub.body.error], [kNone.code, kNone.body.error], 'indistinguishable from an action that does not exist');
+  assert.equal((await call({ op: 'korean', room: A, playerId: co.body.state.you })).code, 400, 'co-admin');
+  assert.equal((await call({ op: 'korean', room: A, playerId: 'nobody' })).code, 400);
+
   // the admin is told about every sign-in (any room, any role); nobody else can read that feed; each one is delivered once
   const feed = await call({ op: 'joins', room: A, playerId: admin.body.state.you });
   assert.equal(feed.code, 200);

@@ -1,5 +1,6 @@
 import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
+import { HANGUL } from './_lib/korean.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -219,6 +220,15 @@ export default async function handler(req, res) {
       }
       await closeRoom(target);
       return res.json({ ok: true });
+    }
+
+    // The private "Learn Korean" page: only the real admin and private players get anything; everyone else gets the same
+    // answer as for an action that does not exist, so there is nothing to find.
+    if (b.op === 'korean') {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      if (!me || !(me.admin || me.role === 'private')) return res.status(400).json({ error: 'Unknown action.' });
+      return res.json({ hangul: HANGUL });
     }
 
     // Stats window: this room's table and its last games (read-only, any member of the room).
