@@ -7,6 +7,11 @@ import fs from 'node:fs';
 const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const js = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8') + fs.readFileSync(new URL('../public/voice.js', import.meta.url), 'utf8');
 
+test('the Korean quiz hides the letter grid (it labels every letter with its sound) while a question is open', () => {
+  assert.match(js, /openQ[\s\S]{0,200}koreanGrid"\)\.classList\.toggle\("hidden", openQ\)/);
+  assert.match(js, /koreanTabs"\)\.classList\.toggle\("hidden", openQ\)/);
+});
+
 test('every id in the page is unique', () => {
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);

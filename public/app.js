@@ -1780,6 +1780,10 @@ function renderLearn(s) {
     : L ? (following ? "Following the teacher." : "Exploring on your own — tick Follow to rejoin the teacher.") : (s.host ? "Waiting for the teacher to start. You can look around meanwhile." : "The teacher is not here yet. You can look around meanwhile.");
 
   // tabs
+  // while a question is open the letter grid (it shows every letter's sound) and the highlighted letter would give the answer away
+  const openQ = Boolean(L && L.mode === "quiz" && L.q && !L.q.revealed);
+  $("koreanTabs").classList.toggle("hidden", openQ);
+  $("koreanGrid").classList.toggle("hidden", openQ);
   const tabs = $("koreanTabs");
   tabs.textContent = "";
   for (const [key, label] of K_TABS) {
