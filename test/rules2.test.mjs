@@ -478,6 +478,29 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal((await call({ op: 'korean', room: A, playerId: co.body.state.you })).code, 400, 'co-admin');
   assert.equal((await call({ op: 'korean', room: A, playerId: 'nobody' })).code, 400);
 
+  // Learn Korean backups: words, questions and points saved with no expiry; only the real admin; separate from room backups
+  const pp = bPriv.body.state.you, aa = bAdmin.body.state.you;
+  assert.equal((await call({ op: 'learnBackupSave', room: B, playerId: aa })).code, 400, 'nothing to back up yet');
+  assert.equal((await call({ op: 'learnWordAdd', room: B, playerId: pp, ko: '물', roman: 'mul', meaning: 'water' })).code, 200);
+  const lsaved = await call({ op: 'learnBackupSave', room: B, playerId: aa, label: 'week 1' });
+  assert.equal(lsaved.code, 200);
+  const ll = (await call({ op: 'learnBackupList', room: B, playerId: aa })).body.backups.find((x) => x.id === lsaved.body.id);
+  assert.deepEqual([ll.room, ll.label, ll.words], [B, 'week 1', 1]);
+  assert.equal((await call({ op: 'backupList', room: B, playerId: aa })).body.backups.some((x) => x.id === lsaved.body.id), false, 'not in the room backups');
+  assert.equal((await call({ op: 'backupRestore', room: B, playerId: aa, id: lsaved.body.id })).code, 400, 'not a room backup');
+  for (const op of ['learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete']) {
+    assert.equal((await call({ op, room: B, playerId: pp, id: lsaved.body.id })).code, 400, op + ' refused for a private player');
+  }
+  const wid = (await call({ op: 'state', room: B, playerId: pp })).body.state.learn.words[0].id;
+  await call({ op: 'learnWordRemove', room: B, playerId: aa, id: wid });
+  assert.deepEqual((await call({ op: 'state', room: B, playerId: pp })).body.state.learn.words, []);
+  assert.equal((await call({ op: 'learnBackupRestore', room: B, playerId: aa, id: lsaved.body.id })).code, 200);
+  const back = (await call({ op: 'state', room: B, playerId: pp })).body.state.learn.words;
+  assert.deepEqual(back.map((w) => [w.ko, w.byName]), [['물', 'Priv']], 'the word is back with the same author');
+  assert.equal((await call({ op: 'learnBackupGet', room: B, playerId: aa, id: lsaved.body.id })).body.backup.data.words.length, 1);
+  assert.equal((await call({ op: 'learnBackupDelete', room: B, playerId: aa, id: lsaved.body.id })).code, 200);
+  assert.equal((await call({ op: 'learnBackupRestore', room: B, playerId: aa, id: lsaved.body.id })).code, 400, 'removed');
+
   // backups: the admin saves a room, it carries on, a restore puts it back; no expiry; only the admin can touch them
   const saved = await call({ op: 'backupSave', room: A, playerId: admin.body.state.you, target: B, label: 'before the final' });
   assert.equal(saved.code, 200);

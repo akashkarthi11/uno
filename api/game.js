@@ -203,7 +203,7 @@ export default async function handler(req, res) {
 
     // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.
     // The admin is whoever signed in with the admin password in the room they are in now.
-    if (['rooms', 'closeRoom', 'peek', 'joins', 'backupSave', 'backupList', 'backupRestore', 'backupDelete'].includes(b.op)) {
+    if (['rooms', 'closeRoom', 'peek', 'joins', 'backupSave', 'backupList', 'backupRestore', 'backupDelete', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
       const here = await readRoom(code);
       const who = here && here.members.find((m) => m.id === b.playerId);
       if (!who || !who.admin) throw new G.GameError('Only the admin can do that.');
@@ -211,15 +211,64 @@ export default async function handler(req, res) {
 
       // Backups: a copy of a room kept with no time limit until the admin removes it; restoring puts the room back as it was.
       if (b.op === 'backupList') {
-        const list = (await listBackups()).map((e) => ({ id: e.id, room: e.room, at: e.at, label: e.label, mode: e.mode, phase: e.phase, players: e.players, gameNo: e.gameNo })).sort((x, y) => y.at - x.at);
+        const list = (await listBackups()).filter((e) => !e.kind).map((e) => ({ id: e.id, room: e.room, at: e.at, label: e.label, mode: e.mode, phase: e.phase, players: e.players, gameNo: e.gameNo })).sort((x, y) => y.at - x.at);
         return res.json({ backups: list, max: MAX_BACKUPS });
+      }
+      // Learn Korean backups: the shared word list, the questions between members and the points of the room's lesson, kept with
+      // no time limit (the same store as room backups, told apart by `kind`) until the admin removes them.
+      if (b.op === 'learnBackupList') {
+        const list = (await listBackups()).filter((e) => e.kind === 'learn').map((e) => ({ id: e.id, room: e.room, at: e.at, label: e.label, words: e.data.words.length, asks: e.data.asks.length, players: Object.keys(e.data.scores).length })).sort((x, y) => y.at - x.at);
+        return res.json({ backups: list, max: MAX_BACKUPS });
+      }
+      if (b.op === 'learnBackupGet') {
+        const entry = await getBackup(String(b.id ?? '').slice(0, 60));
+        if (!entry || entry.kind !== 'learn') throw new G.GameError('That backup no longer exists.');
+        return res.json({ backup: entry });
+      }
+      if (b.op === 'learnBackupSave') {
+        const L = here.learn;
+        if (!L || !((L.words || []).length || (L.asks || []).length || Object.keys(L.scores || {}).length)) throw new G.GameError('There is nothing in the lesson to back up yet.');
+        if ((await listBackups()).filter((e) => e.kind === 'learn').length >= MAX_BACKUPS) throw new G.GameError(`Backup limit reached (${MAX_BACKUPS}). Remove an old one first.`);
+        const entry = {
+          id: `learn-${code}-${now.toString(36)}`, kind: 'learn', room: code, at: now, label: String(b.label ?? '').trim().slice(0, 40),
+          data: {
+            words: L.words || [], asks: L.asks || [], scores: L.scores || {}, wordSeq: L.wordSeq || 0, askSeq: L.askSeq || 0,
+            names: Object.fromEntries(here.members.map((m) => [m.id, m.name])),
+          },
+        };
+        await saveBackup(structuredClone(entry));
+        return res.json({ ok: true, id: entry.id });
+      }
+      if (b.op === 'learnBackupRestore') {
+        const entry = await getBackup(String(b.id ?? '').slice(0, 60));
+        if (!entry || entry.kind !== 'learn') throw new G.GameError('That backup no longer exists.');
+        const d = entry.data;
+        await withRoom(code, (s) => {
+          if (!s.private) throw new G.GameError('The lesson belongs to private games — switch this room to private first.');
+          const L = s.learn || (s.learn = { tab: 'consonants', idx: 0, mode: 'learn', q: null, qn: 0, scores: {}, at: now });
+          // members have new ids in a new room, so people are matched by name; whatever cannot be matched falls back to the admin
+          const idFor = (id) => (s.members.some((m) => m.id === id) ? id : (s.members.find((m) => m.name === d.names[id]) || {}).id);
+          L.words = d.words.map((w) => ({ ...w, by: idFor(w.by) || who.id }));
+          L.wordSeq = d.wordSeq;
+          L.asks = d.asks.map((a) => ({ ...a, from: idFor(a.from), to: a.to === 'all' ? 'all' : idFor(a.to), answers: Object.fromEntries(Object.entries(a.answers).map(([id, x]) => [idFor(id), x]).filter(([id]) => id)) })).filter((a) => a.from && a.to);
+          L.askSeq = d.askSeq;
+          L.scores = { ...d.scores };
+          L.at = now;
+        });
+        return res.json({ ok: true });
+      }
+      if (b.op === 'learnBackupDelete') {
+        const entry = await getBackup(String(b.id ?? '').slice(0, 60));
+        if (!entry || entry.kind !== 'learn') throw new G.GameError('That backup no longer exists.');
+        await deleteBackup(entry.id);
+        return res.json({ ok: true });
       }
       if (b.op === 'backupSave') {
         const target = String(b.target ?? code);
         if (!/^[A-Za-z0-9_-]{1,24}$/.test(target)) throw new G.GameError('Bad room name.');
         const src = await readRoom(target);
         if (!src) throw new G.GameError('That room no longer exists.');
-        if ((await listBackups()).length >= MAX_BACKUPS) throw new G.GameError(`Backup limit reached (${MAX_BACKUPS}). Remove an old backup first.`);
+        if ((await listBackups()).filter((e) => !e.kind).length >= MAX_BACKUPS) throw new G.GameError(`Backup limit reached (${MAX_BACKUPS}). Remove an old backup first.`);
         const sum = G.roomSummary(src, target, now);
         const { log, ...snapshot } = src;
         const entry = {
@@ -235,7 +284,7 @@ export default async function handler(req, res) {
       }
       if (b.op === 'backupRestore') {
         const entry = await getBackup(String(b.id ?? '').slice(0, 60));
-        if (!entry) throw new G.GameError('That backup no longer exists.');
+        if (!entry || entry.kind) throw new G.GameError('That backup no longer exists.');
         await withRoom(entry.room, (s) => {
           const was = s.version || 0;
           const adminHere = (s.members || []).filter((m) => m.admin); // the admin must not be locked out of the room they restore

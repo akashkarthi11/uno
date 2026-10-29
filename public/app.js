@@ -1850,6 +1850,7 @@ function setPane(p) {
   [["letters", "paneLetters"], ["quiz", "paneQuiz"], ["words", "paneWords"], ["ask", "paneAsk"]].forEach(([k, id]) => $(id).classList.toggle("hidden", k !== p));
   const page = $("learnPage");
   if (page) page.scrollTo({ top: 0 });
+  if (p === "words") loadLearnBackups();
 }
 document.querySelectorAll(".learn-nav button").forEach((b) => b.addEventListener("click", () => setPane(b.dataset.pane)));
 
@@ -2294,6 +2295,65 @@ async function findWord() {
 }
 $("wordFind").addEventListener("click", findWord);
 $("wordQ").addEventListener("keydown", (e) => { if (e.key === "Enter") findWord(); });
+
+/* ---- Learn data backups (real admin only): saved on the server with no time limit, restorable, downloadable ---- */
+async function loadLearnBackups() {
+  const card = $("learnBackupCard");
+  const on = Boolean(state && state.admin);
+  card.classList.toggle("hidden", !on);
+  if (!on) return;
+  let r;
+  try { r = await api({ op: "learnBackupList" }); } catch (e) { return; }
+  const list = $("lbList");
+  list.textContent = "";
+  for (const b of r.backups) {
+    const row = mk("div", "ask-card");
+    row.style.marginTop = "10px";
+    row.appendChild(mk("div", "ask-q", (b.label || "Backup") + " · " + fmtAt(b.at)));
+    row.appendChild(mk("div", "hint-line", b.words + " words · " + b.asks + " questions · " + b.players + " scores · from room " + b.room));
+    const acts = mk("div", "ask-row");
+    const restore = mk("button", "l-btn soft", "↩ Restore");
+    restore.type = "button";
+    restore.addEventListener("click", async () => {
+      if (!confirm("Restore this backup? The words, questions and points in the lesson now are replaced.")) return;
+      try { apply(await api({ op: "learnBackupRestore", id: b.id })); } catch (e) { toast(e.message); return; }
+      toast("Learn data restored.");
+    });
+    const file = mk("button", "l-btn soft", "⬇ File");
+    file.type = "button";
+    file.addEventListener("click", async () => {
+      try {
+        const { backup } = await api({ op: "learnBackupGet", id: b.id });
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "learn-korean-" + new Date(b.at).toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".json";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      } catch (e) { toast(e.message); }
+    });
+    const del = mk("button", "l-btn soft", "Delete");
+    del.type = "button";
+    del.addEventListener("click", async () => {
+      if (!confirm("Delete this backup for good?")) return;
+      try { await api({ op: "learnBackupDelete", id: b.id }); } catch (e) { toast(e.message); return; }
+      loadLearnBackups();
+    });
+    acts.append(restore, file, del);
+    row.appendChild(acts);
+    list.appendChild(row);
+  }
+  if (!r.backups.length) list.appendChild(mk("p", "muted", "No backups yet."));
+}
+$("lbSave").addEventListener("click", async () => {
+  const label = prompt("Name for this backup (optional):", "");
+  if (label === null) return;
+  try { await api({ op: "learnBackupSave", label }); } catch (e) { toast(e.message); return; }
+  toast("Learn data backed up.");
+  loadLearnBackups();
+});
 
 function wordMessage(kind, text) {
   const m = $("wordMsg");
