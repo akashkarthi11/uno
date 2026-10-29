@@ -83,6 +83,25 @@ function voiceSync(s) {
   $("muteBtn").title = voice.muted ? "Unmute" : "Mute";
 }
 
+/**
+ * Opening the camera or microphone shows the browser's permission box, and Chrome takes the page out of full screen when it
+ * does (the bars come back and the table is the wrong size). So: if the page was full screen before, go back in afterwards
+ * (the tap on the camera button is still fresh enough for the browser to allow it) and measure the screen again.
+ */
+async function getMedia(constraints) {
+  const wasFull = Boolean(document.fullscreenElement);
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } finally {
+    if (wasFull && !document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen();
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
+      } catch (e) { /* the browser wants a fresh tap: the full screen button is still there */ }
+    }
+    [0, 200, 600, 1500].forEach((ms) => setTimeout(() => { if (typeof setAppHeight === "function") setAppHeight(); }, ms));
+  }
+}
 const MIC = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
 const CAM = { width: 320, height: 240, frameRate: 15, facingMode: "user" }; // where the camera starts; adaptCamera() then follows the connection
 
@@ -143,7 +162,7 @@ async function voiceJoinNow(opts) {
     return;
   }
   try {
-    voice.stream = await navigator.mediaDevices.getUserMedia({ audio: opts.audio ? MIC : false, video: opts.video ? CAM : false });
+    voice.stream = await getMedia({ audio: opts.audio ? MIC : false, video: opts.video ? CAM : false });
   } catch (e) {
     toast(opts.video && !opts.audio ? "Camera blocked — allow it in the browser to share video." : "Microphone blocked — allow it in the browser to join voice.");
     return;
@@ -522,7 +541,7 @@ async function flipCamera() {
   const next = facing === "user" ? "environment" : "user";
   let track;
   try {
-    track = (await navigator.mediaDevices.getUserMedia({ video: { ...CAM, facingMode: { ideal: next } } })).getVideoTracks()[0];
+    track = (await getMedia({ video: { ...CAM, facingMode: { ideal: next } } })).getVideoTracks()[0];
   } catch (e) {
     toast("This device has no other camera.");
     return;
@@ -555,7 +574,7 @@ async function toggleDevice(kind) {
     if (!voice.mic && !voice.cam) return voiceLeave();
   } else {
     try {
-      const got = await navigator.mediaDevices.getUserMedia(audio ? { audio: MIC } : { video: CAM });
+      const got = await getMedia(audio ? { audio: MIC } : { video: CAM });
       voice.stream.addTrack(got.getTracks()[0]);
     } catch (e) {
       toast(audio ? "Microphone blocked — allow it in the browser." : "Camera blocked — allow it in the browser to share video.");
