@@ -149,16 +149,12 @@ $("handRight").addEventListener("click", () => scrollHand(1));
 
 /** The real visible height of the screen (browser bars excluded), kept in a CSS variable the phone layout uses. */
 function setAppHeight() {
-  // the smaller of the two: in some phone browsers (Brave) the visual viewport can briefly report the height without the address bar
-  // that is still showing, which pushed the bottom of the hand off the screen
-  const h = window.visualViewport ? Math.min(window.visualViewport.height, window.innerHeight) : window.innerHeight;
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
 }
 setAppHeight();
 window.addEventListener("resize", setAppHeight);
 window.addEventListener("orientationchange", setAppHeight);
-// the bars take a moment to hide or show after full screen starts / ends: measure again as they settle
-document.addEventListener("fullscreenchange", () => [0, 150, 400, 900, 1800].forEach((ms) => setTimeout(setAppHeight, ms)));
 if (window.visualViewport) window.visualViewport.addEventListener("resize", setAppHeight);
 
 /** Forget everything remembered about the previous table (used when joining again or after being removed). */
@@ -214,7 +210,6 @@ async function join() {
   $("joinBtn").disabled = true;
   removed = false;
   resetScreenCaches();
-  wantOrientation("portrait"); // the tap on Join is the permission the browser wants for full screen
   try {
     playerId = store("uno-id-" + room) || null;
     apply(await api({ op: "join", name: myName, password: myPassword }));
@@ -584,7 +579,6 @@ function render() {
   document.body.classList.toggle("in-game", inGame); // on phones a running game fills the screen exactly, no page scrolling
   renderRotateHint();
   placeChat(inGame);
-  wantOrientation(inGame && !document.body.classList.contains("learning") ? "landscape" : "portrait");
   renderChat(s);
   updateChatUi(s);
   $("lobby").classList.toggle("hidden", inGame);
@@ -1514,50 +1508,14 @@ function renderRotateHint() {
   const touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   $("rotateHint").classList.toggle("hidden", !(document.body.classList.contains("in-game") && portrait && touch && !rotateDismissed));
 }
-/**
- * Phones: the lobby and sign-in are full screen and upright; a game that starts goes full screen and sideways on its own.
- * Browsers only allow fullscreen / rotation right after a tap, so when there was none (a refresh, a game started by
- * someone else) the very next tap anywhere does it. Computers are left alone.
- */
-let orientHave = null; // "portrait" | "landscape": what this page has already asked for
-let orientArmed = null;
-const coarse = () => Boolean(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
-async function lockOrientation(mode) {
-  if (!coarse()) return true;
-  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { return false; }
-  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock(mode); } catch (e) { /* this browser cannot lock the rotation: the rotate hint covers it */ }
-  return true;
-}
-/**
- * Going full screen by itself can be switched off: it is OFF by default in Brave (there the address bar can stay on top of a
- * "full screen" page and hide the bottom of the hand), ON elsewhere. The Settings button changes it; the manual full screen
- * button always works.
- */
-const autoFsOn = () => { const v = store("uno-autofs"); return v === "1" || (v !== "0" && !(navigator.brave && true)); };
-function wantOrientation(mode) {
-  if (!coarse() || orientHave === mode || !autoFsOn()) return;
-  orientHave = mode;
-  const go = () => lockOrientation(mode).then((ok) => { if (!ok && orientHave === mode) arm(); });
-  const arm = () => {
-    if (orientArmed) document.removeEventListener("pointerup", orientArmed);
-    orientArmed = () => { document.removeEventListener("pointerup", orientArmed); orientArmed = null; if (orientHave === mode) go(); };
-    document.addEventListener("pointerup", orientArmed);
-  };
-  go();
-}
 async function enterLandscape() {
   try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { /* not allowed */ }
   try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape"); } catch (e) { toast("Turn your phone sideways to play in landscape."); }
   renderRotateHint();
 }
 $("landscapeBtn").addEventListener("click", enterLandscape);
-/** The same button turns full screen on and off: while it is on, the label says "Exit full screen" and a tap leaves it. */
-function updateAutoFsBtn() { $("autoFsBtn").textContent = "⛶ Auto full screen: " + (autoFsOn() ? "on" : "off"); }
-$("autoFsBtn").addEventListener("click", () => { store("uno-autofs", autoFsOn() ? "0" : "1"); orientHave = null; updateAutoFsBtn(); });
-updateAutoFsBtn();
 function updateFsBtn() { $("fsBtn").textContent = document.fullscreenElement ? "⛶ Exit full screen" : "⛶ Landscape / full screen"; }
 async function exitFullscreen() {
-  if (orientArmed) { document.removeEventListener("pointerup", orientArmed); orientArmed = null; } // do not drag them back in on the next tap
   try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) { /* nothing to unlock */ }
   try { if (document.exitFullscreen) await document.exitFullscreen(); } catch (e) { /* already out */ }
   updateFsBtn();

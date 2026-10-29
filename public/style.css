@@ -908,7 +908,6 @@ body.in-game {
   --ch: clamp(84px, calc(var(--app-h, 100vh) * .27), 170px);   /* height of a card in your hand */
   --oh: clamp(20px, min(calc(var(--app-h, 100vh) * .065), 4.6vw), 40px); /* height of an opponent's face-down card */
   height: var(--app-h, 100dvh); overflow: hidden; display: flex; flex-direction: column; background: var(--room-bg);
-  height: min(var(--app-h, 100svh), 100svh); /* never taller than the part of the screen that is always visible */
 }
 /* the header becomes a see-through bar over the top of the table: ping and room on the left, icons on the right */
 body.in-game header {
