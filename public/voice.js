@@ -66,7 +66,7 @@ function voiceSync(s) {
   btn.title = voice.active ? "Leave voice" : "Join voice" + (voice.members.length ? " (" + voice.members.length + " in voice)" : "");
   btn.dataset.count = String(voice.members.length);
   $("muteBtn").classList.toggle("hidden", !voice.active);
-  $("camBtn").classList.toggle("hidden", !voice.active);
+  $("camBtn").classList.toggle("hidden", !s.canVoice); // same permission as the mic button
   $("camBtn").classList.toggle("on", voice.cam);
   $("camBtn").title = voice.cam ? "Turn camera off" : "Turn camera on";
   $("muteBtn").textContent = voice.muted ? "🔇" : "🎙";
@@ -328,6 +328,10 @@ function removeTile(id) {
 }
 
 async function toggleCam() {
+  if (!voice.active) { // the camera rides on voice: joining it first, like the mic button does
+    session(voiceOffKey(), null);
+    await voiceJoin();
+  }
   if (!voice.active || !voice.stream) return;
   if (voice.cam) {
     voice.stream.getVideoTracks().forEach((t) => { t.stop(); voice.stream.removeTrack(t); });
