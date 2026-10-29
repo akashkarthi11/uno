@@ -70,10 +70,10 @@ export const THEMES = ['growx', 'classic', 'midnight'];
 /** How many cards each player is dealt (the admin sets it in the lobby; 5 unless changed). */
 const handSizeOf = (s) => (s.settings && Number.isInteger(s.settings.handSize) ? s.settings.handSize : DEFAULT_HAND);
 /**
- * The deal takes 5 to 10 seconds, longer the more cards go out (cards per player times players). Nobody can act until it is
+ * The deal takes 5 to 15 seconds, longer the more cards go out (cards per player times players). Nobody can act until it is
  * over, and the first turn's clock starts then. GAME_DEAL=off (tests) skips it.
  */
-export const dealMsFor = (cards) => (process.env.GAME_DEAL === 'off' ? 0 : Math.min(10000, Math.max(5000, cards * 160)));
+export const dealMsFor = (cards) => (process.env.GAME_DEAL === 'off' ? 0 : Math.min(15000, Math.max(5000, cards * 240)));
 const turnMsOf = (s) => (s.settings && Number.isInteger(s.settings.turnSecs) ? s.settings.turnSecs * 1000 : TURN_MS);
 export const MATCH_TARGET = 500; // official: first to 500 points wins the match
 /** Official card values: numbers = face value, Skip / Reverse / Draw Two = 20, Wild / Wild Draw Four = 50 (our extra cards: 20 / 50). */

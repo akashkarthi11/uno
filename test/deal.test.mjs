@@ -15,13 +15,13 @@ function room(n, handSize) {
   return { s, ps, now };
 }
 
-test('the deal lasts 5 to 10 seconds, longer for more cards', () => {
+test('the deal lasts 5 to 15 seconds, longer for more cards', () => {
   assert.equal(G.dealMsFor(14), 5000);
-  assert.equal(G.dealMsFor(42), 6720);
-  assert.equal(G.dealMsFor(80), 10000);
-  assert.equal(G.dealMsFor(500), 10000);
+  assert.equal(G.dealMsFor(42), 10080);
+  assert.equal(G.dealMsFor(80), 15000);
+  assert.equal(G.dealMsFor(500), 15000);
   assert.equal(room(2, 3).s.dealMs, 5000);
-  assert.equal(room(8, 10).s.dealMs, 10000);
+  assert.equal(room(8, 10).s.dealMs, 15000);
 });
 
 test('nothing can be played or drawn while cards are being dealt, and the first clock starts afterwards', () => {
