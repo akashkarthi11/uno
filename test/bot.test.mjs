@@ -103,13 +103,15 @@ test('observer account: hears and sees, is not an admin, is never listed or deal
   const names = G.view(s, a, now).players.map((p) => p.name);
   assert.deepEqual(names.sort(), ['Boss', 'P1'], 'the real admin is listed in the lobby, the observer is not');
   assert.throws(() => G.act(s, obs, { op: 'start' }, now), /Only the admin/, 'no admin powers');
-  assert.throws(() => G.act(s, obs, { op: 'kick', targetId: a.id }, now), /Only the admin/);
+  assert.throws(() => G.act(s, obs, { op: 'kick', targetId: boss.id }, now), /cannot remove an admin/, 'it can remove people, but never the admin');
   assert.throws(() => G.act(s, obs, { op: 'chat', text: 'hi' }, now), /only watch/);
   G.act(s, boss, { op: 'start' }, now);
   assert.equal(s.seats.includes(obs.id), false, 'never dealt in');
   assert.equal(s.seats.length, 2);
   assert.equal(G.view(s, obs, now).seated, false);
   assert.equal(G.view(s, obs, now).hand.length, 0);
+  G.act(s, obs, { op: 'kick', targetId: a.id }, now); // removing an unwanted player is allowed
+  assert.equal(s.members.some((m) => m.id === a.id), false);
 });
 
 test('observer account: cannot play any game, not even against the bot', () => {
