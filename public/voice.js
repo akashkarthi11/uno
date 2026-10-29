@@ -171,7 +171,8 @@ function voiceStopLocal() {
   voice.active = false;
   voice.mic = false;
   voice.cam = false;
-  $("videoStrip").textContent = "";
+  $("vTiles").textContent = "";
+  updateVideoChip();
   paintSpeaking();
 }
 
@@ -313,28 +314,112 @@ function toggleMute() {
 
 /* ---------- camera (optional, only while in voice) ---------- */
 
-/** One small round-cornered video per person with a camera on; the strip sits over the table's right edge. */
+/**
+ * Video tiles: one per person with a camera on, in a strip you can drag anywhere. Tap a tile to make it big (tap again to
+ * shrink it); the little chip hides or shows them all; your own tile has a flip button for the front / back camera. A
+ * tile gets a green ring while that person talks (the same ring the seats use) and a spinner until the picture arrives.
+ */
+let facing = "user";
+function updateVideoChip() {
+  const n = $("vTiles").children.length;
+  const chip = $("vToggle");
+  chip.classList.toggle("hidden", n === 0);
+  chip.textContent = $("videoStrip").classList.contains("collapsed") ? "📹 " + n + " ▾" : "📹 ▴";
+}
+
 function showTile(id, stream, self) {
   removeTile(id);
   const tile = document.createElement("div");
-  tile.className = "vtile" + (self ? " self" : "");
+  tile.className = "vtile loading" + (self ? " self" : "") + (self && facing === "environment" ? " back" : "");
   tile.dataset.vid = id;
+  tile.dataset.pid = id; // so the speaking ring (paintSpeaking) lands on it too
   const v = document.createElement("video");
   v.autoplay = true;
   v.playsInline = true;
   v.muted = true; // the sound already plays through the audio element
   v.srcObject = new MediaStream(stream.getVideoTracks());
+  v.addEventListener("playing", () => tile.classList.remove("loading"));
   v.play().catch(() => {});
   const p = state && state.players.find((x) => x.id === id);
   const name = document.createElement("span");
+  name.className = "vname";
   name.textContent = self ? "You" : (p ? p.name : "");
   tile.append(v, name);
-  $("videoStrip").appendChild(tile);
+  if (self) {
+    const flip = document.createElement("button");
+    flip.type = "button";
+    flip.className = "vflip";
+    flip.title = "Switch camera";
+    flip.textContent = "🔄";
+    flip.addEventListener("pointerdown", (e) => e.stopPropagation()); // not a drag, not an enlarge
+    flip.addEventListener("click", (e) => { e.stopPropagation(); flipCamera(); });
+    tile.appendChild(flip);
+  }
+  $("vTiles").appendChild(tile);
+  updateVideoChip();
 }
 function removeTile(id) {
-  const t = $("videoStrip").querySelector('[data-vid="' + CSS.escape(id) + '"]');
+  const t = $("vTiles").querySelector('[data-vid="' + CSS.escape(id) + '"]');
   if (t) t.remove();
+  updateVideoChip();
 }
+
+/** Front / back camera: the new picture replaces the old one on every connection, nobody has to reconnect. */
+async function flipCamera() {
+  if (!voice.cam || !voice.stream) return;
+  const next = facing === "user" ? "environment" : "user";
+  let track;
+  try {
+    track = (await navigator.mediaDevices.getUserMedia({ video: { ...CAM, facingMode: { ideal: next } } })).getVideoTracks()[0];
+  } catch (e) {
+    toast("This device has no other camera.");
+    return;
+  }
+  facing = next;
+  voice.stream.getVideoTracks().forEach((o) => { o.stop(); voice.stream.removeTrack(o); });
+  voice.stream.addTrack(track);
+  for (const peer of voice.peers.values()) {
+    const sender = peer.pc.getSenders().find((x) => x.track && x.track.kind === "video");
+    if (sender) sender.replaceTrack(track).catch(() => {});
+  }
+  showTile(state.you, voice.stream, true); // a back camera is not mirrored (the tile gets the "back" class)
+}
+
+// Drag the strip anywhere; a tap (no movement) on a tile makes it big or small.
+(() => {
+  const strip = $("videoStrip");
+  let drag = null;
+  strip.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button") && e.target.id !== "vToggle") return;
+    const r = strip.getBoundingClientRect();
+    drag = { x: e.clientX, y: e.clientY, left: r.left, top: r.top, moved: false, tile: e.target.closest(".vtile") };
+    strip.setPointerCapture(e.pointerId);
+  });
+  strip.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+    drag.moved = true;
+    const r = strip.getBoundingClientRect();
+    strip.style.right = "auto";
+    strip.style.left = Math.max(0, Math.min(window.innerWidth - r.width, drag.left + dx)) + "px";
+    strip.style.top = Math.max(0, Math.min(window.innerHeight - 40, drag.top + dy)) + "px";
+  });
+  strip.addEventListener("pointerup", () => {
+    if (!drag) return;
+    if (!drag.moved && drag.tile) {
+      const big = !drag.tile.classList.contains("big");
+      strip.querySelectorAll(".vtile.big").forEach((x) => x.classList.remove("big"));
+      drag.tile.classList.toggle("big", big);
+    }
+    drag = null;
+  });
+  strip.addEventListener("pointercancel", () => { drag = null; });
+  $("vToggle").addEventListener("click", () => {
+    strip.classList.toggle("collapsed");
+    updateVideoChip();
+  });
+})();
 
 /** The microphone and the camera are switched on and off separately; the call is left when both are off. */
 async function toggleDevice(kind) {
