@@ -1541,7 +1541,21 @@ async function enterLandscape() {
   renderRotateHint();
 }
 $("landscapeBtn").addEventListener("click", enterLandscape);
-$("fsBtn").addEventListener("click", () => { settingsModal.classList.add("hidden"); enterLandscape(); });
+/** The same button turns full screen on and off: while it is on, the label says "Exit full screen" and a tap leaves it. */
+function updateFsBtn() { $("fsBtn").textContent = document.fullscreenElement ? "⛶ Exit full screen" : "⛶ Landscape / full screen"; }
+async function exitFullscreen() {
+  if (orientArmed) { document.removeEventListener("pointerup", orientArmed); orientArmed = null; } // do not drag them back in on the next tap
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) { /* nothing to unlock */ }
+  try { if (document.exitFullscreen) await document.exitFullscreen(); } catch (e) { /* already out */ }
+  updateFsBtn();
+  renderRotateHint();
+}
+document.addEventListener("fullscreenchange", updateFsBtn);
+updateFsBtn();
+$("fsBtn").addEventListener("click", () => {
+  settingsModal.classList.add("hidden");
+  if (document.fullscreenElement) exitFullscreen(); else enterLandscape();
+});
 $("rotateX").addEventListener("click", () => { rotateDismissed = true; renderRotateHint(); });
 window.addEventListener("resize", renderRotateHint);
 window.addEventListener("orientationchange", renderRotateHint);
