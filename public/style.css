@@ -312,6 +312,21 @@ button.kick {
 .float-msg.mine b { color: #9be7a1; }
 @keyframes floatIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes floatOut { to { opacity: 0; transform: translateY(-8px); } }
+.learn-page { position: fixed; inset: 0; z-index: 65; background: var(--bg, var(--surface)); overflow-y: auto; display: flex; flex-direction: column; }
+.learn-page.hidden { display: none; }
+.learn-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.learn-head h2 { flex: 1; margin: 0; font-size: 20px; text-align: left; }
+.learn-body { width: min(720px, 100%); margin: 0 auto; padding: 12px 16px 28px; box-sizing: border-box; }
+.learn-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; align-items: center; }
+.learn-quiz { text-align: center; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft); margin: 10px 0; }
+.learn-quiz .k-letter { font-size: 88px; line-height: 1.1; }
+.q-opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
+.q-opts button { font-size: 20px; min-height: 52px; }
+.q-opts button.mine { outline: 3px solid var(--blue, #3b82f6); }
+.q-opts button.right { background: var(--green); color: #fff; }
+.q-opts button.wrong { background: #dc2626; color: #fff; }
+.learn-scores { margin: 10px 0; font-size: 15px; }
+body.learning { overflow: hidden; }
 .korean-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
 .korean-tabs button { padding: 6px 12px; min-height: 0; }
 .korean-tabs button.on { background: var(--green); color: #fff; }

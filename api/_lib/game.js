@@ -1,6 +1,7 @@
 // Pure game rules. A room is one plain JSON object; every function mutates it and throws GameError
 // on a rule violation (the caller then discards the mutated copy and saves nothing).
 import { randomUUID } from 'node:crypto';
+import { HANGUL } from './korean.js';
 
 export class GameError extends Error {}
 
@@ -193,6 +194,76 @@ export function join(s, { name, admin, role, playerId, coadmin }, now) {
 /* ---------------- lobby chat ---------------- */
 
 /** A short text or emoji message to everyone in the room (shown in the lobby). */
+/* ---------------- live Korean lesson (private games only) ---------------- */
+
+const LEARN_TABS = Object.keys(HANGUL);
+const LEARN_POINTS = 10;
+/** Only the real admin and private players; anybody else gets what a made-up action gets, so there is nothing to find. */
+export const canLearn = (p) => Boolean(p && (p.admin || p.role === 'private'));
+const letterAt = (tab, idx) => (HANGUL[tab] || [])[idx];
+
+/** The real admin teaches (picks the letter, starts and reveals quizzes); private players follow and answer. */
+function learn(s, p, b, now) {
+  if (!canLearn(p)) fail('Unknown action.');
+  const L = s.learn || (s.learn = { tab: 'consonants', idx: 0, mode: 'learn', q: null, qn: 0, scores: {}, at: now });
+  if (b.op === 'learnAnswer') {
+    const q = L.q;
+    if (!q || q.revealed) fail('There is no open question.');
+    const choice = b.choice;
+    if (!Number.isInteger(choice) || choice < 0 || choice >= q.opts.length) fail('Bad answer.');
+    if (q.answers[p.id] !== undefined) fail('You already answered.');
+    q.answers[p.id] = choice;
+    const waiting = s.members.filter((m) => canLearn(m) && online(m, now) && q.answers[m.id] === undefined);
+    if (!waiting.length) revealQuestion(s, L);
+    return;
+  }
+  if (!p.admin) fail('Only the teacher can do that.');
+  if (b.op === 'learnShow') {
+    if (!LEARN_TABS.includes(b.tab) || !Number.isInteger(b.idx) || !letterAt(b.tab, b.idx)) fail('Bad letter.');
+    Object.assign(L, { tab: b.tab, idx: b.idx, mode: 'learn', q: null, at: now });
+  } else if (b.op === 'learnQuiz') {
+    const tab = LEARN_TABS.includes(b.tab) ? b.tab : L.tab;
+    const rows = HANGUL[tab];
+    const idx = rnd(rows.length);
+    // the answers are the sounds of this letter and three other letters of the same group (all different)
+    const others = shuffle(rows.map((_, i) => i).filter((i) => i !== idx && rows[i][1] !== rows[idx][1])).slice(0, 3);
+    const order = shuffle([idx, ...others]);
+    L.qn += 1;
+    Object.assign(L, { tab, idx, mode: 'quiz', at: now, q: { n: L.qn, letter: rows[idx][0], opts: order.map((i) => rows[i][1]), correct: order.indexOf(idx), answers: {}, revealed: false } });
+  } else if (b.op === 'learnReveal') {
+    if (!L.q || L.q.revealed) fail('There is no open question.');
+    revealQuestion(s, L);
+  } else if (b.op === 'learnEnd') {
+    s.learn = null;
+  }
+}
+
+function revealQuestion(s, L) {
+  const q = L.q;
+  q.revealed = true;
+  for (const [id, choice] of Object.entries(q.answers)) {
+    const m = byId(s, id);
+    if (m && choice === q.correct) L.scores[m.name] = (L.scores[m.name] || 0) + LEARN_POINTS;
+  }
+}
+
+/** What a member of the lesson sees (nobody else gets the field at all). The right answer stays hidden until the reveal. */
+function learnView(s, me) {
+  if (!canLearn(me) || !s.learn) return undefined;
+  const L = s.learn;
+  const q = L.q;
+  return {
+    tab: L.tab, idx: L.idx, mode: L.mode, scores: L.scores, at: L.at,
+    q: q ? {
+      n: q.n, letter: q.letter, opts: q.opts, revealed: q.revealed,
+      mine: q.answers[me.id] ?? null,
+      answered: Object.keys(q.answers).length,
+      correct: q.revealed ? q.correct : undefined,
+      results: q.revealed ? Object.entries(q.answers).map(([id, c]) => ({ name: (byId(s, id) || {}).name || '?', ok: c === q.correct })) : undefined,
+    } : null,
+  };
+}
+
 function chat(s, p, raw, now) {
   if (s.over) fail('The game has finished — the chat starts fresh with the next game.');
   const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
@@ -311,6 +382,7 @@ function dispatch(s, me, b, now) {
     case 'private': return setPrivate(s, me, b.on === true, now);
     case 'config': return setConfig(s, me, b);
     case 'chat': return chat(s, me, b.text, now);
+    case 'learnShow': case 'learnQuiz': case 'learnReveal': case 'learnAnswer': case 'learnEnd': return learn(s, me, b, now);
     case 'pause': return setPaused(s, me, true, now);
     case 'resume': return setPaused(s, me, false, now);
     case 'voiceJoin': return voiceJoin(s, me);
@@ -444,6 +516,7 @@ function setPrivate(s, p, on, now) {
   s.private = on;
   if (on && s.settings) s.settings = { ...s.settings, publicVoice: false }; // a private game has no public voice, and it stays off when the game goes public again
   if (changed) s.chat = []; // switching public/private starts a clean chat
+  if (!on) s.learn = null; // the Korean lesson belongs to private games
   addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
   const want = on ? 'private' : 'public';
   for (const m of [...s.members]) {
@@ -1063,6 +1136,7 @@ export function view(s, me, now) {
     })),
     chat: (s.chat || []).slice(-30),
     settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
+    learn: learnView(s, me), // the live Korean lesson: undefined (not even sent) for anyone but the admin and private players
     canVoice: canVoice(s, me),
     voice: canVoice(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };

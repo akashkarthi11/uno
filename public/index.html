@@ -222,12 +222,18 @@
   </div>
 </div>
 
-<div id="koreanModal" class="modal hidden">
-  <div class="box sheet">
-    <div class="sheet-head">
-      <h2>🇰🇷 Hangul letters</h2>
-      <button id="koreanX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
+<!-- Learn Korean: a page of its own, shared live by the real admin (teacher) and the private players -->
+<section id="learnPage" class="learn-page hidden">
+  <header class="learn-head">
+    <button id="learnBack" class="ghost" type="button">← Back</button>
+    <h2>🇰🇷 Hangul</h2>
+    <span id="learnRole" class="badge"></span>
+  </header>
+  <div class="learn-body">
+    <div id="learnFollowRow" class="learn-row hidden">
+      <label><input id="learnFollow" type="checkbox" checked> Follow the teacher</label>
     </div>
+    <p id="learnStatus" class="hint"></p>
     <div id="koreanTabs" class="korean-tabs"></div>
     <div id="koreanGrid" class="korean-grid"></div>
     <div id="koreanDetail" class="korean-detail hidden">
@@ -238,10 +244,22 @@
         <div id="kExample"></div>
       </div>
     </div>
-    <p class="hint">Tap a letter to see how it sounds. 🔊 uses your phone's Korean voice, if it has one.</p>
-    <button id="koreanClose" class="ghost sticky-close" type="button">Close</button>
+    <div id="learnQuiz" class="learn-quiz hidden">
+      <div class="hint">What sound is this letter?</div>
+      <div id="qLetter" class="k-letter"></div>
+      <div id="qOpts" class="q-opts"></div>
+      <div id="qInfo" class="hint"></div>
+    </div>
+    <div id="learnTeacher" class="learn-row hidden">
+      <button id="learnQuizBtn" type="button">🎯 Quiz on this group</button>
+      <button id="learnRevealBtn" class="ghost hidden" type="button">Show answers</button>
+      <button id="learnNextBtn" class="ghost hidden" type="button">Next question</button>
+      <button id="learnStopBtn" class="ghost hidden" type="button">Back to letters</button>
+    </div>
+    <div id="learnScores" class="learn-scores"></div>
+    <p class="hint">The teacher (the admin) picks the letter and starts the quizzes; everyone sees it at the same moment. The ✓ and ⭐ marks are kept on this phone only.</p>
   </div>
-</div>
+</section>
 
 <div id="chatFloat" aria-live="polite"></div>
 

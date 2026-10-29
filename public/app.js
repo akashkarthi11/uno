@@ -148,7 +148,7 @@ if (window.visualViewport) window.visualViewport.addEventListener("resize", setA
 function resetScreenCaches() {
   chatSig = "";
   hangul = null; // the letters are fetched again after a new sign-in, so they never outlive the right to see them
-  $("koreanModal").classList.add("hidden");
+  if (typeof closeLearn === "function") closeLearn();
   floatSeenT = null;
   seenCards = null;
   lastTopId = null;
@@ -513,6 +513,7 @@ function render() {
   renderNotifyBtn(); // the alerts switch belongs to the kind of game on screen (public or private)
   applyTheme(s.settings && s.settings.theme); // every update carries the room's theme, so a change shows for everyone
   const inGame = s.started;
+  if (learnOpen) { if (inGame || !s.private) closeLearn(); else renderLearn(s); } // a starting game (or a game turned public) takes everyone out of the lesson
   // the sheet is only useful while it is still your turn and the card is still in your hand
   if (sheet && !(s.started && !s.over && !s.paused && s.cur === s.you && s.hand.some((c) => c.id === sheet.card.id))) closeSheet();
   document.body.classList.toggle("in-game", inGame); // on phones a running game fills the screen exactly, no page scrolling
@@ -1674,50 +1675,147 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) docu
 renderNotifyBtn();
 if (notifyOn()) registerAlertWorker();
 
-/* ---------- Learn Korean (private games only): the letters come from the server, which only answers the admin and private players ---------- */
+/* ---------- Learn Korean: a page of its own, shared live. The real admin teaches, private players follow; the letters come from the
+   server, which only answers the admin and private players. What each person has seen / got right is kept on this phone only. ---------- */
 
-const K_TABS = [["consonants", "Consonants"], ["double", "Double consonants"], ["vowels", "Vowels"], ["compound", "Combined vowels"]];
+const K_TABS = [["consonants", "Consonants"], ["double", "Double"], ["vowels", "Vowels"], ["compound", "Combined vowels"]];
 let hangul = null;
+let learnOpen = false;
 let kTab = "consonants";
+let kIdx = -1; // the letter this person is looking at on their own (when not following the teacher)
+let kSpeech = "";
+let kQuizDone = 0; // the newest quiz question already counted in this phone's progress
 
-function renderKorean() {
+const learnProgress = () => { try { return JSON.parse(store("uno-hangul") || "{}"); } catch (e) { return {}; } };
+function markLetter(ch, field) {
+  const p = learnProgress();
+  p[ch] = { seen: 0, right: 0, ...(p[ch] || {}) };
+  p[ch][field] += 1;
+  store("uno-hangul", JSON.stringify(p));
+}
+
+/** What to show: the teacher's letter for followers (and for the teacher), else the letter this person picked. */
+function learnSel(s) {
+  const L = s.learn;
+  const follow = s.admin || $("learnFollow").checked;
+  if (L && follow) return { tab: L.tab, idx: L.idx };
+  return { tab: kTab, idx: kIdx };
+}
+
+function renderLearn(s) {
+  if (!hangul) return;
+  const L = s.learn;
+  const sel = learnSel(s);
+  const following = Boolean(L) && (s.admin || $("learnFollow").checked);
+  $("learnRole").textContent = s.admin ? "👑 Teacher" : "Student";
+  $("learnFollowRow").classList.toggle("hidden", s.admin);
+  $("learnTeacher").classList.toggle("hidden", !s.admin);
+  $("learnStatus").textContent = s.admin
+    ? "Tap a letter: everyone in the room sees it. Start a quiz when you like."
+    : L ? (following ? "Following the teacher." : "Exploring on your own — tick Follow to rejoin the teacher.") : (s.host ? "Waiting for the teacher to start. You can look around meanwhile." : "The teacher is not here yet. You can look around meanwhile.");
+
+  // tabs
   const tabs = $("koreanTabs");
   tabs.textContent = "";
   for (const [key, label] of K_TABS) {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "ghost" + (key === kTab ? " on" : "");
+    b.className = "ghost" + (key === sel.tab ? " on" : "");
     b.textContent = label;
-    b.addEventListener("click", () => { kTab = key; $("koreanDetail").classList.add("hidden"); renderKorean(); });
+    b.addEventListener("click", () => {
+      if (s.admin) { learnSend({ op: "learnShow", tab: key, idx: 0 }); return; }
+      if (following) { toast("You are following the teacher — untick Follow to explore."); return; }
+      kTab = key; kIdx = -1; renderLearn(state);
+    });
     tabs.appendChild(b);
   }
+
+  // letters, with this phone's marks
+  const prog = learnProgress();
   const grid = $("koreanGrid");
   grid.textContent = "";
-  for (const row of hangul[kTab]) {
+  hangul[sel.tab].forEach((row, i) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "ghost";
+    b.className = "ghost" + (i === sel.idx ? " on" : "");
     b.append(row[0]);
     const sm = document.createElement("small");
-    sm.textContent = row[1];
+    const pr = prog[row[0]];
+    sm.textContent = row[1] + (pr && pr.right >= 2 ? " ⭐" : pr && pr.seen ? " ✓" : "");
     b.appendChild(sm);
     b.addEventListener("click", () => {
-      grid.querySelectorAll("button.on").forEach((x) => x.classList.remove("on"));
-      b.classList.add("on");
-      showLetter(row);
+      if (s.admin) { learnSend({ op: "learnShow", tab: sel.tab, idx: i }); return; }
+      if (following) { toast("You are following the teacher — untick Follow to explore."); return; }
+      kTab = sel.tab; kIdx = i; renderLearn(state);
     });
     grid.appendChild(b);
+  });
+
+  // the letter in detail (not while a question is open: that would give the answer away)
+  const quiz = L && L.mode === "quiz" && L.q;
+  const row = !quiz && sel.idx >= 0 ? hangul[sel.tab][sel.idx] : null;
+  $("koreanDetail").classList.toggle("hidden", !row);
+  if (row) {
+    const [ch, roman, sound, word, wordRoman, meaning] = row;
+    $("kLetter").textContent = ch;
+    $("kRoman").textContent = roman;
+    $("kSound").textContent = sound;
+    $("kExample").textContent = word + " (" + wordRoman + ") — " + meaning;
+    kSpeech = ch === "ㅇ" ? "응" : word;
+    const key = ch + ":" + (L ? L.at : 0) + ":" + sel.tab + sel.idx;
+    if (renderLearn.lastSeen !== key) { renderLearn.lastSeen = key; markLetter(ch, "seen"); }
+  }
+
+  // the live quiz
+  $("learnQuiz").classList.toggle("hidden", !quiz);
+  if (quiz) {
+    const q = L.q;
+    $("qLetter").textContent = q.letter;
+    const opts = $("qOpts");
+    opts.textContent = "";
+    q.opts.forEach((o, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ghost" + (q.mine === i ? " mine" : "") + (q.revealed && i === q.correct ? " right" : "") + (q.revealed && q.mine === i && i !== q.correct ? " wrong" : "");
+      b.textContent = o;
+      b.disabled = q.mine !== null || q.revealed;
+      b.addEventListener("click", () => learnSend({ op: "learnAnswer", choice: i }));
+      opts.appendChild(b);
+    });
+    $("qInfo").textContent = q.revealed
+      ? q.results.map((r) => (r.ok ? "✅ " : "❌ ") + r.name).join("   ")
+      : q.answered + " answered" + (q.mine !== null ? " — waiting for the others…" : "");
+    if (q.revealed && kQuizDone !== q.n) {
+      kQuizDone = q.n;
+      if (q.mine !== null && q.mine === q.correct) markLetter(q.letter, "right");
+    }
+  }
+  $("learnQuizBtn").classList.toggle("hidden", Boolean(quiz && !L.q.revealed));
+  $("learnRevealBtn").classList.toggle("hidden", !(quiz && !L.q.revealed));
+  $("learnNextBtn").classList.toggle("hidden", !(quiz && L.q.revealed));
+  $("learnStopBtn").classList.toggle("hidden", !quiz);
+
+  // everyone's points in this lesson
+  const sc = $("learnScores");
+  sc.textContent = "";
+  const entries = Object.entries((L && L.scores) || {}).sort((a, b) => b[1] - a[1]);
+  if (entries.length) {
+    const h = document.createElement("b");
+    h.textContent = "Points";
+    sc.appendChild(h);
+    for (const [name, pts] of entries) { const d = document.createElement("div"); d.textContent = name + " — " + pts; sc.appendChild(d); }
   }
 }
-let kSpeech = "";
-function showLetter([ch, roman, sound, word, wordRoman, meaning]) {
-  $("koreanDetail").classList.remove("hidden");
-  $("kLetter").textContent = ch;
-  $("kRoman").textContent = roman;
-  $("kSound").textContent = sound;
-  $("kExample").textContent = word + " (" + wordRoman + ") — " + meaning;
-  kSpeech = ch === "ㅇ" ? "응" : word;
+
+async function learnSend(body) {
+  try { apply(await api(body)); } catch (e) { toast(e.message); }
 }
+$("learnFollow").addEventListener("change", () => { if (state) renderLearn(state); });
+$("learnQuizBtn").addEventListener("click", () => { const s = state; learnSend({ op: "learnQuiz", tab: s.learn ? s.learn.tab : kTab }); });
+$("learnRevealBtn").addEventListener("click", () => learnSend({ op: "learnReveal" }));
+$("learnNextBtn").addEventListener("click", () => learnSend({ op: "learnQuiz", tab: state.learn ? state.learn.tab : kTab }));
+$("learnStopBtn").addEventListener("click", () => learnSend({ op: "learnShow", tab: state.learn.tab, idx: state.learn.idx }));
+
 $("kSpeak").addEventListener("click", () => {
   try {
     if (!kSpeech || !window.speechSynthesis) { toast("This browser cannot speak."); return; }
@@ -1728,17 +1826,22 @@ $("kSpeak").addEventListener("click", () => {
     speechSynthesis.speak(u);
   } catch (e) { toast("This browser cannot speak."); }
 });
+
+function closeLearn() {
+  learnOpen = false;
+  $("learnPage").classList.add("hidden");
+  document.body.classList.remove("learning");
+}
 $("koreanBtn").addEventListener("click", async () => {
   try {
     if (!hangul) hangul = (await api({ op: "korean" })).hangul;
   } catch (e) { toast(e.message); return; }
-  $("koreanDetail").classList.add("hidden");
-  renderKorean();
-  $("koreanModal").classList.remove("hidden");
+  learnOpen = true;
+  document.body.classList.add("learning");
+  $("learnPage").classList.remove("hidden");
+  renderLearn(state);
 });
-const closeKorean = () => $("koreanModal").classList.add("hidden");
-$("koreanX").addEventListener("click", closeKorean);
-$("koreanClose").addEventListener("click", closeKorean);
+$("learnBack").addEventListener("click", closeLearn);
 
 /* ---------- the real admin: told whenever anybody signs in to any room ---------- */
 
