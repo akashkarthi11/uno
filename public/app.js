@@ -1509,8 +1509,19 @@ function renderRotateHint() {
   $("rotateHint").classList.toggle("hidden", !(document.body.classList.contains("in-game") && portrait && touch && !rotateDismissed));
 }
 async function enterLandscape() {
-  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { /* not allowed */ }
-  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape"); } catch (e) { toast("Turn your phone sideways to play in landscape."); }
+  const el = document.documentElement;
+  let blocked = "";
+  try {
+    if (!document.fullscreenElement) {
+      const ask = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!ask) blocked = "This browser has no full screen for web pages.";
+      else await ask.call(el);
+    }
+  } catch (e) { blocked = "The browser refused full screen (" + (e && e.name ? e.name : "blocked") + ")."; }
+  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape"); } catch (e) { if (!blocked) toast("Turn your phone sideways to play in landscape."); }
+  // the bars take a moment to go: measure the screen again as it settles
+  [0, 200, 600, 1500].forEach((ms) => setTimeout(setAppHeight, ms));
+  if (blocked) toast(blocked + " For a full screen like a video: browser menu ⋮ → Add to Home screen, then open the game from its icon.");
   renderRotateHint();
 }
 $("landscapeBtn").addEventListener("click", enterLandscape);
@@ -1521,11 +1532,27 @@ async function exitFullscreen() {
   updateFsBtn();
   renderRotateHint();
 }
-document.addEventListener("fullscreenchange", updateFsBtn);
+document.addEventListener("fullscreenchange", () => { updateFsBtn(); [0, 200, 600, 1500].forEach((ms) => setTimeout(setAppHeight, ms)); });
 updateFsBtn();
 $("fsBtn").addEventListener("click", () => {
   settingsModal.classList.add("hidden");
   if (document.fullscreenElement) exitFullscreen(); else enterLandscape();
+});
+/* The installed app opens with no address bar at all (the manifest asks for full screen). Where the browser offers it, one tap installs; elsewhere the button says how. */
+let installPrompt = null;
+const installed = () => window.matchMedia("(display-mode: fullscreen)").matches || window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
+window.addEventListener("appinstalled", () => { installPrompt = null; $("installBtn").classList.add("hidden"); });
+$("installBtn").classList.toggle("hidden", installed()); // already running as the app: nothing to install
+$("installBtn").addEventListener("click", async () => {
+  settingsModal.classList.add("hidden");
+  if (installPrompt) {
+    installPrompt.prompt();
+    try { await installPrompt.userChoice; } catch (e) { /* closed */ }
+    installPrompt = null;
+  } else {
+    toast("Browser menu ⋮ → Add to Home screen (or Install app), then open the game from its icon: no address bar.");
+  }
 });
 $("rotateX").addEventListener("click", () => { rotateDismissed = true; renderRotateHint(); });
 window.addEventListener("resize", renderRotateHint);
@@ -2688,6 +2715,7 @@ function desktopOnPhone(screenW, screenH, innerW) {
       "screen " + screen.width + "x" + screen.height + "  dpr " + window.devicePixelRatio,
       "brave: " + brave + "  desktop-site? " + desktopOnPhone(screen.width, screen.height, window.innerWidth),
       "in-game class: " + document.body.classList.contains("in-game") + "  --app-h: " + doc.style.getPropertyValue("--app-h"),
+      "fullscreen: " + (document.fullscreenElement ? "yes" : "no") + "  display-mode: " + (window.matchMedia("(display-mode: fullscreen)").matches ? "fullscreen" : window.matchMedia("(display-mode: standalone)").matches ? "standalone" : "browser"),
       "page scrollable: " + (doc.scrollHeight > doc.clientHeight + 1) + " (" + doc.scrollHeight + " vs " + doc.clientHeight + ")",
       "hand: cards " + hand.querySelectorAll(".card").length + "  top " + Math.round(hr.top) + "  bottom " + Math.round(hr.bottom) + "  scrollW " + hand.scrollWidth + "/" + hand.clientWidth,
       "state: " + (state ? (state.started ? "game" : "lobby") + " seated=" + state.seated + " hand=" + (state.hand ? state.hand.length : "-") : "none"),
