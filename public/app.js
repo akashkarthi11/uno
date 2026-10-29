@@ -1278,9 +1278,14 @@ function renderRooms(r) {
     watch.className = "ghost";
     watch.textContent = "👁 Watch";
     watch.addEventListener("click", () => openWatch(room.code));
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "ghost";
+    save.textContent = "💾 Backup";
+    save.addEventListener("click", () => backupRoom(room));
     const actions = document.createElement("div");
     actions.className = "row-actions";
-    actions.append(watch, rm);
+    actions.append(watch, save, rm);
     row.append(info, actions);
     list.appendChild(row);
   }
@@ -1291,6 +1296,66 @@ const roomNow = () => room;
 async function loadRooms() {
   $("roomsSummary").textContent = "Loading…";
   try { renderRooms(await api({ op: "rooms" })); } catch (e) { $("roomsSummary").textContent = e.message; }
+  loadBackups();
+}
+
+/* backups: kept with no time limit until the admin removes them */
+const fmtAt = (t) => new Date(t).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+async function loadBackups() {
+  let r;
+  try { r = await api({ op: "backupList" }); } catch (e) { return; }
+  $("backupCount").textContent = "(" + r.backups.length + " of " + r.max + ")";
+  const list = $("backupList");
+  list.textContent = "";
+  for (const b of r.backups) {
+    const row = document.createElement("div");
+    row.className = "room-row";
+    const info = document.createElement("div");
+    info.className = "info";
+    const name = document.createElement("b");
+    name.textContent = b.room + (b.label ? " — " + b.label : "");
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = (b.mode === "private" ? "🔒 private" : "public") + " · " + b.phase;
+    const line = document.createElement("div");
+    line.textContent = "saved " + fmtAt(b.at) + (b.gameNo ? " · game #" + b.gameNo : "");
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = b.players.join(", ") || "—";
+    info.append(name, badge, line, who);
+    const restore = document.createElement("button");
+    restore.type = "button";
+    restore.className = "ghost";
+    restore.textContent = "↩ Restore";
+    restore.addEventListener("click", async () => {
+      if (!confirm("Restore room " + b.room + " to how it was on " + fmtAt(b.at) + "? What is in the room now is replaced.")) return;
+      try { await api({ op: "backupRestore", id: b.id }); } catch (e) { toast(e.message); return; }
+      toast("Room " + b.room + " restored.");
+      loadRooms();
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "ghost remove";
+    del.textContent = "Delete";
+    del.addEventListener("click", async () => {
+      if (!confirm("Delete this backup for good?")) return;
+      try { await api({ op: "backupDelete", id: b.id }); } catch (e) { toast(e.message); return; }
+      loadBackups();
+    });
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    actions.append(restore, del);
+    row.append(info, actions);
+    list.appendChild(row);
+  }
+  if (!r.backups.length) { const n = document.createElement("div"); n.className = "none hint"; n.textContent = "No backups yet."; list.appendChild(n); }
+}
+async function backupRoom(r) {
+  const label = prompt("Name for this backup (optional):", "");
+  if (label === null) return;
+  try { await api({ op: "backupSave", target: r.code, label }); } catch (e) { toast(e.message); return; }
+  toast("Backed up " + r.code + ".");
+  loadBackups();
 }
 async function closeRoomNow(r) {
   const here = r.code === roomNow();

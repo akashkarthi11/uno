@@ -170,6 +170,54 @@ export async function takeJoins(now = Date.now()) {
   return list.filter((e) => now - e.t < JOINS_TTL * 1000);
 }
 
+/**
+ * Backups of a room, kept for as long as the real admin wants them (no expiry). One small key each; the admin removes them.
+ * At most MAX_BACKUPS are kept so they can never grow without limit.
+ */
+export const MAX_BACKUPS = 30;
+const backupKey = (id) => `growx:backup:${id}`;
+const backupsMem = new Map();
+
+export async function saveBackup(entry) {
+  if (!usingRedis) {
+    backupsMem.set(entry.id, structuredClone(entry));
+    return;
+  }
+  await (await client()).set(backupKey(entry.id), JSON.stringify(entry)); // no expiry
+}
+
+export async function listBackups() {
+  if (!usingRedis) return [...backupsMem.values()].map((e) => structuredClone(e));
+  const r = await client();
+  const keys = [];
+  let cursor = '0';
+  do {
+    const [next, batch] = await r.scan(cursor, { match: 'growx:backup:*', count: 200 });
+    cursor = String(next);
+    keys.push(...batch);
+  } while (cursor !== '0' && keys.length < 200);
+  const picked = [...new Set(keys)];
+  if (!picked.length) return [];
+  const vals = await r.mget(...picked);
+  const out = [];
+  for (const v of vals) {
+    try { const e = typeof v === 'string' ? JSON.parse(v) : v; if (e && e.id) out.push(e); } catch { /* skip a damaged one */ }
+  }
+  return out;
+}
+
+export async function getBackup(id) {
+  if (!usingRedis) return backupsMem.has(id) ? structuredClone(backupsMem.get(id)) : null;
+  const v = await (await client()).get(backupKey(id));
+  if (!v) return null;
+  return typeof v === 'string' ? JSON.parse(v) : v;
+}
+
+export async function deleteBackup(id) {
+  if (!usingRedis) { backupsMem.delete(id); return; }
+  await (await client()).del(backupKey(id));
+}
+
 const closedKey = (code) => `growx:closed:${code}`;
 const closedMem = new Map();
 const CLOSED_SECONDS = 120; // players of a closed room are told so for this long (instead of quietly rejoining it)

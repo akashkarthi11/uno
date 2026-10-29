@@ -478,6 +478,29 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal((await call({ op: 'korean', room: A, playerId: co.body.state.you })).code, 400, 'co-admin');
   assert.equal((await call({ op: 'korean', room: A, playerId: 'nobody' })).code, 400);
 
+  // backups: the admin saves a room, it carries on, a restore puts it back; no expiry; only the admin can touch them
+  const saved = await call({ op: 'backupSave', room: A, playerId: admin.body.state.you, target: B, label: 'before the final' });
+  assert.equal(saved.code, 200);
+  const bl = await call({ op: 'backupList', room: A, playerId: admin.body.state.you });
+  const mine = bl.body.backups.find((x) => x.id === saved.body.id);
+  assert.deepEqual([mine.room, mine.label, mine.mode, mine.phase], [B, 'before the final', 'private', 'playing']);
+  assert.equal(JSON.stringify(bl.body).includes('"hand"'), false, 'the list carries no cards');
+  for (const op of ['backupSave', 'backupList', 'backupDelete', 'backupRestore']) {
+    assert.equal((await call({ op, room: A, playerId: aPub.body.state.you, id: saved.body.id })).code, 400, op + ' refused for a player');
+    assert.equal((await call({ op, room: A, playerId: co.body.state.you, id: saved.body.id })).code, 400, op + ' refused for a co-admin');
+  }
+  // the room changes after the backup (a player leaves), then the restore brings the old room back
+  const beforeRestore = (await call({ op: 'state', room: B, playerId: bPriv.body.state.you })).body.state;
+  await call({ op: 'leave', room: B, playerId: bPriv.body.state.you });
+  assert.equal((await call({ op: 'backupRestore', room: A, playerId: admin.body.state.you, id: saved.body.id })).code, 200);
+  const restored = await call({ op: 'state', room: B, playerId: bPriv.body.state.you });
+  assert.ok(restored.body.state, 'the player who had left is back in the restored room');
+  assert.equal(restored.body.state.players.length, beforeRestore.players.length);
+  assert.ok(restored.body.state.version > beforeRestore.version, 'newer than what pages had seen');
+  assert.equal((await call({ op: 'backupDelete', room: A, playerId: admin.body.state.you, id: saved.body.id })).code, 200);
+  assert.equal((await call({ op: 'backupList', room: A, playerId: admin.body.state.you })).body.backups.some((x) => x.id === saved.body.id), false, 'removed');
+  assert.equal((await call({ op: 'backupRestore', room: A, playerId: admin.body.state.you, id: saved.body.id })).code, 400, 'a removed backup cannot be restored');
+
   // the admin is told about every sign-in (any room, any role); nobody else can read that feed; each one is delivered once
   const feed = await call({ op: 'joins', room: A, playerId: admin.body.state.you });
   assert.equal(feed.code, 200);

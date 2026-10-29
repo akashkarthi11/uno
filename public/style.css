@@ -312,6 +312,8 @@ button.kick {
 .float-msg.mine b { color: #9be7a1; }
 @keyframes floatIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes floatOut { to { opacity: 0; transform: translateY(-8px); } }
+.rooms-sub { margin: 14px 0 4px; font-size: 16px; text-align: left; }
+#backupList { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
 .learn-page { position: fixed; inset: 0; z-index: 65; background: var(--bg, var(--surface)); overflow-y: auto; display: flex; flex-direction: column; }
 .learn-page.hidden { display: none; }
 .learn-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
