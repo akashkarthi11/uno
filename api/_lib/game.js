@@ -31,7 +31,7 @@ function shuffle(a) {
   return a;
 }
 
-export const online = (p, now) => now - p.lastSeen < ONLINE_MS;
+export const online = (p, now) => Boolean(p.bot) || now - p.lastSeen < ONLINE_MS; // the bot never goes offline
 
 /** Who is online right now, as a short string: lets a quiet poll tell "nothing changed" without a database write. */
 export const presenceSig = (s, now) => s.members.map((m) => (online(m, now) ? 1 : 0)).join('');
@@ -410,7 +410,7 @@ export function tick(s, now) {
 function tickGame(s, now) {
   if (!s.started) {
     const before = s.members.length;
-    s.members = s.members.filter((m) => now - m.lastSeen < PRUNE_MS);
+    s.members = s.members.filter((m) => m.bot || now - m.lastSeen < PRUNE_MS);
     return s.members.length !== before;
   }
   if (s.over) return false;
@@ -425,6 +425,11 @@ function tickGame(s, now) {
     s.pausedAt = now;
     s.pauseNote = fewLeft ? 'Not enough players are connected.' : `${p.name} lost connection.`;
     addLog(s, 'Game paused: ' + s.pauseNote);
+    return true;
+  }
+  if (p.bot && now >= Math.max(s.turnAt, s.botAt || 0) + BOT_THINK_MS) { // the bot's turn: it thinks for a moment, then makes one move
+    s.botAt = now;
+    botMove(s, p, now);
     return true;
   }
   const idle = now - s.turnAt;
@@ -472,6 +477,7 @@ function dispatch(s, me, b, now) {
   if (s.started && !s.over && now < (s.dealUntil || 0) && DEAL_BLOCKED.includes(b.op)) fail('The cards are still being dealt.');
   switch (b.op) {
     case 'start': return start(s, me, now);
+    case 'botMatch': return botMatch(s, me, now);
     case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now, String(b.target ?? ''), String(b.rule ?? ''));
     case 'draw': return draw(s, me, now, b);
     case 'pass': return pass(s, me, now);
@@ -495,10 +501,17 @@ function dispatch(s, me, b, now) {
   }
 }
 
-function start(s, p, now) {
-  if (!p.admin && !p.starter) fail('Only the admin can start the game.');
+function start(s, p, now, only = null) {
+  if (!only && !p.admin && !p.starter) {
+    if (s.botGame && s.botHost === p.id) return botMatch(s, p, now); // the player who began a bot match plays the next one the same way
+    fail('Only the admin can start the game.');
+  }
   if (s.started && !s.over) fail('A game is already running.');
-  s.members = s.members.filter((m) => m.id === p.id || online(m, now));
+  if (!only) {
+    s.members = s.members.filter((m) => !m.bot && (m.id === p.id || online(m, now)));
+    s.botGame = false;
+    s.botHost = null;
+  }
   if (s.members.length < 2) fail('At least 2 players are needed.');
   s.members.forEach((m) => {
     m.hand = [];
@@ -506,7 +519,7 @@ function start(s, p, now) {
     m.finished = false;
     m.skipNext = false;
   });
-  s.seats = s.members.slice(0, MAX_SEATS).map((m) => m.id);
+  s.seats = (only || s.members.slice(0, MAX_SEATS)).map((m) => m.id);
   s.deck = shuffle(buildDeck((kind) => superOn(s, kind))); // only the super cards the admin left ticked
   s.discard = [];
   const handSize = handSizeOf(s);
@@ -693,7 +706,10 @@ function removeMember(s, t, now, left = false) {
 
 /** Admin ends the current game (running or finished) and sends everyone back to the lobby. */
 function toLobby(s, p) {
-  if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to run the game
+  if (!p.admin && !p.starter && !isBotHost(s, p)) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to run the game
+  s.members = s.members.filter((m) => !m.bot);
+  s.botGame = false;
+  s.botHost = null;
   s.started = false;
   s.over = false;
   s.seats = [];
@@ -720,7 +736,7 @@ function toLobby(s, p) {
 
 /** Admin freezes the game (no plays, draws or timeouts); resuming gives the player back the time they had left. */
 function setPaused(s, p, on, now) {
-  if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to run the game
+  if (!p.admin && !p.starter && !isBotHost(s, p)) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to run the game
   if (!s.started || s.over) fail('No game running.');
   if (on === Boolean(s.paused)) return;
   if (on) {
@@ -1126,9 +1142,65 @@ const canChallenge = (s) => {
   return Boolean(by && !by.finished && s.seats.includes(by.id));
 };
 
+/* ---------------- practice match against the bot ---------------- */
+
+const BOT_NAME = 'GrowX Bot';
+const BOT_THINK_MS = 1300; // the bot waits a moment before each move, so the table can be followed
+const isBotHost = (s, p) => Boolean(s.botGame && s.botHost === p.id);
+
+/**
+ * Anyone in the room can play a single-player match against the bot: no admin or co-admin needed. Only the player and the
+ * bot are dealt in; anybody else in the room watches. The match is not counted in the table's stats.
+ */
+function botMatch(s, p, now) {
+  if (s.started && !s.over) fail('A game is already running.');
+  s.members = s.members.filter((m) => !m.bot);
+  const bot = { id: 'bot-' + randomUUID(), name: BOT_NAME, admin: false, role: 'public', bot: true, lastSeen: now, hand: [], saidUno: false, finished: false };
+  s.members.push(bot);
+  start(s, p, now, [p, bot]);
+  s.botGame = true;
+  s.botHost = p.id;
+  s.botAt = 0;
+}
+
+/** One move for the bot: say GrowX when it should, answer a waiting +2/+4, play a card (wilds last), or draw. */
+function botMove(s, p, now) {
+  try {
+    if (p.hand.length <= 2 && Math.random() < 0.8) sayUno(s, p); // now and then it forgets, so it can be caught
+    const other = active(s).find((q) => q.id !== p.id);
+    if (s.pend) {
+      if (challengeOf(s) && canChallenge(s) && Math.random() < 0.3) return challenge(s, p, now);
+      const stack = stackingOf(s) ? p.hand.find((c) => c.value === s.pend.kind) : null;
+      if (stack) return botPlay(s, p, stack, other, now);
+      return draw(s, p, now);
+    }
+    const ok = p.hand.filter((c) => (s.drawnId == null || c.id === s.drawnId) && playable(s, c, p));
+    if (!ok.length) return s.drawnId != null ? pass(s, p, now) : draw(s, p, now);
+    const plain = ok.filter((c) => c.color !== 'wild');
+    const simpleWild = ok.filter((c) => ['wild', 'wild4', 'blast', 'gift'].includes(c.value));
+    const pool = plain.length ? plain : simpleWild.length ? simpleWild : ok;
+    // action cards first now and then, otherwise the highest number (it sheds the most points)
+    const acts = pool.filter((c) => !/^[0-9]$/.test(c.value));
+    const pick = acts.length && Math.random() < 0.4 ? acts[rnd(acts.length)] : [...pool].sort((a, b) => cardPoints(b) - cardPoints(a))[0];
+    return botPlay(s, p, pick, other, now);
+  } catch (e) {
+    if (!(e instanceof GameError)) throw e;
+    // whatever it tried was refused: fall back to the plain moves so the game can never get stuck on the bot
+    try { return s.pend || s.drawnId == null ? draw(s, p, now) : pass(s, p, now); } catch (e2) { advance(s, 1, now); }
+  }
+}
+
+function botPlay(s, p, c, other, now) {
+  const counts = {};
+  for (const h of p.hand) if (h.color !== 'wild' && h.id !== c.id) counts[h.color] = (counts[h.color] || 0) + 1;
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  const colour = best ? best[0] : COLORS[rnd(COLORS.length)];
+  return play(s, p, c.id, c.color === 'wild' ? colour : '', now, other ? other.id : '', c.value === 'master' ? 'draw2' : '');
+}
+
 /** One line about a room for the admin's Rooms window. */
 export function roomSummary(s, code, now) {
-  const members = s.members || [];
+  const members = (s.members || []).filter((m) => !m.bot);
   return {
     code,
     mode: s.private ? 'private' : 'public',
@@ -1172,6 +1244,7 @@ export function peekView(s, code, now) {
  */
 function recordGame(s) {
   if (s.recordedNo === s.gameNo) return;
+  if (s.botGame) return; // a practice match against the bot is not part of the table's stats
   s.recordedNo = s.gameNo;
   const mode = s.gameMode === 'private' ? 'private' : 'public';
   const names = s.gameNames || [];
@@ -1230,7 +1303,8 @@ export function view(s, me, now) {
     host: me.admin ? me.id : (s.members.find((m) => m.admin && online(m, now)) || {}).id || null,
     started: s.started, over: s.over, winner: s.winner, loser: s.loser, ranking: s.ranking, notice: s.notice,
     seated: s.started && s.seats.includes(me.id),
-    players: (s.started ? seated(s) : s.members.filter((m) => online(m, now))).map((p) => ({
+    botHost: isBotHost(s, me), // the player running a bot match may pause it, restart it and play again
+    players: (s.started ? seated(s) : s.members.filter((m) => !m.bot && online(m, now))).map((p) => ({
       id: p.id, name: p.name, count: p.hand.length, finished: s.started && p.finished, connected: online(p, now),
       isAdmin: me.admin ? Boolean(p.admin) : undefined, starter: Boolean(p.starter), // who the real admin is stays private
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how

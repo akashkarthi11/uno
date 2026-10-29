@@ -1192,7 +1192,7 @@ body.in-game .actions button { width: 100%; }
 .lobby-pastel #startBtn { min-height: 52px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: var(--l-purple); box-shadow: 0 8px 18px rgba(108, 85, 230, .34); }
 .lobby-pastel #startBtn:hover:not(:disabled) { background: var(--l-purple-d); }
 .lobby-pastel #startBtn:disabled { box-shadow: none; }
-.lobby-pastel #koreanBtn { min-height: 48px; border: 0; border-radius: 16px; font-size: 15px; font-weight: 800; background: var(--l-lav); color: var(--l-purple-d); box-shadow: none; }
+.lobby-pastel #koreanBtn, .lobby-pastel #botBtn { min-height: 48px; border: 0; border-radius: 16px; font-size: 15px; font-weight: 800; background: var(--l-lav); color: var(--l-purple-d); box-shadow: none; }
 .lobby-pastel #chat { border-top: 1px solid var(--l-line); }
 .lobby-pastel #chatLog { background: var(--l-soft); border: 1px solid var(--l-line); border-radius: 18px; }
 .lobby-pastel #chatLog .msg .bubble { border: 1px solid var(--l-line); border-radius: 14px; }
@@ -1227,7 +1227,7 @@ html[data-theme="midnight"] .lobby-pastel #chatLog .msg .bubble { background: #2
 html[data-theme="midnight"] .lobby-pastel #chatLog .msg .who { color: #a9a6cc; }
 html[data-theme="midnight"] .lobby-pastel #emojiBar button { background: #221e4a; }
 html[data-theme="midnight"] .lobby-pastel button.ghost { background: #221e4a; color: #ece9ff; border-color: #35315f; }
-html[data-theme="midnight"] .lobby-pastel #koreanBtn { background: var(--l-lav); color: #cfc6ff; }
+html[data-theme="midnight"] .lobby-pastel #koreanBtn, .lobby-pastel #botBtn { background: var(--l-lav); color: #cfc6ff; }
 html[data-theme="midnight"] .lobby-pastel .badge { color: #cfc6ff; }
 
 @media (prefers-color-scheme: dark) {
@@ -1244,7 +1244,7 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #cha
 html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #chatLog .msg .who { color: #a9a6cc; }
 html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #emojiBar button { background: #221e4a; }
 html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel button.ghost { background: #221e4a; color: #ece9ff; border-color: #35315f; }
-html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #koreanBtn { background: var(--l-lav); color: #cfc6ff; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #koreanBtn, .lobby-pastel #botBtn { background: var(--l-lav); color: #cfc6ff; }
 html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel .badge { color: #cfc6ff; }
 }
 

@@ -623,6 +623,7 @@ function renderLobby(s) {
   }
   $("koreanBtn").classList.toggle("hidden", !s.private); // private games only: they hold the real admin and private players, nobody else
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
+  $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over)); // anyone may start a practice match against the bot
   $("lobbyCount").textContent = s.players.length + (s.players.length === 1 ? " player" : " players");
   $("startBtn").classList.toggle("hidden", !isHost);
   $("startBtn").disabled = s.players.length < 2;
@@ -792,7 +793,7 @@ function renderGame(s) {
   turn = s.over ? null : { deadline: Date.now() + s.turnLeft, frozen: s.turnLeft, paused: s.paused, total: s.turnMs, mine: myTurn, name: curPlayer ? curPlayer.name : "?" };
   $("pausedBanner").classList.toggle("hidden", !(s.paused && !s.over));
   $("pausedBanner").textContent = s.pauseNote ? "⏸ Game paused — " + s.pauseNote + (s.admin ? " Resume, remove them, or restart." : s.canStart ? " Resume or restart." : " Waiting for the admin.") : "⏸ Game paused by the admin";
-  $("pauseBtn").classList.toggle("hidden", !(s.canStart && !s.over));
+  $("pauseBtn").classList.toggle("hidden", !((s.canStart || s.botHost) && !s.over));
   $("pauseBtn").textContent = s.paused ? "▶" : "⏸";
   $("pauseBtn").title = s.paused ? "Resume the game" : "Pause the game";
   updateTimer();
@@ -820,7 +821,7 @@ function renderGame(s) {
   ["passBtn", "unoBtn"].forEach((id) => $(id).classList.toggle("hidden", !s.seated));
   $("hand").classList.remove("hidden"); // the hand area is always there; it explains itself when it has no cards
   $("drawPile").style.cursor = s.seated ? "pointer" : "default";
-  $("restartBtn").classList.toggle("hidden", !s.canStart);
+  $("restartBtn").classList.toggle("hidden", !(s.canStart || s.botHost));
   $("passBtn").disabled = !(myTurn && s.drawn != null) || s.paused;
   // GrowX! must be pressed while you hold 2 cards, i.e. before playing the second-to-last one.
   const canUno = s.seated && !s.over && !s.dealing && me && me.count > 0 && me.count <= 2 && !s.saidUno;
@@ -854,9 +855,9 @@ function renderGame(s) {
     if (totals.length) score.push("Match (first to " + (sc.target || 500) + "): " + totals.map(([n, v]) => n + " " + v).join(" · "));
     if (sc.matchWinner) score.push("🏆 " + sc.matchWinner + " wins the match! A new match starts with the next game.");
     $("endScore").textContent = score.join("\n");
-    $("playAgain").classList.toggle("hidden", !s.canStart);
-    $("toLobby").classList.toggle("hidden", !s.canStart);
-    $("endHint").textContent = s.canStart ? "" : "Waiting for the admin to start the next game…";
+    $("playAgain").classList.toggle("hidden", !(s.canStart || s.botHost));
+    $("toLobby").classList.toggle("hidden", !(s.canStart || s.botHost));
+    $("endHint").textContent = s.canStart || s.botHost ? "" : "Waiting for the admin to start the next game…";
     end.classList.remove("hidden");
     const key = s.ranking.join("|") + "|" + (s.loser || "");
     if (celebrated !== key) {
@@ -1694,6 +1695,7 @@ $("drawPile").addEventListener("click", () => {
   if (dealingNow()) { toast("The cards are still being dealt."); return; }
   send({ op: "draw" });
 });
+$("botBtn").addEventListener("click", () => send({ op: "botMatch" }));
 $("pauseBtn").addEventListener("click", () => send({ op: state && state.paused ? "resume" : "pause" }));
 $("restartBtn").addEventListener("click", () => {
   if (confirm("End this game and send everyone back to the lobby?")) send({ op: "lobby" });
