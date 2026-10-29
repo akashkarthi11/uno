@@ -30,15 +30,17 @@ const voiceOffKey = () => "uno-voice-off-" + room;
 /** Called by app.js whenever a fresh game state arrives. */
 function voiceSync(s) {
   const btn = $("voiceBtn");
+  const call = Boolean(s.canVoice || s.canVideo); // in the call with a microphone, a camera, or both
   btn.classList.toggle("hidden", !s.canVoice);
-  if (!s.canVoice) {
+  if (!call) {
     if (voice.active) voiceStopLocal();
     $("muteBtn").classList.add("hidden");
     $("camBtn").classList.add("hidden");
     autoJoinTried = false; // allowed again later (e.g. the room became private): join then
     return;
   }
-  if (!voice.active && !autoJoinTried && !session(voiceOffKey())) {
+  if (voice.active && !s.canVoice && voice.mic) toggleDevice("audio"); // microphone permission was taken away: only the camera stays
+  if (s.canVoice && !voice.active && !autoJoinTried && !session(voiceOffKey())) {
     autoJoinTried = true;
     voiceJoin();
   }
@@ -52,6 +54,12 @@ function voiceSync(s) {
     }
   }
   voice.relay = relayNow;
+  if (voice.active) { // who may hear me changed (Public voice was switched): start those pairings over with the right tracks
+    for (const [id, p] of [...voice.peers]) {
+      const hearNow = Boolean(s.canVoice) && (!s.voiceAudio || s.voiceAudio.includes(id));
+      if (p.hear !== undefined && p.hear !== hearNow && (s.voice || []).includes(id)) createPeer(id, true);
+    }
+  }
   const before = new Set(voice.members);
   voice.members = s.voice || [];
   if (voice.active) {
@@ -67,8 +75,8 @@ function voiceSync(s) {
   btn.title = voice.mic ? "Turn microphone off" : "Turn microphone on" + (voice.members.length ? " (" + voice.members.length + " in the call)" : "");
   btn.dataset.count = String(voice.members.length);
   $("muteBtn").classList.toggle("hidden", !voice.mic);
-  $("camBtn").classList.toggle("hidden", !s.canVoice || s.canVideo === false); // the mic button's permission, unless the admin hid public video
-  if (s.canVideo === false && voice.active && voice.cam) toggleDevice("video"); // the admin switched public video off: the camera stops
+  $("camBtn").classList.toggle("hidden", !s.canVideo); // its own permission: it does not depend on the microphone / Public voice
+  if (!s.canVideo && voice.active && voice.cam) toggleDevice("video"); // the admin switched public video off: the camera stops
   $("camBtn").classList.toggle("on", voice.cam);
   $("camBtn").title = voice.cam ? "Turn camera off" : "Turn camera on";
   $("muteBtn").textContent = voice.muted ? "🔇" : "🎙";
@@ -235,9 +243,11 @@ function createPeer(id, initiator) {
   const peer = { pc, queue: [], audio: null };
   voice.peers.set(id, peer);
   camTier = -1; // a new connection has no bitrate limit yet: the next check sets it
-  voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
+  const hear = Boolean(state && state.canVoice) && (!state.voiceAudio || state.voiceAudio.includes(id)); // sound goes only to people allowed to hear it
+  peer.hear = hear;
+  voice.stream.getTracks().filter((t) => t.kind !== "audio" || hear).forEach((t) => pc.addTrack(t, voice.stream));
   // someone with only a microphone still has to receive the other person's camera, and the other way round
-  for (const kind of ["audio", "video"]) if (!voice.stream.getTracks().some((t) => t.kind === kind)) pc.addTransceiver(kind, { direction: "recvonly" });
+  for (const kind of ["audio", "video"]) if (!pc.getTransceivers().some((x) => x.sender.track && x.sender.track.kind === kind)) pc.addTransceiver(kind, { direction: "recvonly" });
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(id, "ice", e.candidate.toJSON()); };
   pc.ontrack = (e) => {
     attachRemote(id, peer, e.streams[0]);
@@ -284,6 +294,7 @@ function closePeer(id) {
 }
 
 function attachRemote(id, peer, stream) {
+  if (state && !state.canVoice) return; // a camera-only player hears nothing
   if (!peer.audio) {
     peer.audio = document.createElement("audio");
     peer.audio.autoplay = true;

@@ -372,16 +372,18 @@ function chat(s, p, raw, now) {
 
 /** Voice chat is for the admin and private players. */
 export const canVoice = (s, p) => Boolean(p.admin || p.role === 'private' || publicVoiceOf(s));
-// Public players' camera: allowed unless the real admin switched it off (the admin and private players always may).
 // The practice match against the bot: on unless the real admin switched it off (the real admin can always start one).
 export const botOf = (s) => !(s.settings && s.settings.botMatch === false);
 export const canBot = (s, p) => Boolean(p.admin || botOf(s));
-export const publicVideoOf = (s) => !(s.settings && s.settings.publicVideo === false);
-export const canVideo = (s, p) => canVoice(s, p) && Boolean(p.admin || p.role === 'private' || publicVideoOf(s));
+// Public players' camera: its own switch, independent of Public voice (off by default; the admin and private players always may).
+export const publicVideoOf = (s) => Boolean(s.settings && s.settings.publicVideo === true && !s.private);
+export const canVideo = (s, p) => Boolean(p.admin || p.role === 'private' || publicVideoOf(s));
+/** In the call at all: with a microphone (canVoice), a camera (canVideo), or both. Only canVoice people hear and are heard. */
+export const canCall = (s, p) => canVoice(s, p) || canVideo(s, p);
 export const publicVoiceOf = (s) => Boolean(s.settings && s.settings.publicVoice && !s.private); // never in a private game
 
 function voiceJoin(s, p) {
-  if (!canVoice(s, p)) fail('Voice chat is for private players and the admin.');
+  if (!canCall(s, p)) fail('Voice chat is for private players and the admin.');
   s.voice = s.voice || [];
   if (!s.voice.includes(p.id)) s.voice.push(p.id);
 }
@@ -395,7 +397,7 @@ function cleanVoice(s, now) {
   const before = s.voice || [];
   const keep = before.filter((id) => {
     const m = byId(s, id);
-    return m && canVoice(s, m) && now - m.lastSeen < VOICE_GRACE_MS;
+    return m && canCall(s, m) && now - m.lastSeen < VOICE_GRACE_MS;
   });
   if (keep.length === before.length) return false;
   s.voice = keep;
@@ -1321,7 +1323,9 @@ export function view(s, me, now) {
     canVoice: canVoice(s, me),
     canVideo: canVideo(s, me),
     canBot: canBot(s, me),
-    voice: canVoice(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
+    voice: canCall(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
+    // who in the call may hear and be heard (only told to people who may themselves, so a camera-only player learns nothing about roles)
+    voiceAudio: canVoice(s, me) ? (s.voice || []).filter((id) => { const m = byId(s, id); return m && canVoice(s, m); }) : undefined,
   };
   if (!s.started) return out;
   const myTurn = !s.over && s.seats[s.cur] === me.id;

@@ -196,7 +196,7 @@ function apply(data) {
     playerId = state.you;
     store("uno-id-" + room, playerId);
     render();
-    if (state.canVoice) ensureVoice().then(() => voiceSync(state)).catch(() => {});
+    if (state.canVoice || state.canVideo) ensureVoice().then(() => voiceSync(state)).catch(() => {});
     else if (typeof voiceSync === "function") voiceSync(state); // lets a loaded voice.js hang up if access was lost
   }
 }
@@ -490,7 +490,7 @@ function renderRelayBtn(s) {
     : "Only you and private players have voice chat. Click to let public players join it too.";
   const pvid = $("pubVideoBtn");
   pvid.classList.toggle("hidden", !s.admin || s.private);
-  const pvidOn = !(s.settings && s.settings.publicVideo === false);
+  const pvidOn = Boolean(s.settings && s.settings.publicVideo);
   pvid.textContent = "📷 Public video: " + (pvidOn ? "on" : "off");
   pvid.classList.toggle("on", pvidOn);
   pvid.title = pvidOn

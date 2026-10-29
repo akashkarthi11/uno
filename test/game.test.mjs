@@ -1095,22 +1095,31 @@ test('going private switches public voice off, and it cannot be switched on in a
   assert.equal(G.view(s, admin, now).settings.publicVoice, false, 'and it stays off when the game is public again');
 });
 
-test('public video: on by default, only the real admin can hide it, private players and the admin keep their camera', () => {
+test('public video: its own switch, independent of Public voice (off by default); a camera-only player is in the call but hears nothing', () => {
   const s = oldRules('t');
   const now = 1000;
   const admin = G.join(s, { name: 'Boss', admin: true }, now);
   const pub = G.join(s, { name: 'Pub', admin: false, role: 'public' }, now);
   const priv = G.join(s, { name: 'Priv', admin: false, role: 'private' }, now);
-  G.act(s, admin, { op: 'config', publicVoice: true }, now);
-  assert.equal(G.view(s, pub, now).canVideo, true, 'on by default');
-  assert.equal(G.view(s, admin, now).settings.publicVideo, true);
-  assert.throws(() => G.act(s, pub, { op: 'config', publicVideo: false }, now), /Only the admin/);
+  assert.equal(G.view(s, pub, now).canVideo, false, 'off by default');
+  assert.equal(G.view(s, admin, now).settings.publicVideo, false);
+  assert.throws(() => G.act(s, pub, { op: 'config', publicVideo: true }, now), /Only the admin/);
   assert.throws(() => G.act(s, admin, { op: 'config', publicVideo: 'no' }, now), /Bad settings/);
-  G.act(s, admin, { op: 'config', publicVideo: false }, now);
-  assert.equal(G.view(s, pub, now).canVideo, false);
-  assert.equal(G.view(s, pub, now).canVoice, true, 'voice itself is unchanged');
-  assert.equal(G.view(s, admin, now).canVideo, true);
-  assert.equal(G.view(s, priv, now).canVideo, true);
+  assert.throws(() => G.act(s, pub, { op: 'voiceJoin' }, now), /private players and the admin/, 'no camera, no call');
+  // video on, voice still off: the public player gets the camera and the call, but no microphone
   G.act(s, admin, { op: 'config', publicVideo: true }, now);
-  assert.equal(G.view(s, pub, now).canVideo, true);
+  const v = G.view(s, pub, now);
+  assert.equal(v.canVideo, true);
+  assert.equal(v.canVoice, false, 'Public voice is still off');
+  G.act(s, pub, { op: 'voiceJoin' }, now);
+  G.act(s, admin, { op: 'voiceJoin' }, now);
+  assert.deepEqual(G.view(s, pub, now).voice.sort(), [admin.id, pub.id].sort(), 'they see who is in the call');
+  assert.equal(G.view(s, pub, now).voiceAudio, undefined, 'and learn nothing about who may talk');
+  assert.deepEqual(G.view(s, admin, now).voiceAudio, [admin.id], 'the admin is told who may hear them: not the camera-only player');
+  assert.equal(G.canCall(s, pub), true);
+  assert.equal(G.view(s, priv, now).canVideo, true);
+  G.act(s, admin, { op: 'config', publicVideo: false }, now); // switched off: they drop out of the call
+  assert.equal(G.tick(s, now), true);
+  assert.equal(G.view(s, admin, now).voice.includes(pub.id), false);
+  assert.equal(G.view(s, pub, now).canVideo, false);
 });
