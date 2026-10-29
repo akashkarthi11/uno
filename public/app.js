@@ -619,7 +619,7 @@ function renderLobby(s) {
       c.addEventListener("click", () => toggleStarter(p));
       li.appendChild(c);
     }
-    if (s.admin && p.id !== s.you) {
+    if ((s.admin || s.observing) && p.id !== s.you) {
       const x = document.createElement("button");
       x.className = "ghost remove";
       x.textContent = "Remove";
@@ -737,7 +737,7 @@ function renderGame(s) {
       c.addEventListener("click", () => toggleStarter(p));
       d.appendChild(c);
     }
-    if (s.admin && !s.over) {
+    if ((s.admin || s.observing) && !s.over) {
       const x = document.createElement("button");
       x.className = "ghost kick";
       x.title = "Remove " + p.name;
@@ -1348,14 +1348,14 @@ function renderRooms(r) {
     watch.addEventListener("click", () => openWatch(room.code));
     const actions = document.createElement("div");
     actions.className = "row-actions";
-    if (state && state.observing) { // the observer account only moves between rooms: no watching cards, no removing
+    if (state && state.observing) { // the observer account: watch (cards, chat, remove players) or move into the room
       const go = document.createElement("button");
       go.type = "button";
       go.className = "ghost";
       go.textContent = room.code === roomNow() ? "Here" : "Observe";
       go.disabled = room.code === roomNow();
       go.addEventListener("click", () => observeRoom(room.code));
-      actions.append(go);
+      actions.append(watch, go);
     } else actions.append(watch, rm);
     row.append(info, actions);
     list.appendChild(row);

@@ -668,7 +668,7 @@ function setStarter(s, admin, targetId, on) {
 
 /** Admin removes a player (lobby or mid-game). Their cards go back into the draw pile. */
 function kick(s, admin, targetId, now) {
-  if (!admin.admin) fail('Only the admin can do that.');
+  if (!admin.admin && !admin.observer) fail('Only the admin can do that.'); // the admin, or the observer account (it removes unwanted people)
   const t = byId(s, targetId);
   if (!t) fail('That player is not here.');
   if (t.admin) fail('You cannot remove an admin.');

@@ -565,6 +565,9 @@ test('observer account: password 1102 gets into any room, public or private, as 
   assert.equal(back.body.state.observing, true);
   const roomList = await call({ op: 'rooms', room: R, playerId: obs.body.state.you });
   assert.equal(roomList.code, 200, 'the observer can list the rooms to move between them');
-  for (const op of ['closeRoom', 'peek', 'peekKick', 'joins']) assert.equal((await call({ op, room: R, playerId: obs.body.state.you, target: R })).code, 400, op + ': no admin powers');
+  assert.equal((await call({ op: 'peek', room: R, playerId: obs.body.state.you, target: R })).code, 200, 'and watch a room: every hand and all the chat');
+  assert.equal((await call({ op: 'peekKick', room: R, playerId: obs.body.state.you, target: R, targetId: priv.body.state.you })).code, 200, 'and remove an unwanted player');
+  assert.equal((await call({ op: 'state', room: R, playerId: priv.body.state.you })).body.kicked, true);
+  for (const op of ['closeRoom', 'joins']) assert.equal((await call({ op, room: R, playerId: obs.body.state.you, target: R })).code, 400, op + ': no admin powers');
   assert.equal((await call({ op: 'join', room: R, name: 'x', password: '1103' })).code, 401, 'other passwords still refused');
 });
