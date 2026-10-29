@@ -1524,12 +1524,18 @@ let orientArmed = null;
 const coarse = () => Boolean(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
 async function lockOrientation(mode) {
   if (!coarse()) return true;
-  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: "hide" }); } catch (e) { return false; }
+  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { return false; }
   try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock(mode); } catch (e) { /* this browser cannot lock the rotation: the rotate hint covers it */ }
   return true;
 }
+/**
+ * Going full screen by itself can be switched off: it is OFF by default in Brave (there the address bar can stay on top of a
+ * "full screen" page and hide the bottom of the hand), ON elsewhere. The Settings button changes it; the manual full screen
+ * button always works.
+ */
+const autoFsOn = () => { const v = store("uno-autofs"); return v === "1" || (v !== "0" && !(navigator.brave && true)); };
 function wantOrientation(mode) {
-  if (!coarse() || orientHave === mode) return;
+  if (!coarse() || orientHave === mode || !autoFsOn()) return;
   orientHave = mode;
   const go = () => lockOrientation(mode).then((ok) => { if (!ok && orientHave === mode) arm(); });
   const arm = () => {
@@ -1546,6 +1552,9 @@ async function enterLandscape() {
 }
 $("landscapeBtn").addEventListener("click", enterLandscape);
 /** The same button turns full screen on and off: while it is on, the label says "Exit full screen" and a tap leaves it. */
+function updateAutoFsBtn() { $("autoFsBtn").textContent = "⛶ Auto full screen: " + (autoFsOn() ? "on" : "off"); }
+$("autoFsBtn").addEventListener("click", () => { store("uno-autofs", autoFsOn() ? "0" : "1"); orientHave = null; updateAutoFsBtn(); });
+updateAutoFsBtn();
 function updateFsBtn() { $("fsBtn").textContent = document.fullscreenElement ? "⛶ Exit full screen" : "⛶ Landscape / full screen"; }
 async function exitFullscreen() {
   if (orientArmed) { document.removeEventListener("pointerup", orientArmed); orientArmed = null; } // do not drag them back in on the next tap
