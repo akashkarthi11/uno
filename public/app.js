@@ -1391,10 +1391,23 @@ function renderWatch(p) {
     n.className = "n";
     n.textContent = (pl.connected ? "🟢 " : "⚪ ") + pl.name + (pl.admin ? " 👑" : pl.starter ? " (admin)" : "");
     const c = document.createElement("span");
-    c.textContent = p.started ? (pl.finished ? "out" : pl.count + " 🂠") : "";
+    c.textContent = p.started ? (pl.spectator ? "watching" : pl.finished ? "out" : pl.count + " 🂠") : "";
     const sc = p.totals[pl.name];
     row.append(n, c);
     if (sc) { const t = document.createElement("span"); t.textContent = sc + " pts"; row.append(t); }
+    if (!pl.admin && pl.id) { // remove an unwanted player without entering the room
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "ghost remove";
+      rm.textContent = "Remove";
+      rm.addEventListener("click", async () => {
+        if (!confirm("Remove " + pl.name + " from room " + p.code + "?")) return;
+        try { await api({ op: "peekKick", target: watchCode, targetId: pl.id }); } catch (e) { toast(e.message); return; }
+        toast(pl.name + " was removed.");
+        pollWatch();
+      });
+      row.append(rm);
+    }
     list.appendChild(row);
     if (p.started && !pl.finished && pl.hand && pl.hand.length) { // every player's cards, face up
       const cards = document.createElement("div");

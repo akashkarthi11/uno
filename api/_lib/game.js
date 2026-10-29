@@ -1237,13 +1237,19 @@ export function peekView(s, code, now) {
     top: s.started ? top(s) : null, color: s.started ? s.color : null, dir: s.dir, deck: s.started ? s.deck.length : 0,
     cur: cur ? cur.name : null, ranking: s.ranking || [], loser: s.loser || null,
     totals: s.match || {}, target: MATCH_TARGET,
-    players: seatedNow.map((p) => ({
-      name: p.name, count: p.hand.length, finished: Boolean(s.started && p.finished), connected: online(p, now),
+    // the players, then anybody else in the room (people who joined mid-game and only watch): all can be removed from the watch window
+    players: [...seatedNow, ...(s.started ? members.filter((m) => !m.bot && !m.observer && !s.seats.includes(m.id)) : [])].map((p) => ({
+      spectator: Boolean(s.started && !s.seats.includes(p.id)), id: p.id, name: p.name, count: p.hand.length, finished: Boolean(s.started && p.finished), connected: online(p, now),
       admin: Boolean(p.admin), starter: Boolean(p.starter), role: p.role || 'public',
       hand: [...p.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)), // the real admin watching sees every hand
     })),
-    chat: (s.chat || []).slice(-30),
+    chat: (s.chat || []).slice(-50), // all the chat of the room, for the admin's watch window
   };
+}
+
+/** The real admin removes a player from a room they are only watching (same effect as the Remove button inside the room). */
+export function removeByAdmin(s, targetId, now) {
+  kick(s, { admin: true }, targetId, now);
 }
 
 /* ---------------- stats and history ---------------- */

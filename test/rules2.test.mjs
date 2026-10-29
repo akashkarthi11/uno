@@ -467,6 +467,17 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal((await call({ op: 'peek', room: A, playerId: aPub.body.state.you, target: B })).code, 400);
   assert.equal((await call({ op: 'peek', room: A, playerId: admin.body.state.you, target: 'nonexistentroom' })).code, 400);
 
+  // the admin removes a player from a room they are only watching; nobody else can
+  const spare = await call({ op: 'join', room: B, name: 'Spare', password: '281101' }); // somebody unwanted joins the private room
+  const watched = (await call({ op: 'peek', room: A, playerId: admin.body.state.you, target: B })).body.peek;
+  const victim = watched.players.find((p) => p.id === spare.body.state.you);
+  assert.ok(victim && victim.id, 'the watch window knows who is who');
+  assert.equal((await call({ op: 'peekKick', room: A, playerId: co.body.state.you, target: B, targetId: victim.id })).code, 400, 'a co-admin cannot');
+  assert.equal((await call({ op: 'peekKick', room: A, playerId: aPub.body.state.you, target: B, targetId: victim.id })).code, 400);
+  assert.equal((await call({ op: 'peekKick', room: A, playerId: admin.body.state.you, target: B, targetId: 'nobody' })).code, 400, 'unknown player');
+  assert.equal((await call({ op: 'peekKick', room: A, playerId: admin.body.state.you, target: B, targetId: victim.id })).code, 200);
+  assert.equal((await call({ op: 'state', room: B, playerId: victim.id })).body.kicked, true, 'they are told they were removed');
+
   // Learn Korean: the real admin and private players only; a public player or co-admin gets what a made-up action gets
   const kAdmin = await call({ op: 'korean', room: B, playerId: bAdmin.body.state.you });
   assert.equal(kAdmin.code, 200);
