@@ -379,7 +379,7 @@ export const botOf = (s) => !(s.settings && s.settings.botMatch === false);
 export const canBot = (s, p) => Boolean(!p.observer && (p.admin || botOf(s))); // an observer only watches: no bot matches either
 // Public players' camera: its own switch, independent of Public voice (off by default; the admin and private players always may).
 export const publicVideoOf = (s) => Boolean(s.settings && s.settings.publicVideo === true && !s.private);
-export const canVideo = (s, p) => Boolean(p.admin || p.observer || p.role === 'private' || publicVideoOf(s));
+export const canVideo = (s, p) => Boolean(p.admin || p.role === 'private' || publicVideoOf(s));
 /** In the call at all: with a microphone (canVoice), a camera (canVideo), or both. Only canVoice people hear and are heard. */
 export const canCall = (s, p) => canVoice(s, p) || canVideo(s, p);
 export const publicVoiceOf = (s) => Boolean(s.settings && s.settings.publicVoice && !s.private); // never in a private game

@@ -97,8 +97,7 @@ test('observer account: hears and sees, is not an admin, is never listed or deal
   const obs = G.join(s, { name: 'Observer', admin: false, role: 'observer', observer: true }, now);
   assert.equal(obs.observer, true);
   assert.equal(obs.admin, false, 'not an admin');
-  assert.equal(G.canVoice(s, obs), true, 'it can hear the call, and speak if it chooses');
-  assert.equal(G.canVideo(s, obs), true, 'and use a camera if it chooses');
+  assert.equal(G.canVoice(s, obs), true, 'it can hear the call');
   assert.equal(G.view(s, a, now).observed, true, 'players are told someone is observing');
   assert.equal(G.view(s, obs, now).observing, true);
   const names = G.view(s, a, now).players.map((p) => p.name);
