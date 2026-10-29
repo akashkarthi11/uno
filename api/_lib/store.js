@@ -140,6 +140,36 @@ export async function takeSignals(code, id) {
   return (v || []).map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
 }
 
+/**
+ * Sign-in feed for the real admin: every sign-in to any room is dropped on one short-lived list; the admin's page takes
+ * what is new with one cheap call. Anything older than an hour is not worth telling about and is skipped.
+ */
+const JOINS_KEY = 'growx:joins';
+const JOINS_TTL = 3600;
+let joinsMem = [];
+
+export async function pushJoin(evt) {
+  if (!usingRedis) {
+    joinsMem = [...joinsMem, evt].slice(-100);
+    return;
+  }
+  const r = await client();
+  await r.rpush(JOINS_KEY, JSON.stringify(evt));
+  await r.expire(JOINS_KEY, JOINS_TTL);
+}
+
+export async function takeJoins(now = Date.now()) {
+  let list;
+  if (!usingRedis) {
+    list = joinsMem;
+    joinsMem = [];
+  } else {
+    const v = await (await client()).lpop(JOINS_KEY, 50);
+    list = (v || []).map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
+  }
+  return list.filter((e) => now - e.t < JOINS_TTL * 1000);
+}
+
 const closedKey = (code) => `growx:closed:${code}`;
 const closedMem = new Map();
 const CLOSED_SECONDS = 120; // players of a closed room are told so for this long (instead of quietly rejoining it)

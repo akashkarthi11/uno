@@ -308,6 +308,7 @@ async function pollOnce() {
       quiet++;
     }
     lastOk = Date.now();
+    checkJoins();
   } catch (e) {
     notePing(null);
     if (Date.now() - lastOk > HEARTBEAT_MS) toast("Connection problem — retrying…");
@@ -1153,6 +1154,7 @@ $("challengeBox").addEventListener("change", (e) => sendRule({ challenge: e.targ
 function renderSettings(s) {
   // The game settings are the admin's: other players only see the "For you" part of the Settings window.
   $("roomsBtn").classList.toggle("hidden", !s.admin); // the real admin only
+  $("joinAlertBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
   $("settings").classList.toggle("hidden", !s.canStart);
@@ -1643,6 +1645,45 @@ function notifyTurn() {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) document.title = BASE_TITLE; });
 renderNotifyBtn();
 if (notifyOn()) registerAlertWorker();
+
+/* ---------- the real admin: told whenever anybody signs in to any room ---------- */
+
+const joinAlertsOn = () => store("uno-joinalerts") === "1";
+function renderJoinAlertBtn() {
+  const on = joinAlertsOn() && typeof Notification !== "undefined" && Notification.permission === "granted";
+  $("joinAlertBtn").textContent = "👤 Join alerts: " + (on ? "on" : "off");
+  $("joinAlertBtn").classList.toggle("on", on);
+}
+$("joinAlertBtn").addEventListener("click", async () => {
+  if (joinAlertsOn()) { store("uno-joinalerts", "0"); renderJoinAlertBtn(); return; }
+  if (typeof Notification === "undefined") { toast("This browser cannot show notifications."); return; }
+  const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+  if (perm !== "granted") { toast("Notifications are blocked — allow them in the browser's site settings."); renderJoinAlertBtn(); return; }
+  store("uno-joinalerts", "1");
+  registerAlertWorker();
+  renderJoinAlertBtn();
+  toast("You will be told whenever anybody signs in (keep this page open).");
+});
+
+let lastJoinCheck = 0;
+async function checkJoins() {
+  if (!state || !state.admin || !joinAlertsOn() || Date.now() - lastJoinCheck < 6000) return;
+  lastJoinCheck = Date.now();
+  let r;
+  try { r = await api({ op: "joins" }); } catch (e) { return; }
+  for (const j of r.joins || []) {
+    const text = j.n + " joined " + j.r + " (" + j.role + ")";
+    toast("👤 " + text);
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") continue;
+    const opts = { body: text, tag: "join-" + j.r + "-" + j.n + "-" + j.t, vibrate: [100, 50, 100] };
+    const title = BASE_TITLE + " · New player";
+    const fallback = () => { try { new Notification(title, opts); } catch (e) { /* needs the worker */ } };
+    if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistration().then((reg) => (reg ? reg.showNotification(title, opts) : fallback())).catch(fallback);
+    else fallback();
+  }
+}
+renderJoinAlertBtn();
+if (joinAlertsOn()) registerAlertWorker();
 
 /* ---------- stats and history (public and private kept apart) ---------- */
 

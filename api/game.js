@@ -1,6 +1,6 @@
 import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -134,6 +134,8 @@ export default async function handler(req, res) {
         claim = { r: code, p: me.id, role, n: me.name, co: coadmin };
         return G.view(s, me, now);
       });
+      // tell the real admin (best effort: a failure here must never stop anyone joining)
+      if (!admin) await pushJoin({ r: code, n: claim.n, role: coadmin ? 'co-admin' : claim.role, t: now }).catch(() => {});
       return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
     }
 
@@ -199,10 +201,11 @@ export default async function handler(req, res) {
 
     // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.
     // The admin is whoever signed in with the admin password in the room they are in now.
-    if (b.op === 'rooms' || b.op === 'closeRoom' || b.op === 'peek') {
+    if (b.op === 'rooms' || b.op === 'closeRoom' || b.op === 'peek' || b.op === 'joins') {
       const here = await readRoom(code);
       const who = here && here.members.find((m) => m.id === b.playerId);
       if (!who || !who.admin) throw new G.GameError('Only the admin can do that.');
+      if (b.op === 'joins') return res.json({ joins: await takeJoins(now) });
       if (b.op === 'rooms') {
         const rooms = (await listRooms()).map(({ code: c, room }) => G.roomSummary(room, c, now)).sort((x, y) => y.last - x.last);
         return res.json({ rooms, total: rooms.length, active: rooms.filter((r) => r.online > 0).length });

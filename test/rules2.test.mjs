@@ -466,6 +466,17 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal((await call({ op: 'peek', room: A, playerId: aPub.body.state.you, target: B })).code, 400);
   assert.equal((await call({ op: 'peek', room: A, playerId: admin.body.state.you, target: 'nonexistentroom' })).code, 400);
 
+  // the admin is told about every sign-in (any room, any role); nobody else can read that feed; each one is delivered once
+  const feed = await call({ op: 'joins', room: A, playerId: admin.body.state.you });
+  assert.equal(feed.code, 200);
+  assert.ok(feed.body.joins.some((j) => j.r === A && j.n === 'Pat' && j.role === 'public'), 'Pat joining room A');
+  assert.ok(feed.body.joins.some((j) => j.r === B && j.n === 'Priv' && j.role === 'private'), 'Priv joining room B');
+  assert.ok(feed.body.joins.some((j) => j.n === 'Co' && j.role === 'co-admin'), 'the co-admin too');
+  assert.equal(feed.body.joins.some((j) => j.n === 'Boss' || j.n === 'Other'), false, 'the admin\'s own sign-in is not news');
+  assert.equal((await call({ op: 'joins', room: A, playerId: admin.body.state.you })).body.joins.length, 0, 'taken once');
+  assert.equal((await call({ op: 'joins', room: A, playerId: aPub.body.state.you })).code, 400);
+  assert.equal((await call({ op: 'joins', room: A, playerId: co.body.state.you })).code, 400);
+
   // remove room B: it disappears from the list, its players are told, their old sign-in no longer works
   assert.equal((await call({ op: 'closeRoom', room: A, playerId: admin.body.state.you, target: B })).code, 200);
   const after = await call({ op: 'rooms', room: A, playerId: admin.body.state.you });
