@@ -2710,6 +2710,7 @@ function desktopOnPhone(screenW, screenH, innerW) {
       "screen " + screen.width + "x" + screen.height + "  dpr " + window.devicePixelRatio,
       "brave: " + brave + "  desktop-site? " + desktopOnPhone(screen.width, screen.height, window.innerWidth),
       "in-game class: " + document.body.classList.contains("in-game") + "  --app-h: " + doc.style.getPropertyValue("--app-h"),
+      "voice: " + (typeof voice === "undefined" ? "not loaded" : "in call=" + voice.active + " mic=" + voice.mic + " cam=" + voice.cam + " peers=" + [...voice.peers.values()].map((p) => p.pc.connectionState).join(",") + " tiles=" + document.querySelectorAll(".vtile").length) + "  canVoice=" + (state && state.canVoice) + " canVideo=" + (state && state.canVideo) + " observing=" + (state && state.observing),
       "fullscreen: " + (document.fullscreenElement ? "yes" : "no") + "  display-mode: " + (window.matchMedia("(display-mode: fullscreen)").matches ? "fullscreen" : window.matchMedia("(display-mode: standalone)").matches ? "standalone" : "browser"),
       "page scrollable: " + (doc.scrollHeight > doc.clientHeight + 1) + " (" + doc.scrollHeight + " vs " + doc.clientHeight + ")",
       "hand: cards " + hand.querySelectorAll(".card").length + "  top " + Math.round(hr.top) + "  bottom " + Math.round(hr.bottom) + "  scrollW " + hand.scrollWidth + "/" + hand.clientWidth,
