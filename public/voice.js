@@ -9,6 +9,7 @@
 const voice = {
   active: false,
   muted: false,
+  cam: false,
   stream: null,
   peers: new Map(), // playerId -> { pc, queue, audio }
   members: [],
@@ -32,6 +33,7 @@ function voiceSync(s) {
   if (!s.canVoice) {
     if (voice.active) voiceStopLocal();
     $("muteBtn").classList.add("hidden");
+    $("camBtn").classList.add("hidden");
     autoJoinTried = false; // allowed again later (e.g. the room became private): join then
     return;
   }
@@ -64,6 +66,9 @@ function voiceSync(s) {
   btn.title = voice.active ? "Leave voice" : "Join voice" + (voice.members.length ? " (" + voice.members.length + " in voice)" : "");
   btn.dataset.count = String(voice.members.length);
   $("muteBtn").classList.toggle("hidden", !voice.active);
+  $("camBtn").classList.toggle("hidden", !voice.active);
+  $("camBtn").classList.toggle("on", voice.cam);
+  $("camBtn").title = voice.cam ? "Turn camera off" : "Turn camera on";
   $("muteBtn").textContent = voice.muted ? "🔇" : "🎙";
   $("muteBtn").title = voice.muted ? "Unmute" : "Mute";
 }
@@ -158,6 +163,8 @@ function voiceStopLocal() {
   voice.meters.clear();
   voice.speaking.clear();
   voice.active = false;
+  voice.cam = false;
+  $("videoStrip").textContent = "";
   paintSpeaking();
 }
 
@@ -170,7 +177,10 @@ function createPeer(id, initiator) {
   voice.peers.set(id, peer);
   voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(id, "ice", e.candidate.toJSON()); };
-  pc.ontrack = (e) => attachRemote(id, peer, e.streams[0]);
+  pc.ontrack = (e) => {
+    attachRemote(id, peer, e.streams[0]);
+    if (e.track.kind === "video") showTile(id, e.streams[0]);
+  };
   pc.onconnectionstatechange = () => {
     clearTimeout(peer.fix);
     if (pc.connectionState === "failed") rebuildPeer(id);
@@ -205,6 +215,7 @@ function closePeer(id) {
   clearTimeout(peer.fix);
   try { peer.pc.close(); } catch (e) { /* ignore */ }
   if (peer.audio) peer.audio.remove();
+  removeTile(id);
   voice.meters.delete(id);
   voice.speaking.delete(id);
   voice.peers.delete(id);
@@ -230,6 +241,9 @@ async function flushQueue(peer) {
 async function handleSignal(m) {
   if (!voice.active) return;
   if (m.kind === "offer") {
+    // both sides offered at once (both switched the camera together): the smaller id keeps its offer, the other answers it
+    const mine = voice.peers.get(m.from);
+    if (mine && mine.pc.signalingState === "have-local-offer" && state && state.you < m.from) return;
     const peer = createPeer(m.from, false); // a fresh connection for someone (re)joining
     await peer.pc.setRemoteDescription(m.data);
     await flushQueue(peer);
@@ -288,6 +302,54 @@ function toggleMute() {
   if (state) voiceSync(state);
 }
 
+/* ---------- camera (optional, only while in voice) ---------- */
+
+/** One small round-cornered video per person with a camera on; the strip sits over the table's right edge. */
+function showTile(id, stream, self) {
+  removeTile(id);
+  const tile = document.createElement("div");
+  tile.className = "vtile" + (self ? " self" : "");
+  tile.dataset.vid = id;
+  const v = document.createElement("video");
+  v.autoplay = true;
+  v.playsInline = true;
+  v.muted = true; // the sound already plays through the audio element
+  v.srcObject = new MediaStream(stream.getVideoTracks());
+  v.play().catch(() => {});
+  const p = state && state.players.find((x) => x.id === id);
+  const name = document.createElement("span");
+  name.textContent = self ? "You" : (p ? p.name : "");
+  tile.append(v, name);
+  $("videoStrip").appendChild(tile);
+}
+function removeTile(id) {
+  const t = $("videoStrip").querySelector('[data-vid="' + CSS.escape(id) + '"]');
+  if (t) t.remove();
+}
+
+async function toggleCam() {
+  if (!voice.active || !voice.stream) return;
+  if (voice.cam) {
+    voice.stream.getVideoTracks().forEach((t) => { t.stop(); voice.stream.removeTrack(t); });
+    voice.cam = false;
+    removeTile(state.you);
+  } else {
+    if (voice.stream.getVideoTracks().length) return;
+    try {
+      const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, frameRate: 15, facingMode: "user" } });
+      voice.stream.addTrack(cam.getVideoTracks()[0]); // small and slow on purpose: every person you see is one more upload
+      voice.cam = true;
+      showTile(state.you, voice.stream, true);
+    } catch (e) {
+      toast("Camera blocked — allow it in the browser to share video.");
+      return;
+    }
+  }
+  // start every pairing over with the new set of tracks (the other side builds a fresh connection when the offer arrives)
+  for (const id of [...voice.peers.keys()]) createPeer(id, true);
+  voiceSync(state);
+}
+
 function addMeter(id, stream) {
   try {
     const analyser = voice.ctx.createAnalyser();
@@ -320,3 +382,4 @@ $("voiceBtn").addEventListener("click", () => {
   return voiceJoin();
 });
 $("muteBtn").addEventListener("click", toggleMute);
+$("camBtn").addEventListener("click", toggleCam);
