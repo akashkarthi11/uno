@@ -440,6 +440,22 @@ body.learning { overflow: hidden; }
 .form-card { display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 22px; background: #fff; border: 1px solid var(--l-line); box-shadow: var(--l-shadow); }
 .form-card h3 { font-size: 17px; font-weight: 800; margin-bottom: 4px; }
 .form-card label { margin-top: 6px; font-size: 13px; font-weight: 800; }
+.w-lead { margin: 0 0 10px; font-size: 14px; }
+.w-search { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+.w-search input { flex: 1; min-width: 0; }
+.w-search .l-btn { min-height: 48px; padding: 0 20px; flex: none; }
+#wordResults { margin-top: 10px; }
+.w-warn { font-size: 13px; margin: 6px 2px 0; }
+.word-card.tall { display: block; }
+.word-card .w-top { display: flex; align-items: center; gap: 12px; }
+.word-card .w-acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.word-card .w-acts .l-btn { min-height: 38px; padding: 0 14px; font-size: 14px; }
+.word-card .w-why { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--l-lav); font-size: 15px; font-weight: 600; }
+.word-card .w-why-h { font-weight: 800; color: var(--l-purple-d); margin-bottom: 4px; }
+.word-card .w-why-row { padding: 3px 0; overflow-wrap: anywhere; }
+.word-card .w-why-note { margin-top: 6px; font-size: 13px; color: var(--l-muted); }
+.w-own { margin-top: 14px; }
+.w-own summary { cursor: pointer; font-weight: 800; padding: 10px 2px; color: var(--l-purple-d); }
 .words-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .words-head .l-btn { min-height: 40px; padding: 0 14px; font-size: 14px; margin-top: 10px; }
 .word-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border-radius: var(--l-radius); border: 1px solid var(--l-line); background: #fff; box-shadow: var(--l-shadow-s); animation: lRise .2s ease; }

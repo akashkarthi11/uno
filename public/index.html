@@ -355,8 +355,18 @@
     </section>
 
     <section id="paneWords" class="learn-pane hidden" role="tabpanel" aria-label="Words">
+      <div class="form-card">
+        <h3>Find a word</h3>
+        <p class="muted w-lead">Type an English word and see it in Korean — how to say it, and why it sounds that way.</p>
+        <div class="ask-row w-search"><input id="wordQ" type="text" maxlength="40" placeholder="e.g. water, friend, thank you" aria-label="English word"><button id="wordFind" class="l-btn primary" type="button">Find</button></div>
+        <div id="wordResults"></div>
+      </div>
+      <h3 class="section-title">Learn by topic</h3>
+      <div id="wordTopics" class="group-tabs" role="tablist" aria-label="Word topics"></div>
+      <div id="wordTopicList"></div>
+      <details class="w-own">
+      <summary>Add your own word</summary>
       <form id="wordForm" class="form-card" autocomplete="off" onsubmit="return false">
-        <h3>Add a word</h3>
         <label for="wordKo">Korean word</label>
         <input id="wordKo" type="text" maxlength="30" lang="ko" placeholder="e.g. 물">
         <label for="wordRoman">How it is read <span class="muted">(optional)</span></label>
@@ -366,7 +376,8 @@
         <button id="wordAdd" class="l-btn primary big" type="button">Add word</button>
         <div id="wordMsg" class="form-msg hidden" role="status" aria-live="polite"></div>
       </form>
-      <div class="words-head"><h3 class="section-title">Word list <span id="wordCount" class="muted"></span></h3><button id="wordReadAll" class="l-btn soft hidden" type="button">🔊 Read all</button></div>
+      </details>
+      <div class="words-head"><h3 class="section-title">Our shared list <span id="wordCount" class="muted"></span></h3><button id="wordReadAll" class="l-btn soft hidden" type="button">🔊 Read all</button></div>
       <div id="wordList"></div>
       <div id="wordEmptyCard" class="state-card small hidden">
         <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>

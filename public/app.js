@@ -2157,6 +2157,118 @@ function renderWords(s) {
   }
 }
 
+/* ---- teaching words: a built-in dictionary, an online lookup, and a letter-by-letter "why it sounds like this" ---- */
+let dict = null;
+let wordTopic = "greetings";
+const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+const JUNG = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ";
+const JONG = ["", "ㄱ", "ㄲ", "ㄳ", "ㄴ", "ㄵ", "ㄶ", "ㄷ", "ㄹ", "ㄺ", "ㄻ", "ㄼ", "ㄽ", "ㄾ", "ㄿ", "ㅀ", "ㅁ", "ㅂ", "ㅄ", "ㅅ", "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ"];
+
+/** The sound of one letter from the letter table ("g / k" is g at the start, k at the end). */
+function letterSound(ch, final) {
+  if (ch === "ㅇ") return final ? "ng" : "silent here";
+  for (const rows of Object.values(hangul || {})) {
+    const r = rows.find((x) => x[0] === ch);
+    if (r) { const parts = r[1].split(" / "); return final && parts[1] ? parts[1] : parts[0]; }
+  }
+  return "";
+}
+
+/** Splits every Korean syllable into its starting consonant, vowel and optional ending consonant, with each letter's sound. */
+function breakdown(ko) {
+  const lines = [];
+  for (const c of ko) {
+    const n = c.charCodeAt(0) - 0xac00;
+    if (n < 0 || n > 11171) continue;
+    const parts = [[CHO[Math.floor(n / 588)], false], [JUNG[Math.floor((n % 588) / 28)], false]];
+    const t = JONG[n % 28];
+    if (t) parts.push([t, true]);
+    lines.push({ syl: c, parts: parts.map(([ch, fin]) => { const snd = letterSound(ch, fin); return ch + (snd ? " (" + snd + ")" : ""); }) });
+  }
+  return lines;
+}
+
+function wordCard(ko, roman, en, opts = {}) {
+  const wrap = mk("div", "word-card tall");
+  const top = mk("div", "w-top");
+  const k = mk("div", "w-ko", ko);
+  k.lang = "ko";
+  const text = mk("div", "w-text");
+  if (roman) text.appendChild(mk("div", "w-roman", roman));
+  text.appendChild(mk("div", "w-meaning", en));
+  const hear = mk("button", "l-icon-btn speak");
+  hear.type = "button";
+  hear.setAttribute("aria-label", "Hear " + ko);
+  hear.innerHTML = '<svg class="ico"><use href="#i-speaker"/></svg>';
+  hear.addEventListener("click", () => speakKo(ko, hear));
+  top.append(k, text, hear);
+  wrap.appendChild(top);
+  const why = mk("div", "w-why hidden");
+  why.appendChild(mk("div", "w-why-h", "Why it sounds like this"));
+  for (const l of breakdown(ko)) why.appendChild(mk("div", "w-why-row", l.syl + "  =  " + l.parts.join("  +  ")));
+  why.appendChild(mk("div", "w-why-note", "Each Korean block is a starting consonant, then a vowel, and sometimes an ending consonant. Say the sounds together, smoothly."));
+  const acts = mk("div", "w-acts");
+  const whyBtn = mk("button", "l-btn soft", "Why?");
+  whyBtn.type = "button";
+  whyBtn.addEventListener("click", () => { why.classList.toggle("hidden"); whyBtn.textContent = why.classList.contains("hidden") ? "Why?" : "Hide"; });
+  acts.appendChild(whyBtn);
+  const inList = (((state && state.learn && state.learn.words) || []).some((w) => w.ko === ko));
+  const add = mk("button", "l-btn soft", inList ? "In our list ✓" : "Add to our list");
+  add.type = "button";
+  add.disabled = inList;
+  add.addEventListener("click", async () => {
+    add.disabled = true;
+    try { apply(await api({ op: "learnWordAdd", ko, roman: roman || "", meaning: en })); add.textContent = "In our list ✓"; } catch (e) { toast(e.message); add.disabled = false; }
+  });
+  acts.appendChild(add);
+  wrap.append(acts, why);
+  return wrap;
+}
+
+function renderTopics() {
+  if (!dict) return;
+  const tabs = $("wordTopics");
+  tabs.textContent = "";
+  for (const [key, [label, rows]] of Object.entries(dict)) {
+    const b = mk("button", key === wordTopic ? "on" : "", label + " · " + rows.length);
+    b.type = "button";
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-selected", key === wordTopic ? "true" : "false");
+    b.addEventListener("click", () => { wordTopic = key; renderTopics(); });
+    tabs.appendChild(b);
+  }
+  const list = $("wordTopicList");
+  list.textContent = "";
+  for (const [ko, roman, en] of dict[wordTopic][1]) list.appendChild(wordCard(ko, roman, en));
+}
+
+async function findWord() {
+  const q = $("wordQ").value.trim();
+  const out = $("wordResults");
+  out.textContent = "";
+  if (!q) { out.appendChild(mk("p", "form-msg err", "Type an English word first, like “water”.")); return; }
+  const low = q.toLowerCase();
+  const hits = [];
+  for (const [, [, rows]] of Object.entries(dict || {})) for (const r of rows) if (r[2].toLowerCase().includes(low) || r[1] === low) hits.push(r);
+  if (hits.length) {
+    for (const [ko, roman, en] of hits.slice(0, 8)) out.appendChild(wordCard(ko, roman, en));
+    return;
+  }
+  const note = mk("p", "muted", "Not in the starter dictionary. Looking it up online…");
+  out.appendChild(note);
+  try {
+    const r = await api({ op: "translate", q });
+    out.textContent = "";
+    out.appendChild(wordCard(r.ko, "", r.q));
+    out.appendChild(mk("p", "muted w-warn", "From an online dictionary (machine translation) — double-check it before relying on it. Tap Why? to see how to read it, letter by letter."));
+  } catch (e) {
+    out.textContent = "";
+    out.appendChild(mk("p", "form-msg err", e.message));
+  }
+}
+$("wordFind").addEventListener("click", findWord);
+$("wordQ").addEventListener("keydown", (e) => { if (e.key === "Enter") findWord(); });
+
 function wordMessage(kind, text) {
   const m = $("wordMsg");
   m.textContent = text;
@@ -2263,7 +2375,9 @@ async function openLearn() {
     ["paneLetters", "paneQuiz", "paneWords", "paneAsk"].forEach((id) => $(id).classList.add("hidden"));
     $("learnLoading").classList.remove("hidden");
     try {
-      hangul = (await api({ op: "korean" })).hangul;
+      const k = await api({ op: "korean" });
+      hangul = k.hangul;
+      dict = k.words;
     } catch (e) {
       $("learnLoading").classList.add("hidden");
       $("learnErrorText").textContent = e.message || "Check your connection and try again.";
@@ -2272,6 +2386,7 @@ async function openLearn() {
     }
     $("learnLoading").classList.add("hidden");
     setPane("letters");
+    renderTopics();
   }
   renderLearn(state);
 }

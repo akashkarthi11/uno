@@ -1,6 +1,7 @@
 import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
 import { HANGUL } from './_lib/korean.js';
+import { WORDS } from './_lib/words.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -268,7 +269,25 @@ export default async function handler(req, res) {
       const s = await readRoom(code);
       const me = s && s.members.find((m) => m.id === b.playerId);
       if (!me || !(me.admin || me.role === 'private')) return res.status(400).json({ error: 'Unknown action.' });
-      return res.json({ hangul: HANGUL });
+      return res.json({ hangul: HANGUL, words: WORDS });
+    }
+
+    // Looks an English word up online (MyMemory, no key) for the learner; the result is machine-translated and labelled so on the page.
+    if (b.op === 'translate') {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      if (!me || !(me.admin || me.role === 'private')) return res.status(400).json({ error: 'Unknown action.' });
+      const q = String(b.q ?? '').trim().replace(/\s+/g, ' ');
+      if (!/^[A-Za-z][A-Za-z' -]{0,39}$/.test(q)) throw new G.GameError('Type one English word or a short phrase (letters only).');
+      let ko = '';
+      try {
+        const r = await fetch('https://api.mymemory.translated.net/get?langpair=en|ko&q=' + encodeURIComponent(q), { signal: AbortSignal.timeout(6000) });
+        const j = await r.json();
+        const cands = [j && j.responseData && j.responseData.translatedText, ...((j && j.matches) || []).map((m) => m.translation)];
+        ko = String(cands.find((t) => typeof t === 'string' && /^[㄰-㆏가-힯 ]{1,30}$/.test(t.trim())) || '').trim();
+      } catch (e) { throw new G.GameError('The online lookup is not reachable right now — try again in a moment.'); }
+      if (!ko) throw new G.GameError('No Korean word found for “' + q + '”. Try a simpler word.');
+      return res.json({ q, ko });
     }
 
     // Stats window: this room's table and its last games (read-only, any member of the room).

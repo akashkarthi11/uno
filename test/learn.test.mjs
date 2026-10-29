@@ -151,3 +151,15 @@ test('word checks: Korean letters required, meaning required, no duplicates, cap
   for (let i = 0; i < 59; i++) G.act(s, ann, { op: 'learnWordAdd', ko: '가' + String.fromCharCode(0xac00 + i), meaning: 'w' + i }, now);
   assert.throws(() => G.act(s, ann, { op: 'learnWordAdd', ko: '나나나', meaning: 'x' }, now), /list is full/);
 });
+
+import { WORDS } from '../api/_lib/words.js';
+test('the starter dictionary is well formed: Korean, a reading and a meaning in every row, no repeats', () => {
+  const rows = Object.values(WORDS).flatMap(([, r]) => r);
+  assert.ok(rows.length >= 80);
+  for (const [ko, roman, en] of rows) {
+    assert.match(ko, /^[\uac00-\ud7af ]+$/, ko);
+    assert.match(roman, /^[a-z ]+$/, roman);
+    assert.ok(en.length > 0);
+  }
+  assert.equal(new Set(rows.map((r) => r[0])).size, rows.length, 'a word appears twice');
+});
