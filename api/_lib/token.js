@@ -33,6 +33,6 @@ export function verifyToken(token, room, now, salt) {
   let claim;
   try { claim = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { return null; }
   if (!claim || claim.r !== room || !(claim.exp > now) || typeof claim.p !== 'string') return null;
-  if (!['admin', 'private', 'public'].includes(claim.role)) return null;
+  if (!['admin', 'private', 'public', 'observer'].includes(claim.role)) return null;
   return claim;
 }

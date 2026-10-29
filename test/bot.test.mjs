@@ -89,21 +89,25 @@ test('bot: only the real admin can switch it off; off, players cannot start one 
   assert.equal(s.started, true);
 });
 
-test('observer: the admin listens in without being a player; everyone is told; the admin can still remove people', () => {
+test('observer account: hears and sees, is not an admin, is never listed or dealt in; the real admin stays listed', () => {
   const s = G.newRoom('o');
   const now = 1000;
+  const boss = G.join(s, { name: 'Boss', admin: true, role: 'admin' }, now);
   const a = G.join(s, { name: 'P1', admin: false, role: 'public' }, now);
-  const b = G.join(s, { name: 'P2', admin: false, role: 'public' }, now);
-  const boss = G.join(s, { name: 'Admin', admin: true, role: 'admin', observer: true }, now);
-  assert.equal(boss.observer, true);
-  const imposter = G.join(s, { name: 'X', admin: false, role: 'public', observer: true }, now);
-  assert.equal(imposter.observer, undefined, 'only the real admin can observe');
-  assert.equal(G.view(s, a, now).observed, true, 'players are told');
-  assert.equal(G.view(s, boss, now).observing, true);
-  assert.equal(G.view(s, a, now).players.some((p) => p.name === 'Admin'), false, 'not in the lobby list');
-  G.act(s, boss, { op: 'start' }, now); // the observer can start the game for the others...
-  assert.equal(s.seats.includes(boss.id), false, '...but is never dealt in');
-  assert.equal(s.seats.length, 3, 'P1, P2 and X');
-  G.act(s, boss, { op: 'kick', targetId: imposter.id }, now); // removing an unwanted user
-  assert.equal(s.members.some((m) => m.id === imposter.id), false);
+  const obs = G.join(s, { name: 'Observer', admin: false, role: 'observer', observer: true }, now);
+  assert.equal(obs.observer, true);
+  assert.equal(obs.admin, false, 'not an admin');
+  assert.equal(G.canVoice(s, obs), true, 'it can hear the call');
+  assert.equal(G.view(s, a, now).observed, true, 'players are told someone is observing');
+  assert.equal(G.view(s, obs, now).observing, true);
+  const names = G.view(s, a, now).players.map((p) => p.name);
+  assert.deepEqual(names.sort(), ['Boss', 'P1'], 'the real admin is listed in the lobby, the observer is not');
+  assert.throws(() => G.act(s, obs, { op: 'start' }, now), /Only the admin/, 'no admin powers');
+  assert.throws(() => G.act(s, obs, { op: 'kick', targetId: a.id }, now), /Only the admin/);
+  assert.throws(() => G.act(s, obs, { op: 'chat', text: 'hi' }, now), /only watch/);
+  G.act(s, boss, { op: 'start' }, now);
+  assert.equal(s.seats.includes(obs.id), false, 'never dealt in');
+  assert.equal(s.seats.length, 2);
+  assert.equal(G.view(s, obs, now).seated, false);
+  assert.equal(G.view(s, obs, now).hand.length, 0);
 });

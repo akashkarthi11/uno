@@ -173,7 +173,7 @@ export function join(s, { name, admin, role, playerId, coadmin, observer }, now)
   let p = playerId ? byId(s, playerId) : null;
   if (!p) {
     p = { id: randomUUID(), name: cleanName(name), admin: false, lastSeen: now, hand: [], saidUno: false, finished: false };
-    if (observer && admin) p.observer = true; // the admin listening in: not a player, and everyone is told
+    if (observer) p.observer = true; // the observer account (password 1102): not a player, not listed, everyone is told
     s.members.push(p);
     addLog(s, p.name + ' joined' + (s.started && !s.over ? ' (waiting for the next game).' : '.'));
   } else if (!online(p, now)) {
@@ -361,6 +361,7 @@ function learnView(s, me) {
 }
 
 function chat(s, p, raw, now) {
+  if (p.observer) fail('Observers only watch.');
   if (s.over) fail('The game has finished — the chat starts fresh with the next game.');
   const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
   if (!text) fail('Type a message first.');
@@ -372,7 +373,7 @@ function chat(s, p, raw, now) {
 /* ---------------- voice chat (membership only; audio is browser-to-browser) ---------------- */
 
 /** Voice chat is for the admin and private players. */
-export const canVoice = (s, p) => Boolean(p.admin || p.role === 'private' || publicVoiceOf(s));
+export const canVoice = (s, p) => Boolean(p.admin || p.observer || p.role === 'private' || publicVoiceOf(s));
 // The practice match against the bot: on unless the real admin switched it off (the real admin can always start one).
 export const botOf = (s) => !(s.settings && s.settings.botMatch === false);
 export const canBot = (s, p) => Boolean(p.admin || botOf(s));

@@ -545,3 +545,24 @@ test('rooms: a room summary says who is online and what the room is doing', () =
   G.act(s, a, { op: 'pause' }, now);
   assert.equal(G.roomSummary(s, 'x', now).phase, 'paused');
 });
+
+test('observer account: password 1102 gets into any room, public or private, as a hidden non-admin; a session resumes it', async () => {
+  const R = 'obsroom' + Date.now() % 100000;
+  const admin = await call({ op: 'join', room: R, name: 'Boss', password: '110299' });
+  await call({ op: 'private', room: R, playerId: admin.body.state.you, on: true });
+  const priv = await call({ op: 'join', room: R, name: 'Priv', password: '281101' });
+  const obs = await call({ op: 'join', room: R, name: 'whatever', password: '1102' });
+  assert.equal(obs.code, 200, 'a private room admits it too');
+  assert.equal(obs.body.state.observing, true);
+  assert.equal(obs.body.state.admin, false);
+  assert.equal(obs.body.state.canVoice, true);
+  assert.equal(obs.body.state.players.some((p) => p.name === 'Observer'), false, 'not listed');
+  const seen = (await call({ op: 'state', room: R, playerId: priv.body.state.you })).body.state;
+  assert.equal(seen.observed, true);
+  assert.deepEqual(seen.players.map((p) => p.name).sort(), ['Boss', 'Priv']);
+  const back = await call({ op: 'session', room: R, token: obs.body.token });
+  assert.equal(back.code, 200, 'a refresh keeps the observer in a private room');
+  assert.equal(back.body.state.observing, true);
+  assert.equal((await call({ op: 'rooms', room: R, playerId: obs.body.state.you })).code, 400, 'no admin powers');
+  assert.equal((await call({ op: 'join', room: R, name: 'x', password: '1103' })).code, 401, 'other passwords still refused');
+});
