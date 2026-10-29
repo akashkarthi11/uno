@@ -9,6 +9,7 @@ const POLL_GAME_MS = 1500; // while a game is running
 const POLL_GAME_QUIET_MS = 2500; // game running but nothing has moved for a while
 const POLL_HIDDEN_MS = 8000; // tab not visible (still well inside the 27 s "online" window)
 const REQUEST_TIMEOUT_MS = 8000;
+const POLL_TIMEOUT_MS = 4500; // a quiet check that has not answered by now is on a dead connection (phones switching between 5G and wifi): try again at once
 const HEARTBEAT_MS = 8000;
 const $ = (id) => document.getElementById(id);
 
@@ -47,16 +48,25 @@ function store(key, value) {
 
 /** Ping badge: the middle value of the last 5 quiet checks (so one slow start does not show), green/orange/red like a game. */
 const pingSamples = [];
+let failStreak = 0; // checks in a row that did not get through
 let pingMid = null; // the ping badge's middle value in ms (null: unknown / offline); the camera picks its quality from it
 function notePing(ms) {
   const el = $("ping");
   if (ms === null) { // the last check did not get through
+    // Mobile networks drop a request now and then without being down: one or two misses show "…", only a real outage shows "offline"
+    failStreak++;
+    if (failStreak < 3 && Date.now() - lastOk < 12000) {
+      el.className = "ping mid";
+      el.lastChild.textContent = "…";
+      return;
+    }
     pingSamples.length = 0;
     pingMid = null;
     el.className = "ping bad";
     el.lastChild.textContent = "offline";
     return;
   }
+  failStreak = 0;
   pingSamples.push(ms);
   if (pingSamples.length > 5) pingSamples.shift();
   const mid = [...pingSamples].sort((a, b) => a - b)[Math.floor(pingSamples.length / 2)];
@@ -65,10 +75,10 @@ function notePing(ms) {
   el.lastChild.textContent = Math.round(mid) + " ms";
 }
 
-async function api(body) {
+async function api(body, timeoutMs = REQUEST_TIMEOUT_MS) {
   // A request that hangs must not freeze the game, so every call has a timeout.
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   const t0 = performance.now();
   let r;
   try {
@@ -245,6 +255,7 @@ async function resumeSession() {
 }
 
 let inFlight = false;
+let retrySoon = false;
 let quiet = 0; // polls in a row that brought nothing new
 let lastOk = Date.now();
 let removed = false;
@@ -293,7 +304,14 @@ async function pollOnce() {
   if (busy || inFlight || removed) return;
   inFlight = true;
   try {
-    const data = await api({ op: "state", since: state ? state.version : undefined, ps: state ? state.ps : undefined });
+    const ask = () => api({ op: "state", since: state ? state.version : undefined, ps: state ? state.ps : undefined }, POLL_TIMEOUT_MS);
+    let data;
+    try {
+      data = await ask();
+    } catch (e) {
+      if (e.denied || (e.message || "").startsWith("Server error")) throw e;
+      data = await ask(); // a dropped or stalled connection (not a server answer): once more, straight away, on a new connection
+    }
     if (data.kicked) {
       removedByAdmin();
     } else if (data.left) {
@@ -317,7 +335,8 @@ async function pollOnce() {
     checkJoins();
   } catch (e) {
     notePing(null);
-    if (Date.now() - lastOk > HEARTBEAT_MS) toast("Connection problem — retrying…");
+    if (Date.now() - lastOk > 12000) toast("Connection problem — retrying…");
+    retrySoon = true;
   } finally {
     inFlight = false;
   }
@@ -329,13 +348,17 @@ function startPolling() {
   keepAwake();
   const tick = async () => {
     await pollOnce(); // never throws
-    setTimeout(tick, pollDelay());
+    const soon = retrySoon;
+    retrySoon = false;
+    setTimeout(tick, soon ? Math.min(3000, 700 * Math.max(1, failStreak)) : pollDelay()); // after a miss, look again quickly instead of waiting a whole quiet interval
   };
   setTimeout(tick, pollDelay());
   // Background tabs throttle timers; catch up the moment the player looks again.
   document.addEventListener("visibilitychange", () => { if (!document.hidden) pollOnce(); });
   window.addEventListener("focus", pollOnce);
   window.addEventListener("online", pollOnce);
+  // moving between 5G and wifi leaves old connections dead: look the moment the network changes
+  if (navigator.connection && navigator.connection.addEventListener) navigator.connection.addEventListener("change", pollOnce);
   // A page restored from the back/forward cache is a frozen old copy: refresh it straight away.
   window.addEventListener("pageshow", (e) => { if (e.persisted) pollOnce(); });
 }
