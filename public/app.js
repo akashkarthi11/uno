@@ -1522,6 +1522,12 @@ async function enterLandscape() {
   // the bars take a moment to go: measure the screen again as it settles
   [0, 200, 600, 1500].forEach((ms) => setTimeout(setAppHeight, ms));
   if (blocked) toast(blocked + " For a full screen like a video: browser menu ⋮ → Add to Home screen, then open the game from its icon.");
+  // some browsers (Brave) accept full screen but keep the address bar on top of the page: say how to get rid of it
+  setTimeout(() => {
+    if (document.fullscreenElement && !installed() && window.innerHeight < Math.min(screen.width, screen.height) - 40) {
+      toast("The address bar is still showing. For no address bar: browser menu ⋮ → Add to Home screen (or Install app), then open the game from its icon.");
+    }
+  }, 1200);
   renderRotateHint();
 }
 $("landscapeBtn").addEventListener("click", enterLandscape);
