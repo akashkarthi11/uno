@@ -76,7 +76,51 @@ function voiceSync(s) {
 }
 
 const MIC = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-const CAM = { width: 320, height: 240, frameRate: 15, facingMode: "user" }; // small and slow on purpose: every person you see is one more upload
+const CAM = { width: 320, height: 240, frameRate: 15, facingMode: "user" }; // where the camera starts; adaptCamera() then follows the connection
+
+/**
+ * Picture quality follows the ping badge: a fast connection gets a sharper, smoother picture, a slow one a smaller, calmer
+ * one that still keeps up. Applied to the running camera (no reconnecting). With the relay on, the top step is not used:
+ * relayed video uses up the relay's data allowance fast.
+ */
+const CAM_TIERS = [
+  { maxMs: 60, width: 640, height: 480, frameRate: 30, kbps: 900 },
+  { maxMs: 110, width: 480, height: 360, frameRate: 24, kbps: 550 },
+  { maxMs: 200, width: 320, height: 240, frameRate: 15, kbps: 250 },
+  { maxMs: Infinity, width: 240, height: 180, frameRate: 10, kbps: 120 },
+];
+let camTier = -1;
+let camTierVotes = 0;
+function wantedTier() {
+  if (typeof pingMid !== "number") return 2; // unknown: the middle, safe step
+  let i = CAM_TIERS.findIndex((t) => pingMid <= t.maxMs);
+  if (voice.relay) i = Math.max(i, 1);
+  return i;
+}
+async function adaptCamera() {
+  if (!voice.active || !voice.cam || !voice.stream) { camTier = -1; return; }
+  const want = wantedTier();
+  if (want === camTier) { camTierVotes = 0; return; }
+  // a step is only taken when two checks in a row ask for it (a single ping spike must not make the picture jump)
+  if (++camTierVotes < 2 && camTier !== -1) return;
+  camTierVotes = 0;
+  camTier = want;
+  const t = CAM_TIERS[want];
+  const track = voice.stream.getVideoTracks()[0];
+  if (track) track.applyConstraints({ width: { ideal: t.width }, height: { ideal: t.height }, frameRate: { ideal: t.frameRate } }).catch(() => {});
+  for (const peer of voice.peers.values()) {
+    const sender = peer.pc.getSenders().find((x) => x.track && x.track.kind === "video");
+    if (!sender) continue;
+    try {
+      const p = sender.getParameters();
+      if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+      p.encodings[0].maxBitrate = t.kbps * 1000;
+      p.encodings[0].maxFramerate = t.frameRate;
+      await sender.setParameters(p);
+    } catch (e) { /* this browser does not allow it: the constraints above still apply */ }
+  }
+}
+setInterval(adaptCamera, 4000);
 
 /** Joins the call with a microphone, a camera, or both (opts.audio / opts.video); the automatic join uses the microphone only. */
 async function voiceJoin(opts = { audio: true }) {
@@ -185,6 +229,7 @@ function createPeer(id, initiator) {
   const pc = new RTCPeerConnection({ iceServers: voice.ice });
   const peer = { pc, queue: [], audio: null };
   voice.peers.set(id, peer);
+  camTier = -1; // a new connection has no bitrate limit yet: the next check sets it
   voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
   // someone with only a microphone still has to receive the other person's camera, and the other way round
   for (const kind of ["audio", "video"]) if (!voice.stream.getTracks().some((t) => t.kind === kind)) pc.addTransceiver(kind, { direction: "recvonly" });
@@ -469,6 +514,7 @@ async function flipCamera() {
   facing = next;
   voice.stream.getVideoTracks().forEach((o) => { o.stop(); voice.stream.removeTrack(o); });
   voice.stream.addTrack(track);
+  camTier = -1; // the new camera takes the current quality step at the next check
   for (const peer of voice.peers.values()) {
     const sender = peer.pc.getSenders().find((x) => x.track && x.track.kind === "video");
     if (sender) sender.replaceTrack(track).catch(() => {});

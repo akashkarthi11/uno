@@ -47,10 +47,12 @@ function store(key, value) {
 
 /** Ping badge: the middle value of the last 5 quiet checks (so one slow start does not show), green/orange/red like a game. */
 const pingSamples = [];
+let pingMid = null; // the ping badge's middle value in ms (null: unknown / offline); the camera picks its quality from it
 function notePing(ms) {
   const el = $("ping");
   if (ms === null) { // the last check did not get through
     pingSamples.length = 0;
+    pingMid = null;
     el.className = "ping bad";
     el.lastChild.textContent = "offline";
     return;
@@ -58,6 +60,7 @@ function notePing(ms) {
   pingSamples.push(ms);
   if (pingSamples.length > 5) pingSamples.shift();
   const mid = [...pingSamples].sort((a, b) => a - b)[Math.floor(pingSamples.length / 2)];
+  pingMid = mid;
   el.className = "ping " + (mid <= 100 ? "good" : mid <= 200 ? "mid" : "bad");
   el.lastChild.textContent = Math.round(mid) + " ms";
 }
