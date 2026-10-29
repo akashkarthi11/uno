@@ -9,6 +9,7 @@
 const voice = {
   active: false,
   muted: false,
+  mic: false, // my microphone is on (it and the camera are independent: either one alone puts me in the call)
   cam: false,
   stream: null,
   peers: new Map(), // playerId -> { pc, queue, audio }
@@ -61,11 +62,11 @@ function voiceSync(s) {
       if (voice.members.some((id) => !before.has(id))) pollSignals(); // someone new: look for their offer now
     }
   }
-  btn.classList.toggle("on", voice.active);
+  btn.classList.toggle("on", voice.mic);
   btn.textContent = "🎤";
-  btn.title = voice.active ? "Leave voice" : "Join voice" + (voice.members.length ? " (" + voice.members.length + " in voice)" : "");
+  btn.title = voice.mic ? "Turn microphone off" : "Turn microphone on" + (voice.members.length ? " (" + voice.members.length + " in the call)" : "");
   btn.dataset.count = String(voice.members.length);
-  $("muteBtn").classList.toggle("hidden", !voice.active);
+  $("muteBtn").classList.toggle("hidden", !voice.mic);
   $("camBtn").classList.toggle("hidden", !s.canVoice); // same permission as the mic button
   $("camBtn").classList.toggle("on", voice.cam);
   $("camBtn").title = voice.cam ? "Turn camera off" : "Turn camera on";
@@ -73,18 +74,20 @@ function voiceSync(s) {
   $("muteBtn").title = voice.muted ? "Unmute" : "Mute";
 }
 
-async function voiceJoin() {
+const MIC = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+const CAM = { width: 320, height: 240, frameRate: 15, facingMode: "user" }; // small and slow on purpose: every person you see is one more upload
+
+/** Joins the call with a microphone, a camera, or both (opts.audio / opts.video); the automatic join uses the microphone only. */
+async function voiceJoin(opts = { audio: true }) {
   if (voice.active) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    toast("This browser can't use the microphone here.");
+    toast("This browser can't use the microphone or camera here.");
     return;
   }
   try {
-    voice.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
+    voice.stream = await navigator.mediaDevices.getUserMedia({ audio: opts.audio ? MIC : false, video: opts.video ? CAM : false });
   } catch (e) {
-    toast("Microphone blocked — allow it in the browser to join voice.");
+    toast(opts.video && !opts.audio ? "Camera blocked — allow it in the browser to share video." : "Microphone blocked — allow it in the browser to join voice.");
     return;
   }
   await send({ op: "voiceJoin" });
@@ -95,8 +98,11 @@ async function voiceJoin() {
   }
   voice.active = true;
   voice.muted = false;
+  voice.mic = Boolean(opts.audio);
+  voice.cam = Boolean(opts.video);
   voice.ctx = new (window.AudioContext || window.webkitAudioContext)();
-  addMeter(state.you, voice.stream);
+  if (voice.mic) addMeter(state.you, voice.stream);
+  if (voice.cam) showTile(state.you, voice.stream, true);
   voice.meterTimer = setInterval(updateMeters, 200);
   // The newcomer starts the connection to everyone already in voice.
   for (const id of state.voice) if (id !== state.you) createPeer(id, true);
@@ -163,6 +169,7 @@ function voiceStopLocal() {
   voice.meters.clear();
   voice.speaking.clear();
   voice.active = false;
+  voice.mic = false;
   voice.cam = false;
   $("videoStrip").textContent = "";
   paintSpeaking();
@@ -176,6 +183,8 @@ function createPeer(id, initiator) {
   const peer = { pc, queue: [], audio: null };
   voice.peers.set(id, peer);
   voice.stream.getTracks().forEach((t) => pc.addTrack(t, voice.stream));
+  // someone with only a microphone still has to receive the other person's camera, and the other way round
+  for (const kind of ["audio", "video"]) if (!voice.stream.getTracks().some((t) => t.kind === kind)) pc.addTransceiver(kind, { direction: "recvonly" });
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(id, "ice", e.candidate.toJSON()); };
   pc.ontrack = (e) => {
     attachRemote(id, peer, e.streams[0]);
@@ -327,27 +336,30 @@ function removeTile(id) {
   if (t) t.remove();
 }
 
-async function toggleCam() {
-  if (!voice.active) { // the camera rides on voice: joining it first, like the mic button does
+/** The microphone and the camera are switched on and off separately; the call is left when both are off. */
+async function toggleDevice(kind) {
+  const audio = kind === "audio";
+  if (!voice.active) {
     session(voiceOffKey(), null);
-    await voiceJoin();
+    return voiceJoin(audio ? { audio: true } : { video: true });
   }
-  if (!voice.active || !voice.stream) return;
-  if (voice.cam) {
-    voice.stream.getVideoTracks().forEach((t) => { t.stop(); voice.stream.removeTrack(t); });
-    voice.cam = false;
-    removeTile(state.you);
+  if (!voice.stream) return;
+  const on = audio ? voice.mic : voice.cam;
+  if (on) {
+    (audio ? voice.stream.getAudioTracks() : voice.stream.getVideoTracks()).forEach((t) => { t.stop(); voice.stream.removeTrack(t); });
+    if (audio) { voice.mic = false; voice.muted = false; voice.meters.delete(state.you); voice.speaking.delete(state.you); }
+    else { voice.cam = false; removeTile(state.you); }
+    if (!voice.mic && !voice.cam) return voiceLeave();
   } else {
-    if (voice.stream.getVideoTracks().length) return;
     try {
-      const cam = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240, frameRate: 15, facingMode: "user" } });
-      voice.stream.addTrack(cam.getVideoTracks()[0]); // small and slow on purpose: every person you see is one more upload
-      voice.cam = true;
-      showTile(state.you, voice.stream, true);
+      const got = await navigator.mediaDevices.getUserMedia(audio ? { audio: MIC } : { video: CAM });
+      voice.stream.addTrack(got.getTracks()[0]);
     } catch (e) {
-      toast("Camera blocked — allow it in the browser to share video.");
+      toast(audio ? "Microphone blocked — allow it in the browser." : "Camera blocked — allow it in the browser to share video.");
       return;
     }
+    if (audio) { voice.mic = true; voice.muted = false; addMeter(state.you, voice.stream); }
+    else { voice.cam = true; showTile(state.you, voice.stream, true); }
   }
   // start every pairing over with the new set of tracks (the other side builds a fresh connection when the offer arrives)
   for (const id of [...voice.peers.keys()]) createPeer(id, true);
@@ -380,10 +392,6 @@ function paintSpeaking() {
   $("voiceBtn").classList.toggle("speaking", Boolean(state && voice.speaking.has(state.you)));
 }
 
-$("voiceBtn").addEventListener("click", () => {
-  if (voice.active) return voiceLeave();
-  session(voiceOffKey(), null);
-  return voiceJoin();
-});
+$("voiceBtn").addEventListener("click", () => toggleDevice("audio"));
 $("muteBtn").addEventListener("click", toggleMute);
-$("camBtn").addEventListener("click", toggleCam);
+$("camBtn").addEventListener("click", () => toggleDevice("video"));
