@@ -1793,7 +1793,7 @@ function setPane(p) {
     b.classList.toggle("on", b.dataset.pane === p);
     b.setAttribute("aria-current", b.dataset.pane === p ? "page" : "false");
   });
-  [["letters", "paneLetters"], ["quiz", "paneQuiz"], ["ask", "paneAsk"]].forEach(([k, id]) => $(id).classList.toggle("hidden", k !== p));
+  [["letters", "paneLetters"], ["quiz", "paneQuiz"], ["words", "paneWords"], ["ask", "paneAsk"]].forEach(([k, id]) => $(id).classList.toggle("hidden", k !== p));
   const page = $("learnPage");
   if (page) page.scrollTo({ top: 0 });
 }
@@ -1961,6 +1961,7 @@ function renderLearn(s) {
   $("learnStopBtn").classList.toggle("hidden", !quiz);
 
   renderAsks(s);
+  renderWords(s);
 
   // a number on the Ask tab when somebody is waiting for my answer
   const waiting = ((L && L.asks) || []).filter((a) => !a.mine && !a.myAnswer).length;
@@ -2073,6 +2074,93 @@ function renderAsks(s) {
   }
 }
 
+/* ---- the shared word list: add words, read them, hear them ---- */
+let wordsSig = "";
+
+/** Says a Korean word aloud; `done` runs when it ends (used to read the whole list one after another). */
+function speakKo(text, btn, done) {
+  try {
+    if (!window.speechSynthesis) { toast("This browser cannot speak."); return false; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ko-KR";
+    u.rate = 0.8;
+    const end = () => { if (btn) btn.classList.remove("playing"); if (done) done(); };
+    u.onstart = () => { if (btn) btn.classList.add("playing"); };
+    u.onend = end;
+    u.onerror = end;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+    return true;
+  } catch (e) { toast("This browser cannot speak."); return false; }
+}
+
+function renderWords(s) {
+  const words = (s.learn && s.learn.words) || [];
+  const sig = JSON.stringify(words);
+  if (sig === wordsSig) return;
+  wordsSig = sig;
+  const list = $("wordList");
+  list.textContent = "";
+  $("wordEmptyCard").classList.toggle("hidden", words.length > 0);
+  $("wordReadAll").classList.toggle("hidden", !words.length);
+  $("wordCount").textContent = words.length ? "· " + words.length : "";
+  for (const w of [...words].reverse()) {
+    const card = mk("div", "word-card");
+    const ko = mk("div", "w-ko", w.ko);
+    ko.lang = "ko";
+    const text = mk("div", "w-text");
+    if (w.roman) text.appendChild(mk("div", "w-roman", w.roman));
+    text.appendChild(mk("div", "w-meaning", w.meaning));
+    text.appendChild(mk("div", "w-by", "added by " + (w.mine ? "you" : w.byName)));
+    const hear = mk("button", "l-icon-btn speak");
+    hear.type = "button";
+    hear.setAttribute("aria-label", "Hear " + w.ko);
+    hear.innerHTML = '<svg class="ico"><use href="#i-speaker"/></svg>';
+    hear.addEventListener("click", () => speakKo(w.ko, hear));
+    card.append(ko, text, hear);
+    if (w.canRemove) {
+      const del = mk("button", "l-icon-btn w-del", "✕");
+      del.type = "button";
+      del.setAttribute("aria-label", "Remove " + w.ko);
+      del.addEventListener("click", () => learnSend({ op: "learnWordRemove", id: w.id }));
+      card.appendChild(del);
+    }
+    list.appendChild(card);
+  }
+}
+
+function wordMessage(kind, text) {
+  const m = $("wordMsg");
+  m.textContent = text;
+  m.className = "form-msg " + kind;
+  clearTimeout(wordMessage.t);
+  wordMessage.t = setTimeout(() => m.classList.add("hidden"), 5000);
+}
+$("wordAdd").addEventListener("click", async () => {
+  const ko = $("wordKo").value.trim();
+  const meaning = $("wordMeaning").value.trim();
+  if (!ko) { wordMessage("err", "Write the Korean word first."); $("wordKo").focus(); return; }
+  if (!meaning) { wordMessage("err", "Write what the word means."); $("wordMeaning").focus(); return; }
+  const btn = $("wordAdd");
+  btn.disabled = true;
+  try {
+    apply(await api({ op: "learnWordAdd", ko, roman: $("wordRoman").value, meaning }));
+  } catch (e) {
+    wordMessage("err", e.message);
+    btn.disabled = false;
+    return;
+  }
+  btn.disabled = false;
+  ["wordKo", "wordRoman", "wordMeaning"].forEach((id) => { $(id).value = ""; });
+  wordMessage("ok", "Added! Everyone in the lesson can read it now.");
+  $("wordKo").focus();
+});
+$("wordReadAll").addEventListener("click", () => {
+  const words = ((state && state.learn && state.learn.words) || []).map((w) => w.ko);
+  const next = (i) => { if (i < words.length && learnOpen) speakKo(words[i], null, () => setTimeout(() => next(i + 1), 500)); };
+  next(0);
+});
+
 function askMessage(kind, text) {
   const m = $("askMsg");
   m.textContent = text;
@@ -2144,7 +2232,7 @@ async function openLearn() {
   setPane("letters");
   $("learnError").classList.add("hidden");
   if (!hangul) {
-    ["paneLetters", "paneQuiz", "paneAsk"].forEach((id) => $(id).classList.add("hidden"));
+    ["paneLetters", "paneQuiz", "paneWords", "paneAsk"].forEach((id) => $(id).classList.add("hidden"));
     $("learnLoading").classList.remove("hidden");
     try {
       hangul = (await api({ op: "korean" })).hangul;

@@ -440,6 +440,16 @@ body.learning { overflow: hidden; }
 .form-card { display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 22px; background: #fff; border: 1px solid var(--l-line); box-shadow: var(--l-shadow); }
 .form-card h3 { font-size: 17px; font-weight: 800; margin-bottom: 4px; }
 .form-card label { margin-top: 6px; font-size: 13px; font-weight: 800; }
+.words-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.words-head .l-btn { min-height: 40px; padding: 0 14px; font-size: 14px; margin-top: 10px; }
+.word-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border-radius: var(--l-radius); border: 1px solid var(--l-line); background: #fff; box-shadow: var(--l-shadow-s); animation: lRise .2s ease; }
+.word-card .w-ko { font-size: 28px; font-weight: 800; color: var(--l-purple-d); min-width: 2ch; }
+.word-card .w-text { flex: 1; min-width: 0; line-height: 1.3; }
+.word-card .w-roman { font-weight: 800; }
+.word-card .w-meaning { color: var(--l-muted); font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.word-card .w-by { color: var(--l-muted); font-size: 12px; font-weight: 600; }
+.word-card .l-icon-btn { flex: none; }
+.word-card .w-del { background: var(--l-soft); color: var(--l-muted); }
 .form-card select, .form-card input[type="text"], .ask-card input[type="text"] { width: 100%; min-height: 48px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--l-line); background: var(--l-soft); color: var(--l-ink); font: inherit; font-size: 16px; font-weight: 600; transition: border-color .15s, background .15s; }
 .form-card input:focus, .form-card select:focus, .ask-card input:focus { outline: none; border-color: var(--l-purple); background: #fff; box-shadow: 0 0 0 3px rgba(108, 85, 230, .18); }
 .counter { text-align: right; font-size: 12px; color: var(--l-muted); font-weight: 700; margin-top: -2px; }

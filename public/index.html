@@ -351,12 +351,33 @@
       </div>
     </section>
 
+    <section id="paneWords" class="learn-pane hidden" role="tabpanel" aria-label="Words">
+      <form id="wordForm" class="form-card" autocomplete="off" onsubmit="return false">
+        <h3>Add a word</h3>
+        <label for="wordKo">Korean word</label>
+        <input id="wordKo" type="text" maxlength="30" lang="ko" placeholder="e.g. 물">
+        <label for="wordRoman">How it is read <span class="muted">(optional)</span></label>
+        <input id="wordRoman" type="text" maxlength="40" placeholder="e.g. mul">
+        <label for="wordMeaning">Meaning</label>
+        <input id="wordMeaning" type="text" maxlength="60" placeholder="e.g. water">
+        <button id="wordAdd" class="l-btn primary big" type="button">Add word</button>
+        <div id="wordMsg" class="form-msg hidden" role="status" aria-live="polite"></div>
+      </form>
+      <div class="words-head"><h3 class="section-title">Word list <span id="wordCount" class="muted"></span></h3><button id="wordReadAll" class="l-btn soft hidden" type="button">🔊 Read all</button></div>
+      <div id="wordList"></div>
+      <div id="wordEmptyCard" class="state-card small hidden">
+        <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
+        <p>No words yet. Add the first one — everyone in the lesson can read it and hear it.</p>
+      </div>
+    </section>
+
     <div id="learnScores" class="learn-scores" aria-label="Points"></div>
   </main>
 
   <nav class="learn-nav" aria-label="Lesson sections">
     <button type="button" data-pane="letters" class="on"><svg class="ico"><use href="#i-book"/></svg><span>Letters</span></button>
     <button type="button" data-pane="quiz"><svg class="ico"><use href="#i-target"/></svg><span>Quiz</span></button>
+    <button type="button" data-pane="words"><svg class="ico"><use href="#i-book"/></svg><span>Words</span></button>
     <button type="button" data-pane="ask"><svg class="ico"><use href="#i-chat"/></svg><span>Ask</span><em id="askBadge" class="nav-badge hidden"></em></button>
   </nav>
 </section>

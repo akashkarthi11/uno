@@ -124,3 +124,30 @@ test('questions between members: bad targets and outsiders are refused', () => {
 
 import { HANGUL } from '../api/_lib/korean.js';
 const HANGULROW = (ch) => Object.values(HANGUL).flat().find((r) => r[0] === ch);
+
+test('the word list: members add Korean words and read them; only the adder or the teacher removes; outsiders get nothing', () => {
+  const { s, admin, ann, bob } = room();
+  G.act(s, ann, { op: 'learnWordAdd', ko: '물', roman: 'mul', meaning: 'water' }, now);
+  G.act(s, admin, { op: 'learnWordAdd', ko: '  사랑 ', meaning: 'love' }, now);
+  const seen = G.view(s, bob, now).learn.words;
+  assert.deepEqual(seen.map((w) => [w.ko, w.roman, w.meaning, w.byName, w.canRemove]), [['물', 'mul', 'water', 'Ann', false], ['사랑', '', 'love', 'Boss', false]]);
+  assert.equal(G.view(s, ann, now).learn.words[0].canRemove, true);
+  assert.equal(G.view(s, admin, now).learn.words[0].canRemove, true, 'the teacher can remove any word');
+  assert.throws(() => G.act(s, bob, { op: 'learnWordRemove', id: seen[0].id }, now), /Only the one who added it/);
+  G.act(s, ann, { op: 'learnWordRemove', id: seen[0].id }, now);
+  G.act(s, admin, { op: 'learnWordRemove', id: seen[1].id }, now);
+  assert.deepEqual(G.view(s, bob, now).learn.words, []);
+  const pub = G.join(s, { name: 'Pat', role: 'public' }, now);
+  assert.throws(() => G.act(s, pub, { op: 'learnWordAdd', ko: '물', meaning: 'water' }, now), /Unknown action/);
+});
+
+test('word checks: Korean letters required, meaning required, no duplicates, capped', () => {
+  const { s, ann } = room();
+  assert.throws(() => G.act(s, ann, { op: 'learnWordAdd', ko: 'water', meaning: 'water' }, now), /Korean letters/);
+  assert.throws(() => G.act(s, ann, { op: 'learnWordAdd', ko: '물', meaning: ' ' }, now), /what the word means/);
+  assert.throws(() => G.act(s, ann, { op: 'learnWordAdd', ko: '', meaning: 'x' }, now), /Korean word first/);
+  G.act(s, ann, { op: 'learnWordAdd', ko: '물', meaning: 'water' }, now);
+  assert.throws(() => G.act(s, ann, { op: 'learnWordAdd', ko: '물', meaning: 'again' }, now), /already in the list/);
+  for (let i = 0; i < 59; i++) G.act(s, ann, { op: 'learnWordAdd', ko: '가' + String.fromCharCode(0xac00 + i), meaning: 'w' + i }, now);
+  assert.throws(() => G.act(s, ann, { op: 'learnWordAdd', ko: '나나나', meaning: 'x' }, now), /list is full/);
+});

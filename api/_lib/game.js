@@ -207,6 +207,7 @@ function learn(s, p, b, now) {
   if (!canLearn(p)) fail('Unknown action.');
   const L = s.learn || (s.learn = { tab: 'consonants', idx: 0, mode: 'learn', q: null, qn: 0, scores: {}, at: now });
   if (['learnAsk', 'learnWrite', 'learnMark', 'learnRemoveAsk'].includes(b.op)) return learnAsks(s, p, b, L, now);
+  if (['learnWordAdd', 'learnWordRemove'].includes(b.op)) return learnWords(s, p, b, L, now);
   if (b.op === 'learnAnswer') {
     const q = L.q;
     if (!q || q.revealed) fail('There is no open question.');
@@ -294,6 +295,33 @@ function learnAsks(s, p, b, L, now) {
   if (ans.ok && who) award(s, L, who.name);
 }
 
+/**
+ * The word list: anybody in the lesson can add a Korean word (with an optional romanization and a meaning) and everybody in the
+ * lesson reads the list. The one who added a word can remove it; the teacher can remove any.
+ */
+const MAX_WORDS = 60;
+const HANGUL_RE = /[ᄀ-ᇿ㄰-㆏가-힯]/;
+const clean = (t, n) => String(t ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+
+function learnWords(s, p, b, L, now) {
+  L.words = L.words || [];
+  if (b.op === 'learnWordAdd') {
+    const ko = clean(b.ko, 30);
+    const meaning = clean(b.meaning, 60);
+    if (!ko) fail('Write the Korean word first.');
+    if (!HANGUL_RE.test(ko)) fail('The word must be written in Korean letters (Hangul).');
+    if (!meaning) fail('Write what the word means.');
+    if (L.words.some((w) => norm(w.ko) === norm(ko))) fail('That word is already in the list.');
+    if (L.words.length >= MAX_WORDS) fail('The list is full (' + MAX_WORDS + ' words) — remove one first.');
+    L.words.push({ id: (L.wordSeq = (L.wordSeq || 0) + 1), ko, roman: clean(b.roman, 40), meaning, by: p.id, at: now });
+    return;
+  }
+  const w = L.words.find((x) => x.id === b.id);
+  if (!w) fail('That word is gone.');
+  if (w.by !== p.id && !p.admin) fail('Only the one who added it, or the teacher, can remove it.');
+  L.words = L.words.filter((x) => x.id !== w.id);
+}
+
 function revealQuestion(s, L) {
   const q = L.q;
   q.revealed = true;
@@ -310,6 +338,7 @@ function learnView(s, me) {
   const q = L.q;
   return {
     tab: L.tab, idx: L.idx, mode: L.mode, scores: L.scores, at: L.at,
+    words: (L.words || []).map((w) => ({ id: w.id, ko: w.ko, roman: w.roman, meaning: w.meaning, byName: (byId(s, w.by) || {}).name || '?', mine: w.by === me.id, canRemove: w.by === me.id || Boolean(me.admin) })),
     asks: (L.asks || []).filter((a) => a.from === me.id || a.to === 'all' || a.to === me.id).map((a) => {
       const mineAsk = a.from === me.id;
       return {
@@ -452,7 +481,7 @@ function dispatch(s, me, b, now) {
     case 'config': return setConfig(s, me, b);
     case 'chat': return chat(s, me, b.text, now);
     case 'learnShow': case 'learnQuiz': case 'learnReveal': case 'learnAnswer': case 'learnEnd':
-    case 'learnAsk': case 'learnWrite': case 'learnMark': case 'learnRemoveAsk': return learn(s, me, b, now);
+    case 'learnAsk': case 'learnWrite': case 'learnMark': case 'learnRemoveAsk': case 'learnWordAdd': case 'learnWordRemove': return learn(s, me, b, now);
     case 'pause': return setPaused(s, me, true, now);
     case 'resume': return setPaused(s, me, false, now);
     case 'voiceJoin': return voiceJoin(s, me);
