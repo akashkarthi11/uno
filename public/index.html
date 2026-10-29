@@ -261,6 +261,16 @@
       <button id="learnNextBtn" class="ghost hidden" type="button">Next question</button>
       <button id="learnStopBtn" class="ghost hidden" type="button">Back to letters</button>
     </div>
+    <div class="learn-ask">
+      <h3 class="rooms-sub">✍ Ask someone to write a word</h3>
+      <div class="learn-row">
+        <select id="askTo" aria-label="Ask who"></select>
+      </div>
+      <input id="askText" type="text" maxlength="120" placeholder="e.g. Write “water” in Korean" autocomplete="off">
+      <input id="askExpect" type="text" maxlength="60" placeholder="Right answer (optional — then it is checked for you)" autocomplete="off">
+      <button id="askSend" type="button">Send question</button>
+      <div id="askList"></div>
+    </div>
     <div id="learnScores" class="learn-scores"></div>
     <p class="hint">The teacher (the admin) picks the letter and starts the quizzes; everyone sees it at the same moment. The ✓ and ⭐ marks are kept on this phone only.</p>
   </div>

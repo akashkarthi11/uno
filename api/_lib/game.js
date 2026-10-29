@@ -206,6 +206,7 @@ const letterAt = (tab, idx) => (HANGUL[tab] || [])[idx];
 function learn(s, p, b, now) {
   if (!canLearn(p)) fail('Unknown action.');
   const L = s.learn || (s.learn = { tab: 'consonants', idx: 0, mode: 'learn', q: null, qn: 0, scores: {}, at: now });
+  if (['learnAsk', 'learnWrite', 'learnMark', 'learnRemoveAsk'].includes(b.op)) return learnAsks(s, p, b, L, now);
   if (b.op === 'learnAnswer') {
     const q = L.q;
     if (!q || q.revealed) fail('There is no open question.');
@@ -238,6 +239,61 @@ function learn(s, p, b, now) {
   }
 }
 
+/**
+ * Questions between members of the lesson ("write this word"): anybody in the lesson can ask one person, or everyone, to write
+ * something. If the asker also types the expected answer the server checks it (the expected answer is only ever shown to the
+ * asker); otherwise the asker marks each answer right or wrong. A right answer is worth the same points as a quiz answer.
+ */
+const MAX_ASKS = 20;
+const norm = (t) => String(t).normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+const award = (s, L, name) => { L.scores[name] = (L.scores[name] || 0) + LEARN_POINTS; };
+
+function learnAsks(s, p, b, L, now) {
+  L.asks = L.asks || [];
+  if (b.op === 'learnAsk') {
+    const text = String(b.text ?? '').trim().slice(0, 120);
+    if (!text) fail('Write the question first.');
+    const to = String(b.to ?? '');
+    if (to !== 'all') {
+      const t = byId(s, to);
+      if (!t || t.id === p.id || !canLearn(t)) fail('Pick who to ask.');
+    }
+    const expect = String(b.expect ?? '').trim().slice(0, 60);
+    L.asks.push({ id: (L.askSeq = (L.askSeq || 0) + 1), from: p.id, to, text, expect, answers: {}, at: now });
+    L.asks = L.asks.slice(-MAX_ASKS);
+    return;
+  }
+  const ask = L.asks.find((a) => a.id === b.id);
+  if (!ask) fail('That question is gone.');
+  if (b.op === 'learnWrite') {
+    if (ask.from === p.id) fail('You asked this one.');
+    if (ask.to !== 'all' && ask.to !== p.id) fail('That question is not for you.');
+    if (ask.answers[p.id]) fail('You already answered.');
+    const text = String(b.text ?? '').trim().slice(0, 60);
+    if (!text) fail('Write your answer first.');
+    const ans = { text, ok: null };
+    if (ask.expect) {
+      ans.ok = norm(text) === norm(ask.expect);
+      if (ans.ok) award(s, L, p.name);
+    }
+    ask.answers[p.id] = ans;
+    return;
+  }
+  if (ask.from !== p.id) fail('Only the one who asked can do that.');
+  if (b.op === 'learnRemoveAsk') {
+    L.asks = L.asks.filter((a) => a.id !== ask.id);
+    return;
+  }
+  // learnMark: the asker says whether an answer is right (for questions with no expected answer)
+  const ans = ask.answers[String(b.who ?? '')];
+  if (!ans) fail('No such answer.');
+  if (ask.expect) fail('This question is checked automatically.');
+  if (ans.ok !== null) fail('Already marked.');
+  ans.ok = b.ok === true;
+  const who = byId(s, String(b.who));
+  if (ans.ok && who) award(s, L, who.name);
+}
+
 function revealQuestion(s, L) {
   const q = L.q;
   q.revealed = true;
@@ -254,6 +310,16 @@ function learnView(s, me) {
   const q = L.q;
   return {
     tab: L.tab, idx: L.idx, mode: L.mode, scores: L.scores, at: L.at,
+    asks: (L.asks || []).filter((a) => a.from === me.id || a.to === 'all' || a.to === me.id).map((a) => {
+      const mineAsk = a.from === me.id;
+      return {
+        id: a.id, from: a.from, fromName: (byId(s, a.from) || {}).name || '?', to: a.to,
+        toName: a.to === 'all' ? 'everyone' : (byId(s, a.to) || {}).name || '?', text: a.text,
+        auto: Boolean(a.expect), expect: mineAsk ? a.expect : undefined, // the expected answer is for the asker's eyes only
+        mine: mineAsk, myAnswer: a.answers[me.id] || null,
+        answers: mineAsk ? Object.entries(a.answers).map(([id, x]) => ({ id, name: (byId(s, id) || {}).name || '?', text: x.text, ok: x.ok })) : undefined,
+      };
+    }),
     q: q ? {
       n: q.n, letter: q.letter, opts: q.opts, revealed: q.revealed,
       mine: q.answers[me.id] ?? null,
@@ -385,7 +451,8 @@ function dispatch(s, me, b, now) {
     case 'private': return setPrivate(s, me, b.on === true, now);
     case 'config': return setConfig(s, me, b);
     case 'chat': return chat(s, me, b.text, now);
-    case 'learnShow': case 'learnQuiz': case 'learnReveal': case 'learnAnswer': case 'learnEnd': return learn(s, me, b, now);
+    case 'learnShow': case 'learnQuiz': case 'learnReveal': case 'learnAnswer': case 'learnEnd':
+    case 'learnAsk': case 'learnWrite': case 'learnMark': case 'learnRemoveAsk': return learn(s, me, b, now);
     case 'pause': return setPaused(s, me, true, now);
     case 'resume': return setPaused(s, me, false, now);
     case 'voiceJoin': return voiceJoin(s, me);

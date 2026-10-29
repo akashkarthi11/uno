@@ -1883,6 +1883,8 @@ function renderLearn(s) {
   $("learnNextBtn").classList.toggle("hidden", !(quiz && L.q.revealed));
   $("learnStopBtn").classList.toggle("hidden", !quiz);
 
+  renderAsks(s);
+
   // everyone's points in this lesson
   const sc = $("learnScores");
   sc.textContent = "";
@@ -1894,6 +1896,101 @@ function renderLearn(s) {
     for (const [name, pts] of entries) { const d = document.createElement("div"); d.textContent = name + " — " + pts; sc.appendChild(d); }
   }
 }
+
+/* ---- questions between members: "write this word" ---- */
+let asksSig = "";
+const askDrafts = {}; // what someone has typed into an answer box but not sent yet, kept while the list redraws
+
+function renderAsks(s) {
+  const others = s.players.filter((p) => p.id !== s.you);
+  const sel = $("askTo");
+  const optSig = others.map((p) => p.id + p.name).join("|");
+  if (sel.dataset.sig !== optSig) {
+    const keep = sel.value;
+    sel.textContent = "";
+    const all = document.createElement("option");
+    all.value = "all";
+    all.textContent = "Ask everyone";
+    sel.appendChild(all);
+    for (const p of others) { const o = document.createElement("option"); o.value = p.id; o.textContent = "Ask " + p.name; sel.appendChild(o); }
+    sel.dataset.sig = optSig;
+    if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  }
+  const asks = (s.learn && s.learn.asks) || [];
+  const sig = JSON.stringify(asks);
+  if (sig === asksSig) return;
+  asksSig = sig;
+  for (const inp of $("askList").querySelectorAll("input[data-ask]")) askDrafts[inp.dataset.ask] = inp.value;
+  const list = $("askList");
+  list.textContent = "";
+  for (const a of [...asks].reverse()) {
+    const card = document.createElement("div");
+    card.className = "ask-card";
+    const q = document.createElement("div");
+    q.className = "ask-q";
+    q.textContent = a.mine ? "You asked " + a.toName + ": " + a.text : a.fromName + " asks " + (a.to === "all" ? "everyone" : "you") + ": " + a.text;
+    card.appendChild(q);
+    if (a.mine) {
+      if (a.auto) { const e = document.createElement("div"); e.className = "hint"; e.textContent = "Right answer: " + a.expect + " (checked for you)"; card.appendChild(e); }
+      if (!a.answers.length) { const w = document.createElement("div"); w.className = "hint"; w.textContent = "Waiting for an answer…"; card.appendChild(w); }
+      for (const ans of a.answers) {
+        const row = document.createElement("div");
+        row.className = "ask-row";
+        const t = document.createElement("span");
+        t.textContent = ans.name + ": " + ans.text + (ans.ok === true ? " ✅" : ans.ok === false ? " ❌" : "");
+        row.appendChild(t);
+        if (ans.ok === null) {
+          for (const [label, ok] of [["✅ Right", true], ["❌ Wrong", false]]) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "ghost";
+            b.textContent = label;
+            b.addEventListener("click", () => learnSend({ op: "learnMark", id: a.id, who: ans.id, ok }));
+            row.appendChild(b);
+          }
+        }
+        card.appendChild(row);
+      }
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "ghost remove";
+      rm.textContent = "Remove";
+      rm.addEventListener("click", () => learnSend({ op: "learnRemoveAsk", id: a.id }));
+      card.appendChild(rm);
+    } else if (a.myAnswer) {
+      const r = document.createElement("div");
+      r.textContent = "Your answer: " + a.myAnswer.text + (a.myAnswer.ok === true ? " ✅" : a.myAnswer.ok === false ? " ❌" : " — waiting for " + a.fromName + " to check it");
+      card.appendChild(r);
+    } else {
+      const row = document.createElement("div");
+      row.className = "ask-row";
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.maxLength = 60;
+      inp.placeholder = "Write your answer";
+      inp.dataset.ask = a.id;
+      inp.autocomplete = "off";
+      inp.value = askDrafts[a.id] || "";
+      const send = document.createElement("button");
+      send.type = "button";
+      send.textContent = "Send";
+      const go = () => { const v = inp.value.trim(); if (!v) return; delete askDrafts[a.id]; learnSend({ op: "learnWrite", id: a.id, text: v }); };
+      send.addEventListener("click", go);
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      row.append(inp, send);
+      card.appendChild(row);
+    }
+    list.appendChild(card);
+  }
+  if (!asks.length) { const n = document.createElement("div"); n.className = "hint"; n.textContent = "No questions yet."; list.appendChild(n); }
+}
+$("askSend").addEventListener("click", async () => {
+  const text = $("askText").value.trim();
+  if (!text) { toast("Write the question first."); return; }
+  try { apply(await api({ op: "learnAsk", to: $("askTo").value, text, expect: $("askExpect").value })); } catch (e) { toast(e.message); return; }
+  $("askText").value = "";
+  $("askExpect").value = "";
+});
 
 async function learnSend(body) {
   try { apply(await api(body)); } catch (e) { toast(e.message); }

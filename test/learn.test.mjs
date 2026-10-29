@@ -80,5 +80,47 @@ test('making the game public ends the lesson', () => {
   assert.equal(s.learn, null);
 });
 
+test('asking each other to write a word: auto-checked with an expected answer, otherwise marked by the asker', () => {
+  const { s, admin, ann, bob } = room();
+  // a private player asks the admin, with the right answer typed in (only the asker ever sees it)
+  G.act(s, ann, { op: 'learnAsk', to: admin.id, text: 'Write "water" in Korean', expect: '물' }, now);
+  const forAdmin = G.view(s, admin, now).learn.asks[0];
+  assert.deepEqual([forAdmin.fromName, forAdmin.toName, forAdmin.auto, forAdmin.expect], ['Ann', 'Boss', true, undefined]);
+  assert.equal(G.view(s, bob, now).learn.asks.length, 0, 'a question to someone else is private');
+  assert.equal(JSON.stringify(G.view(s, admin, now)).includes('물'), false, 'the answer is not sent to the one being asked');
+  assert.equal(G.view(s, ann, now).learn.asks[0].expect, '물');
+  assert.throws(() => G.act(s, bob, { op: 'learnWrite', id: forAdmin.id, text: '물' }, now), /not for you/);
+  assert.throws(() => G.act(s, ann, { op: 'learnWrite', id: forAdmin.id, text: '물' }, now), /You asked this one/);
+  G.act(s, admin, { op: 'learnWrite', id: forAdmin.id, text: ' 물 ' }, now);
+  assert.equal(G.view(s, ann, now).learn.asks[0].answers[0].ok, true);
+  assert.equal(G.view(s, admin, now).learn.scores.Boss, 10);
+  assert.throws(() => G.act(s, admin, { op: 'learnWrite', id: forAdmin.id, text: 'x' }, now), /already answered/);
+
+  // the admin asks everyone, no expected answer: each answer is marked by the asker, once
+  G.act(s, admin, { op: 'learnAsk', to: 'all', text: 'Write the letter for "m"' }, now);
+  const all = G.view(s, ann, now).learn.asks.find((a) => a.fromName === 'Boss');
+  G.act(s, ann, { op: 'learnWrite', id: all.id, text: 'ㅁ' }, now);
+  G.act(s, bob, { op: 'learnWrite', id: all.id, text: 'ㄴ' }, now);
+  assert.throws(() => G.act(s, ann, { op: 'learnMark', id: all.id, who: ann.id, ok: true }, now), /Only the one who asked/);
+  G.act(s, admin, { op: 'learnMark', id: all.id, who: ann.id, ok: true }, now);
+  G.act(s, admin, { op: 'learnMark', id: all.id, who: bob.id, ok: false }, now);
+  assert.throws(() => G.act(s, admin, { op: 'learnMark', id: all.id, who: ann.id, ok: false }, now), /Already marked/);
+  const done = G.view(s, admin, now).learn;
+  assert.equal(done.scores.Ann, 10);
+  assert.equal(done.scores.Bob, undefined);
+  assert.deepEqual(G.view(s, bob, now).learn.asks.find((a) => a.id === all.id).myAnswer, { text: 'ㄴ', ok: false });
+  G.act(s, admin, { op: 'learnRemoveAsk', id: all.id }, now);
+  assert.equal(G.view(s, ann, now).learn.asks.some((a) => a.id === all.id), false);
+});
+
+test('questions between members: bad targets and outsiders are refused', () => {
+  const { s, admin, ann } = room();
+  const pub = G.join(s, { name: 'Pat', role: 'public' }, now);
+  assert.throws(() => G.act(s, ann, { op: 'learnAsk', to: ann.id, text: 'hi' }, now), /Pick who/);
+  assert.throws(() => G.act(s, ann, { op: 'learnAsk', to: pub.id, text: 'hi' }, now), /Pick who/);
+  assert.throws(() => G.act(s, ann, { op: 'learnAsk', to: admin.id, text: '   ' }, now), /Write the question/);
+  assert.throws(() => G.act(s, pub, { op: 'learnAsk', to: 'all', text: 'hi' }, now), /Unknown action/);
+});
+
 import { HANGUL } from '../api/_lib/korean.js';
 const HANGULROW = (ch) => Object.values(HANGUL).flat().find((r) => r[0] === ch);
