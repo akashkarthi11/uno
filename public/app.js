@@ -1249,7 +1249,7 @@ $("challengeBox").addEventListener("change", (e) => sendRule({ challenge: e.targ
 
 function renderSettings(s) {
   // The game settings are the admin's: other players only see the "For you" part of the Settings window.
-  $("roomsBtn").classList.toggle("hidden", !s.admin); // the real admin only
+  $("roomsBtn").classList.toggle("hidden", !(s.admin || s.observing)); // the real admin, and the observer account (to move between rooms)
   $("joinAlertBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
@@ -1348,7 +1348,15 @@ function renderRooms(r) {
     watch.addEventListener("click", () => openWatch(room.code));
     const actions = document.createElement("div");
     actions.className = "row-actions";
-    actions.append(watch, rm);
+    if (state && state.observing) { // the observer account only moves between rooms: no watching cards, no removing
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "ghost";
+      go.textContent = room.code === roomNow() ? "Here" : "Observe";
+      go.disabled = room.code === roomNow();
+      go.addEventListener("click", () => observeRoom(room.code));
+      actions.append(go);
+    } else actions.append(watch, rm);
     row.append(info, actions);
     list.appendChild(row);
   }
@@ -1368,6 +1376,31 @@ async function closeRoomNow(r) {
   try { await api({ op: "closeRoom", target: r.code }); } catch (e) { toast(e.message); return; }
   if (here) { removedByAdmin("You removed this room."); $("roomsModal").classList.add("hidden"); return; }
   loadRooms();
+}
+/** The observer account moves to another room: it signs in there with its own password (1102) and just hears and sees. */
+async function observeRoom(target) {
+  let pw = myPassword;
+  if (!pw) pw = prompt("Observer password:") || "";
+  if (!pw) return;
+  $("roomsModal").classList.add("hidden");
+  if (typeof voiceStopLocal === "function") voiceStopLocal();
+  if (typeof autoJoinTried !== "undefined") autoJoinTried = false;
+  const from = room;
+  room = target;
+  removed = false;
+  resetScreenCaches();
+  playerId = null;
+  state = null;
+  try {
+    apply(await api({ op: "join", name: "Observer", password: pw }));
+  } catch (e) {
+    room = from;
+    toast(e.message);
+    return;
+  }
+  myPassword = pw;
+  enterRoom();
+  toast("Observing room " + target + ".");
 }
 /* Watching a room without joining it: the server answers with the table only (no cards), and nothing is written to the room. */
 let watchCode = null;

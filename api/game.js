@@ -208,7 +208,8 @@ export default async function handler(req, res) {
     if (['rooms', 'closeRoom', 'peek', 'peekKick', 'joins', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
       const here = await readRoom(code);
       const who = here && here.members.find((m) => m.id === b.playerId);
-      if (!who || !who.admin) throw new G.GameError('Only the admin can do that.');
+      // the observer account may list the rooms (to move between them); everything else here is the real admin's
+      if (!who || !(who.admin || (who.observer && b.op === 'rooms'))) throw new G.GameError('Only the admin can do that.');
       if (b.op === 'joins') return res.json({ joins: await takeJoins(now) });
 
       // Learn Korean backups: the shared word list, the questions between members and the points of the room's lesson, kept with
