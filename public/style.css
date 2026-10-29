@@ -33,10 +33,9 @@ body {
   margin: 0; min-height: 100vh; color: var(--ink); font-family: var(--font); line-height: 1.5; -webkit-font-smoothing: antialiased;
   background: var(--page-bg);
 }
-/* sign-in screen uses the wireframe's dark auth gradient */
-body:has(#joinScreen:not(.hidden)) { background: var(--auth-grad); }
-body:has(#joinScreen:not(.hidden)) header { background: transparent; border-color: rgba(255,255,255,.12); }
-body:has(#joinScreen:not(.hidden)) h1 { color: #fff; }
+/* sign-in and lobby share one soft lavender page (the Learn Hangul look), so moving between them feels like one screen */
+body:has(#joinScreen:not(.hidden)), body:has(#lobby:not(.hidden)) { background: radial-gradient(900px 300px at 50% -90px, #e9e3ff 0%, rgba(246,244,255,0) 70%), #f6f4ff; }
+body:has(#joinScreen:not(.hidden)) header, body:has(#lobby:not(.hidden)) header { background: rgba(255,255,255,.9); border-color: #e6e2fa; }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
 
 header {
@@ -1205,3 +1204,10 @@ body.in-game .actions button { width: 100%; }
   /* full screen on a phone held upright: the card fills the page edge to edge */
   .lobby-pastel { max-width: none; margin: 0; border: 0; border-radius: 0; box-shadow: none; padding: 14px 14px 22px; min-height: calc(var(--app-h, 100vh) - 56px); }
 }
+
+/* sign-in: the same card as the lobby */
+#joinScreen.lobby-pastel label { color: var(--l-ink); font-weight: 800; }
+#joinScreen.lobby-pastel input { border: 1.5px solid var(--l-line); border-radius: 14px; background: #fff; color: var(--l-ink); font-weight: 600; }
+#joinScreen.lobby-pastel input:focus { border-color: var(--l-purple); box-shadow: 0 0 0 3px rgba(108, 85, 230, .18); outline: 0; }
+#joinScreen.lobby-pastel #joinBtn { min-height: 52px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: var(--l-purple); box-shadow: 0 8px 18px rgba(108, 85, 230, .34); }
+#joinScreen.lobby-pastel #joinBtn:hover:not(:disabled) { background: var(--l-purple-d); }
