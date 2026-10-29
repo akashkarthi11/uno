@@ -535,6 +535,7 @@ function render() {
     return renderLobby(s);
   }
   renderGame(s);
+  if (typeof layoutTiles === "function") layoutTiles(); // video tiles follow the freshly drawn seats
 }
 
 function renderLobby(s) {

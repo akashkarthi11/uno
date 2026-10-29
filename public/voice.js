@@ -172,6 +172,7 @@ function voiceStopLocal() {
   voice.mic = false;
   voice.cam = false;
   $("vTiles").textContent = "";
+  tileState.clear();
   updateVideoChip();
   paintSpeaking();
 }
@@ -315,22 +316,31 @@ function toggleMute() {
 /* ---------- camera (optional, only while in voice) ---------- */
 
 /**
- * Video tiles: one per person with a camera on, in a strip you can drag anywhere. Tap a tile to make it big (tap again to
- * shrink it); the little chip hides or shows them all; your own tile has a flip button for the front / back camera. A
- * tile gets a green ring while that person talks (the same ring the seats use) and a spinner until the picture arrives.
+ * Video tiles. Each one first sits on the board next to its player's cards (an opponent's seat; my own just above my hand).
+ * Drag a tile and it floats wherever you drop it (📌 puts it back by the seat); tap it to make it big or small; ✕ hides it
+ * on your screen and the 📹 chip brings hidden ones back (or folds them all away). Your own tile has a 🔄 flip button for
+ * the front / back camera. A green ring shows who is talking; a spinner shows until the picture arrives.
+ * Seats are redrawn on every update, so tiles live in their own layer and are placed over the seat by layoutTiles().
  */
 let facing = "user";
+const tileState = new Map(); // playerId -> { floating, left, top, hidden } (kept when a tile is rebuilt)
+const tileOf = (id) => $("vTiles").querySelector('[data-vid="' + CSS.escape(id) + '"]');
+
 function updateVideoChip() {
-  const n = $("vTiles").children.length;
+  const tiles = [...$("vTiles").children];
+  const hiddenN = tiles.filter((x) => x.classList.contains("gone")).length;
   const chip = $("vToggle");
-  chip.classList.toggle("hidden", n === 0);
-  chip.textContent = $("videoStrip").classList.contains("collapsed") ? "📹 " + n + " ▾" : "📹 ▴";
+  chip.classList.toggle("hidden", tiles.length === 0);
+  const folded = $("videoStrip").classList.contains("collapsed");
+  chip.textContent = folded || hiddenN ? "📹 " + (tiles.length - (folded ? 0 : hiddenN)) + "/" + tiles.length + " ▾" : "📹 ▴";
 }
 
 function showTile(id, stream, self) {
-  removeTile(id);
+  removeTile(id, true);
+  const st = tileState.get(id) || { floating: false, hidden: false };
+  tileState.set(id, st);
   const tile = document.createElement("div");
-  tile.className = "vtile loading" + (self ? " self" : "") + (self && facing === "environment" ? " back" : "");
+  tile.className = "vtile loading" + (self ? " self" : "") + (self && facing === "environment" ? " back" : "") + (st.hidden ? " gone" : "") + (st.floating ? " floating" : "");
   tile.dataset.vid = id;
   tile.dataset.pid = id; // so the speaking ring (paintSpeaking) lands on it too
   const v = document.createElement("video");
@@ -344,25 +354,105 @@ function showTile(id, stream, self) {
   const name = document.createElement("span");
   name.className = "vname";
   name.textContent = self ? "You" : (p ? p.name : "");
-  tile.append(v, name);
-  if (self) {
-    const flip = document.createElement("button");
-    flip.type = "button";
-    flip.className = "vflip";
-    flip.title = "Switch camera";
-    flip.textContent = "🔄";
-    flip.addEventListener("pointerdown", (e) => e.stopPropagation()); // not a drag, not an enlarge
-    flip.addEventListener("click", (e) => { e.stopPropagation(); flipCamera(); });
-    tile.appendChild(flip);
-  }
+  const ctl = document.createElement("div");
+  ctl.className = "vctl";
+  ctl.addEventListener("pointerdown", (e) => e.stopPropagation()); // a button press is not a drag or an enlarge
+  const btn = (cls, title, text, fn) => {
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = cls;
+    x.title = title;
+    x.textContent = text;
+    x.addEventListener("click", (e) => { e.stopPropagation(); fn(); });
+    ctl.appendChild(x);
+  };
+  btn("vhide", "Hide this video", "✕", () => { st.hidden = true; tile.classList.add("gone"); updateVideoChip(); });
+  btn("vdock", "Put back by the seat", "📌", () => { st.floating = false; tile.classList.remove("floating"); layoutTiles(); });
+  if (self) btn("vflip", "Switch camera", "🔄", flipCamera);
+  tile.append(v, name, ctl);
+  enableTileDrag(tile, st);
   $("vTiles").appendChild(tile);
   updateVideoChip();
+  layoutTiles();
 }
-function removeTile(id) {
-  const t = $("vTiles").querySelector('[data-vid="' + CSS.escape(id) + '"]');
+
+function removeTile(id, keepState) {
+  const t = tileOf(id);
   if (t) t.remove();
+  if (!keepState) tileState.delete(id);
   updateVideoChip();
 }
+
+/** Puts every tile where it belongs: floating ones where they were dropped, the rest by their player's seat. */
+function layoutTiles() {
+  const tiles = [...$("vTiles").children];
+  if (!tiles.length) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  let spare = 0; // tiles with no seat on screen (the lobby) stack down the right edge
+  for (const tile of tiles) {
+    const st = tileState.get(tile.dataset.vid) || {};
+    const w = tile.offsetWidth, h = tile.offsetHeight;
+    let left, top;
+    if (st.floating && st.left !== undefined) {
+      left = st.left; top = st.top;
+    } else {
+      const self = tile.classList.contains("self");
+      const seat = self ? ($("game").classList.contains("hidden") ? null : $("handWrap")) : document.querySelector('#opponents [data-pid="' + CSS.escape(tile.dataset.vid) + '"]');
+      const r = seat && seat.getBoundingClientRect();
+      if (r && r.width) {
+        left = self ? r.left + 8 : r.left + r.width / 2 - w / 2;
+        top = r.top - h - 4;
+        if (top < 2) top = r.bottom + 4; // no room above the seat: below it
+      } else {
+        left = W - w - 8; top = 100 + spare * (h + 8); spare++;
+      }
+    }
+    tile.style.left = Math.max(0, Math.min(W - w, left)) + "px";
+    tile.style.top = Math.max(0, Math.min(H - h, top)) + "px";
+  }
+}
+window.addEventListener("resize", layoutTiles);
+setInterval(layoutTiles, 500); // seats move when the table changes; a cheap check keeps the tiles with them
+
+function enableTileDrag(tile, st) {
+  let drag = null;
+  tile.addEventListener("pointerdown", (e) => {
+    drag = { x: e.clientX, y: e.clientY, left: tile.offsetLeft, top: tile.offsetTop, moved: false };
+    tile.setPointerCapture(e.pointerId);
+  });
+  tile.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+    drag.moved = true;
+    st.floating = true; // dropped somewhere of your choosing: it stays there
+    tile.classList.add("floating");
+    st.left = Math.max(0, Math.min(window.innerWidth - tile.offsetWidth, drag.left + dx));
+    st.top = Math.max(0, Math.min(window.innerHeight - tile.offsetHeight, drag.top + dy));
+    layoutTiles();
+  });
+  tile.addEventListener("pointerup", () => {
+    if (drag && !drag.moved) {
+      const big = !tile.classList.contains("big");
+      $("vTiles").querySelectorAll(".big").forEach((x) => x.classList.remove("big"));
+      tile.classList.toggle("big", big);
+      layoutTiles();
+    }
+    drag = null;
+  });
+  tile.addEventListener("pointercancel", () => { drag = null; });
+}
+
+$("vToggle").addEventListener("click", () => {
+  const gone = [...$("vTiles").children].filter((x) => x.classList.contains("gone"));
+  if (gone.length && !$("videoStrip").classList.contains("collapsed")) { // first bring hidden ones back
+    gone.forEach((x) => { x.classList.remove("gone"); (tileState.get(x.dataset.vid) || {}).hidden = false; });
+  } else {
+    $("videoStrip").classList.toggle("collapsed");
+  }
+  updateVideoChip();
+  layoutTiles();
+});
 
 /** Front / back camera: the new picture replaces the old one on every connection, nobody has to reconnect. */
 async function flipCamera() {
@@ -384,42 +474,6 @@ async function flipCamera() {
   }
   showTile(state.you, voice.stream, true); // a back camera is not mirrored (the tile gets the "back" class)
 }
-
-// Drag the strip anywhere; a tap (no movement) on a tile makes it big or small.
-(() => {
-  const strip = $("videoStrip");
-  let drag = null;
-  strip.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button") && e.target.id !== "vToggle") return;
-    const r = strip.getBoundingClientRect();
-    drag = { x: e.clientX, y: e.clientY, left: r.left, top: r.top, moved: false, tile: e.target.closest(".vtile") };
-    strip.setPointerCapture(e.pointerId);
-  });
-  strip.addEventListener("pointermove", (e) => {
-    if (!drag) return;
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
-    drag.moved = true;
-    const r = strip.getBoundingClientRect();
-    strip.style.right = "auto";
-    strip.style.left = Math.max(0, Math.min(window.innerWidth - r.width, drag.left + dx)) + "px";
-    strip.style.top = Math.max(0, Math.min(window.innerHeight - 40, drag.top + dy)) + "px";
-  });
-  strip.addEventListener("pointerup", () => {
-    if (!drag) return;
-    if (!drag.moved && drag.tile) {
-      const big = !drag.tile.classList.contains("big");
-      strip.querySelectorAll(".vtile.big").forEach((x) => x.classList.remove("big"));
-      drag.tile.classList.toggle("big", big);
-    }
-    drag = null;
-  });
-  strip.addEventListener("pointercancel", () => { drag = null; });
-  $("vToggle").addEventListener("click", () => {
-    strip.classList.toggle("collapsed");
-    updateVideoChip();
-  });
-})();
 
 /** The microphone and the camera are switched on and off separately; the call is left when both are off. */
 async function toggleDevice(kind) {
