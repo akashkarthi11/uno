@@ -67,7 +67,8 @@ function voiceSync(s) {
   btn.title = voice.mic ? "Turn microphone off" : "Turn microphone on" + (voice.members.length ? " (" + voice.members.length + " in the call)" : "");
   btn.dataset.count = String(voice.members.length);
   $("muteBtn").classList.toggle("hidden", !voice.mic);
-  $("camBtn").classList.toggle("hidden", !s.canVoice); // same permission as the mic button
+  $("camBtn").classList.toggle("hidden", !s.canVoice || s.canVideo === false); // the mic button's permission, unless the admin hid public video
+  if (s.canVideo === false && voice.active && voice.cam) toggleDevice("video"); // the admin switched public video off: the camera stops
   $("camBtn").classList.toggle("on", voice.cam);
   $("camBtn").title = voice.cam ? "Turn camera off" : "Turn camera on";
   $("muteBtn").textContent = voice.muted ? "🔇" : "🎙";

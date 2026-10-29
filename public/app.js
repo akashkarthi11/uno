@@ -430,7 +430,17 @@ function togglePublicVoice() {
   render();
   send({ op: "config", publicVoice: on }, () => { state = before; render(); });
 }
+/** Admin: may public players use their camera? (on by default; off hides public players' video) */
+function togglePublicVideo() {
+  if (busy || !state || !state.admin) return;
+  const on = !(state.settings && state.settings.publicVideo);
+  const before = state;
+  state = { ...state, settings: { ...state.settings, publicVideo: on } };
+  render();
+  send({ op: "config", publicVideo: on }, () => { state = before; render(); });
+}
 $("pubVoiceBtn").addEventListener("click", togglePublicVoice);
+$("pubVideoBtn").addEventListener("click", togglePublicVideo);
 
 function renderRelayBtn(s) {
   const pv = $("pubVoiceBtn");
@@ -441,6 +451,14 @@ function renderRelayBtn(s) {
   pv.title = pvOn
     ? "Public players can join voice chat too. Click to limit voice to you and private players."
     : "Only you and private players have voice chat. Click to let public players join it too.";
+  const pvid = $("pubVideoBtn");
+  pvid.classList.toggle("hidden", !s.admin || s.private);
+  const pvidOn = !(s.settings && s.settings.publicVideo === false);
+  pvid.textContent = "📷 Public video: " + (pvidOn ? "on" : "off");
+  pvid.classList.toggle("on", pvidOn);
+  pvid.title = pvidOn
+    ? "Public players can use their camera. Click to hide public video (you and private players keep it)."
+    : "Public players cannot use a camera. Click to allow it again.";
   const btn = $("relayBtn");
   btn.classList.toggle("hidden", !s.admin); // only the real admin, not a co-admin
   const on = Boolean(s.settings && s.settings.voiceRelay);

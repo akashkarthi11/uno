@@ -1094,3 +1094,23 @@ test('going private switches public voice off, and it cannot be switched on in a
   G.act(s, admin, { op: 'private', on: false }, now);
   assert.equal(G.view(s, admin, now).settings.publicVoice, false, 'and it stays off when the game is public again');
 });
+
+test('public video: on by default, only the real admin can hide it, private players and the admin keep their camera', () => {
+  const s = oldRules('t');
+  const now = 1000;
+  const admin = G.join(s, { name: 'Boss', admin: true }, now);
+  const pub = G.join(s, { name: 'Pub', admin: false, role: 'public' }, now);
+  const priv = G.join(s, { name: 'Priv', admin: false, role: 'private' }, now);
+  G.act(s, admin, { op: 'config', publicVoice: true }, now);
+  assert.equal(G.view(s, pub, now).canVideo, true, 'on by default');
+  assert.equal(G.view(s, admin, now).settings.publicVideo, true);
+  assert.throws(() => G.act(s, pub, { op: 'config', publicVideo: false }, now), /Only the admin/);
+  assert.throws(() => G.act(s, admin, { op: 'config', publicVideo: 'no' }, now), /Bad settings/);
+  G.act(s, admin, { op: 'config', publicVideo: false }, now);
+  assert.equal(G.view(s, pub, now).canVideo, false);
+  assert.equal(G.view(s, pub, now).canVoice, true, 'voice itself is unchanged');
+  assert.equal(G.view(s, admin, now).canVideo, true);
+  assert.equal(G.view(s, priv, now).canVideo, true);
+  G.act(s, admin, { op: 'config', publicVideo: true }, now);
+  assert.equal(G.view(s, pub, now).canVideo, true);
+});
