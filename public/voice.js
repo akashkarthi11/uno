@@ -148,7 +148,6 @@ async function voiceJoin(opts = { audio: true }) {
   voice.ctx = new (window.AudioContext || window.webkitAudioContext)();
   if (voice.mic) addMeter(state.you, voice.stream);
   if (voice.cam) showTile(state.you, voice.stream, true);
-  applyVideoVisibility();
   voice.meterTimer = setInterval(updateMeters, 200);
   // The newcomer starts the connection to everyone already in voice.
   for (const id of state.voice) if (id !== state.you) createPeer(id, true);
@@ -373,21 +372,8 @@ let facing = "user";
 const tileState = new Map(); // playerId -> { floating, left, top, hidden } (kept when a tile is rebuilt)
 const tileOf = (id) => $("vTiles").querySelector('[data-vid="' + CSS.escape(id) + '"]');
 
-/** Seeing other people's video is opt-in: it only shows while my own camera is on (turning mine on is what asks for it). */
-function applyVideoVisibility() {
-  for (const t of $("vTiles").children) if (!t.classList.contains("self")) t.classList.toggle("nocam", !voice.cam);
-  updateVideoChip();
-  layoutTiles();
-}
-
 function updateVideoChip() {
   const tiles = [...$("vTiles").children];
-  const waiting = voice.cam ? 0 : tiles.filter((x) => !x.classList.contains("self")).length;
-  if (waiting) { // somebody is on camera but I have not turned mine on
-    $("vToggle").classList.remove("hidden");
-    $("vToggle").textContent = "📹 " + waiting + " on · tap to see";
-    return;
-  }
   const hiddenN = tiles.filter((x) => x.classList.contains("gone")).length;
   const chip = $("vToggle");
   chip.classList.toggle("hidden", tiles.length === 0);
@@ -400,7 +386,7 @@ function showTile(id, stream, self) {
   const st = tileState.get(id) || { floating: false, hidden: false };
   tileState.set(id, st);
   const tile = document.createElement("div");
-  tile.className = "vtile loading" + (!self && !voice.cam ? " nocam" : "") + (self ? " self" : "") + (self && facing === "environment" ? " back" : "") + (st.hidden ? " gone" : "") + (st.floating ? " floating" : "");
+  tile.className = "vtile loading" + (self ? " self" : "") + (self && facing === "environment" ? " back" : "") + (st.hidden ? " gone" : "") + (st.floating ? " floating" : "");
   tile.dataset.vid = id;
   tile.dataset.pid = id; // so the speaking ring (paintSpeaking) lands on it too
   const v = document.createElement("video");
@@ -504,7 +490,6 @@ function enableTileDrag(tile, st) {
 }
 
 $("vToggle").addEventListener("click", () => {
-  if (!voice.cam && [...$("vTiles").children].some((x) => !x.classList.contains("self"))) { toggleDevice("video"); return; } // turn mine on to see theirs
   const gone = [...$("vTiles").children].filter((x) => x.classList.contains("gone"));
   if (gone.length && !$("videoStrip").classList.contains("collapsed")) { // first bring hidden ones back
     gone.forEach((x) => { x.classList.remove("gone"); (tileState.get(x.dataset.vid) || {}).hidden = false; });
@@ -550,7 +535,7 @@ async function toggleDevice(kind) {
     (audio ? voice.stream.getAudioTracks() : voice.stream.getVideoTracks()).forEach((t) => { t.stop(); voice.stream.removeTrack(t); });
     if (audio) { voice.mic = false; voice.muted = false; voice.meters.delete(state.you); voice.speaking.delete(state.you); }
     else { voice.cam = false; removeTile(state.you); }
-    if (!voice.mic && !voice.cam) { applyVideoVisibility(); return voiceLeave(); }
+    if (!voice.mic && !voice.cam) return voiceLeave();
   } else {
     try {
       const got = await navigator.mediaDevices.getUserMedia(audio ? { audio: MIC } : { video: CAM });
@@ -564,7 +549,6 @@ async function toggleDevice(kind) {
   }
   // start every pairing over with the new set of tracks (the other side builds a fresh connection when the offer arrives)
   for (const id of [...voice.peers.keys()]) createPeer(id, true);
-  applyVideoVisibility();
   voiceSync(state);
 }
 

@@ -1144,7 +1144,7 @@ body.in-game .actions button { width: 100%; }
 .vtile { position: absolute; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; width: 88px; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: #0f172a; box-shadow: 0 6px 18px rgba(0,0,0,.45); border: 2px solid rgba(255,255,255,.75); transition: width .2s ease, border-color .15s, box-shadow .15s; animation: tileIn .25s ease-out; }
 .vtile.floating { width: 128px; cursor: grabbing; }
 .vtile.self { width: 92px; }
-.vtile.gone, .vtile.nocam { display: none; }
+.vtile.gone { display: none; }
 .vtile.big, .vtile.self.big, .vtile.floating.big { width: min(320px, 78vw); z-index: 2; }
 .vtile video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .vtile.self:not(.back) video { transform: scaleX(-1); }
