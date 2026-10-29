@@ -31,7 +31,7 @@ const voiceOffKey = () => "uno-voice-off-" + room;
 function voiceSync(s) {
   const btn = $("voiceBtn");
   const call = Boolean(s.canVoice || s.canVideo); // in the call with a microphone, a camera, or both
-  btn.classList.toggle("hidden", !s.canVoice);
+  btn.classList.toggle("hidden", !s.canVoice || Boolean(s.observing)); // an observer has no microphone, mute or camera buttons: just hears and sees
   if (!call) {
     if (voice.active) voiceStopLocal();
     $("muteBtn").classList.add("hidden");
@@ -74,8 +74,8 @@ function voiceSync(s) {
   btn.textContent = "🎤";
   btn.title = voice.mic ? "Turn microphone off" : "Turn microphone on" + (s.admin && voice.members.length ? " (" + voice.members.length + " in the call)" : "");
   btn.dataset.count = s.admin ? String(voice.members.length) : "0"; // only the real admin sees how many are in the call
-  $("muteBtn").classList.toggle("hidden", !voice.mic);
-  $("camBtn").classList.toggle("hidden", !s.canVideo); // its own permission: it does not depend on the microphone / Public voice
+  $("muteBtn").classList.toggle("hidden", !voice.mic || Boolean(s.observing));
+  $("camBtn").classList.toggle("hidden", !s.canVideo || Boolean(s.observing)); // its own permission: it does not depend on the microphone / Public voice
   if (!s.canVideo && voice.active && voice.cam) toggleDevice("video"); // the admin switched public video off: the camera stops
   $("camBtn").classList.toggle("on", voice.cam);
   $("camBtn").title = voice.cam ? "Turn camera off" : "Turn camera on";
