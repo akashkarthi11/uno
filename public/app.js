@@ -894,13 +894,18 @@ let turn = null; // { deadline, total, mine, name } while a game is running
 // (plus one short vibration on phones), so it works for colour-blind players and isn't a screen-wide flash.
 const URGENT_SECS = 10;
 const BUZZ_SECS = 5;
-let buzzed = false;
+let lastBuzzSec = null;
+/**
+ * The last 5 seconds of my turn: one buzz every second, light at first and stronger each time (a phone's vibration has no
+ * strength setting, so a buzz is made stronger by making it longer, and the last one is a double).
+ */
+const COUNTDOWN_BUZZ = { 5: [25], 4: [45], 3: [75], 2: [115], 1: [170, 70, 170] };
 
 function updateTimer() {
   const bar = $("turnBar");
   if (!turn) {
     bar.classList.add("hidden", "urgent");
-    buzzed = false;
+    lastBuzzSec = null;
     return;
   }
   const left = turn.paused ? turn.frozen : Math.max(0, turn.deadline - Date.now());
@@ -916,11 +921,11 @@ function updateTimer() {
   else if (turn.mine) $("turnText").textContent = (urgent ? "⏰ Hurry! " : "Your turn · ") + secs + "s";
   else $("turnText").textContent = turn.name + "'s turn · " + secs + "s";
 
-  if (turn.mine && !turn.paused && secs <= BUZZ_SECS && secs > 0 && !buzzed) {
-    buzzed = true;
-    if (navigator.vibrate) navigator.vibrate(150);
+  if (turn.mine && !turn.paused && secs <= BUZZ_SECS && secs > 0 && secs !== lastBuzzSec) {
+    lastBuzzSec = secs;
+    try { if (navigator.vibrate) navigator.vibrate(COUNTDOWN_BUZZ[secs] || [100]); } catch (e) { /* vibration not allowed here */ }
   }
-  if (!turn.mine || secs > URGENT_SECS) buzzed = false;
+  if (!turn.mine || turn.paused || secs > BUZZ_SECS) lastBuzzSec = null; // a new turn starts the countdown again
 }
 setInterval(updateTimer, 250);
 
