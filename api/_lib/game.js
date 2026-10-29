@@ -69,6 +69,11 @@ export const SUPER_KINDS = ['again', 'sweep', 'blast', 'swap', 'gift', 'master']
 export const THEMES = ['growx', 'classic', 'midnight'];
 /** How many cards each player is dealt (the admin sets it in the lobby; 5 unless changed). */
 const handSizeOf = (s) => (s.settings && Number.isInteger(s.settings.handSize) ? s.settings.handSize : DEFAULT_HAND);
+/**
+ * The deal takes 5 to 10 seconds, longer the more cards go out (cards per player times players). Nobody can act until it is
+ * over, and the first turn's clock starts then. GAME_DEAL=off (tests) skips it.
+ */
+export const dealMsFor = (cards) => (process.env.GAME_DEAL === 'off' ? 0 : Math.min(10000, Math.max(5000, cards * 160)));
 const turnMsOf = (s) => (s.settings && Number.isInteger(s.settings.turnSecs) ? s.settings.turnSecs * 1000 : TURN_MS);
 export const MATCH_TARGET = 500; // official: first to 500 points wins the match
 /** Official card values: numbers = face value, Skip / Reverse / Draw Two = 20, Wild / Wild Draw Four = 50 (our extra cards: 20 / 50). */
@@ -292,7 +297,10 @@ function settle(s) {
   return false;
 }
 
+const DEAL_BLOCKED = ['play', 'draw', 'pass', 'uno', 'challenge', 'catch'];
+
 function dispatch(s, me, b, now) {
+  if (s.started && !s.over && now < (s.dealUntil || 0) && DEAL_BLOCKED.includes(b.op)) fail('The cards are still being dealt.');
   switch (b.op) {
     case 'start': return start(s, me, now);
     case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now, String(b.target ?? ''), String(b.rule ?? ''));
@@ -364,7 +372,9 @@ function start(s, p, now) {
   s.gameNo = (s.gameNo || 0) + 1;
   s.gameNames = seated(s).map((m) => m.name);
   s.gameMode = s.private ? 'private' : 'public'; // which kind of game this is, for its stats and history
-  s.turnAt = now;
+  s.dealMs = dealMsFor(s.seats.length * handSize);
+  s.dealUntil = now + s.dealMs;
+  s.turnAt = s.dealUntil; // the first turn's clock starts when the last card lands
   s.log = [];
   s.chat = []; // a new game starts with a clean chat
   s.paused = false;
@@ -1069,7 +1079,8 @@ export function view(s, me, now) {
     catchable: catchValid(s) ? s.catchId : null, // someone with one card left who did not say GrowX!
     turnAt: s.turnAt, // changes whenever a new turn starts, even when the same player goes again (🔁 Play Again)
     paused: Boolean(s.paused), pauseNote: s.paused ? s.pauseNote || '' : '',
-    turnMs: turnMsOf(s), turnLeft: s.over ? 0 : Math.max(0, turnMsOf(s) - ((s.paused ? s.pausedAt : now) - s.turnAt)),
+    turnMs: turnMsOf(s), turnLeft: s.over ? 0 : Math.min(turnMsOf(s), Math.max(0, turnMsOf(s) - ((s.paused ? s.pausedAt : now) - s.turnAt))),
+    dealLeft: Math.max(0, (s.dealUntil || 0) - now), dealMs: s.dealMs || 0, // the cards are still being handed out for this long
     hand: [...me.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)),
     playable: myTurn && !s.paused
       ? me.hand.filter((c) => (s.drawnId == null || c.id === s.drawnId) && playable(s, c, me)).map((c) => c.id)

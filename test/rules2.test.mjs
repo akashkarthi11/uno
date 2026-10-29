@@ -1,4 +1,5 @@
 // Stacking, +4 challenge, catching a missed GrowX!, leaving a game, and stats / history.
+process.env.GAME_DEAL = 'off'; // no dealing pause in these tests (dealing has its own test)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';

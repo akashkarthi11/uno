@@ -481,9 +481,30 @@ function cardEl(card) {
   return el;
 }
 
+/**
+ * While the server says the cards are still being handed out (5 to 10 seconds), show them arriving one at a time, round the
+ * table, and keep every card unplayable. The same clock the server uses, so everyone's deal ends together.
+ */
+let dealTimer = null;
+function dealView(st) {
+  if (!st.started || st.over || !(st.dealLeft > 0)) return st;
+  if (!st._dealEnd) st._dealEnd = Date.now() + st.dealLeft;
+  const left = st._dealEnd - Date.now();
+  if (left <= 0) return st;
+  const seats = st.players.length;
+  const per = Math.max(1, ...st.players.map((p) => p.count)); // hand size (the first player may hold 2 more)
+  const dealt = Math.floor((1 - left / st.dealMs) * seats * per); // cards handed out so far, one to each seat in turn
+  const shown = (i) => Math.max(0, Math.floor((dealt - i + seats - 1) / seats));
+  const mine = st.players.findIndex((p) => p.id === st.you);
+  const players = st.players.map((p, i) => ({ ...p, count: Math.min(p.count, shown(i)) }));
+  if (!dealTimer) dealTimer = setInterval(() => { if (state) render(); }, 200);
+  return { ...st, players, hand: mine < 0 ? st.hand : st.hand.slice(0, players[mine].count), playable: [], dealing: true, turnLeft: st.turnMs, deck: st.deck + Math.max(0, seats * per - dealt) };
+}
+
 function render() {
   if (!state) return;
-  const s = state;
+  const s = dealView(state);
+  if (!s.dealing && dealTimer) { clearInterval(dealTimer); dealTimer = null; }
   $("privateChip").classList.toggle("hidden", !s.private);
   renderSettings(s);
   renderRelayBtn(s);
@@ -725,7 +746,8 @@ function renderGame(s) {
   updateTimer();
 
   let msg;
-  if (s.pending) msg = "Playing…";
+  if (s.dealing) msg = "🃏 Dealing the cards…";
+  else if (s.pending) msg = "Playing…";
   else if (!s.seated) msg = "You joined mid-game — you'll be dealt in next game.";
   else if (s.over) msg = "Game over.";
   else if (s.paused) msg = s.pauseNote ? "⏸ Paused — " + s.pauseNote : "⏸ Paused by the admin — hang tight.";
@@ -749,7 +771,7 @@ function renderGame(s) {
   $("restartBtn").classList.toggle("hidden", !s.canStart);
   $("passBtn").disabled = !(myTurn && s.drawn != null) || s.paused;
   // GrowX! must be pressed while you hold 2 cards, i.e. before playing the second-to-last one.
-  const canUno = s.seated && !s.over && me && me.count > 0 && me.count <= 2 && !s.saidUno;
+  const canUno = s.seated && !s.over && !s.dealing && me && me.count > 0 && me.count <= 2 && !s.saidUno;
   $("unoBtn").disabled = !canUno;
   $("unoBtn").textContent = s.saidUno && me && me.count <= 2 ? "GrowX! ✓" : "GrowX!";
   $("unoBtn").classList.toggle("pulse", canUno && (myTurn || s.catchable === s.you));
@@ -1039,8 +1061,10 @@ function openCheat() {
 
 document.addEventListener("pointerup", cancelPress);
 
+const dealingNow = () => Boolean(state && state.dealLeft > 0 && state._dealEnd && state._dealEnd > Date.now());
 function onCard(card) {
   if (!state || state.over || state.cur !== state.you) return;
+  if (dealingNow()) { toast("The cards are still being dealt."); return; }
   if (!state.playable.includes(card.id)) {
     toast(card.value === "wild4" ? "Wild Draw Four needs a hand with no card of the current colour." : "You can't play that card.");
     return;
@@ -1525,6 +1549,7 @@ attachLongPress($("drawPile"));
 $("drawPile").addEventListener("click", () => {
   if (suppressClick) { suppressClick = false; return; }
   if (state && !state.seated) return; // spectators can't draw
+  if (dealingNow()) { toast("The cards are still being dealt."); return; }
   send({ op: "draw" });
 });
 $("pauseBtn").addEventListener("click", () => send({ op: state && state.paused ? "resume" : "pause" }));

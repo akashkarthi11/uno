@@ -1,4 +1,5 @@
 // The challenge question for +2 and +4, the result reveal, official scoring, and the official first-card actions.
+process.env.GAME_DEAL = 'off'; // no dealing pause in these tests (dealing has its own test)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';
