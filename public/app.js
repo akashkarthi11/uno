@@ -569,7 +569,7 @@ function render() {
   if (!s.dealing && dealTimer) { clearInterval(dealTimer); dealTimer = null; }
   $("privateChip").classList.toggle("hidden", !s.private);
   $("observedChip").classList.toggle("hidden", !s.observed || s.observing); // everyone but the observer is told
-  $("observedChip").textContent = "👁 Admin is listening";
+  $("observedChip").textContent = "admin"; // shown to the players while the admin is in the room as an observer
   renderSettings(s);
   renderRelayBtn(s);
   renderNotifyBtn(); // the alerts switch belongs to the kind of game on screen (public or private)
