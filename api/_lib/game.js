@@ -376,7 +376,7 @@ function chat(s, p, raw, now) {
 export const canVoice = (s, p) => Boolean(p.admin || p.observer || p.role === 'private' || publicVoiceOf(s));
 // The practice match against the bot: on unless the real admin switched it off (the real admin can always start one).
 export const botOf = (s) => !(s.settings && s.settings.botMatch === false);
-export const canBot = (s, p) => Boolean(p.admin || botOf(s));
+export const canBot = (s, p) => Boolean(!p.observer && (p.admin || botOf(s))); // an observer only watches: no bot matches either
 // Public players' camera: its own switch, independent of Public voice (off by default; the admin and private players always may).
 export const publicVideoOf = (s) => Boolean(s.settings && s.settings.publicVideo === true && !s.private);
 export const canVideo = (s, p) => Boolean(p.admin || p.role === 'private' || publicVideoOf(s));

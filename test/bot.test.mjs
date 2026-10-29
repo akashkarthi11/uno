@@ -111,3 +111,13 @@ test('observer account: hears and sees, is not an admin, is never listed or deal
   assert.equal(G.view(s, obs, now).seated, false);
   assert.equal(G.view(s, obs, now).hand.length, 0);
 });
+
+test('observer account: cannot play any game, not even against the bot', () => {
+  const s = G.newRoom('x');
+  const now = 1000;
+  const obs = G.join(s, { name: 'Observer', admin: false, role: 'observer', observer: true }, now);
+  G.join(s, { name: 'Boss', admin: true, role: 'admin' }, now);
+  assert.equal(G.view(s, obs, now).canBot, false);
+  assert.throws(() => G.act(s, obs, { op: 'botMatch' }, now), /switched off/);
+  assert.equal(s.started, false);
+});
