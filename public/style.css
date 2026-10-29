@@ -311,8 +311,6 @@ button.kick {
 .float-msg.mine b { color: #9be7a1; }
 @keyframes floatIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes floatOut { to { opacity: 0; transform: translateY(-8px); } }
-.rooms-sub { margin: 14px 0 4px; font-size: 16px; text-align: left; }
-#backupList { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
 /* ================= Learn Hangul page — its own light, pastel design system (scoped to .learn-page) ================= */
 .learn-page {
   --l-bg: #ffffff; --l-ink: #2b2a4c; --l-muted: #66658a; --l-line: #e6e2fa; --l-soft: #f6f4ff;
