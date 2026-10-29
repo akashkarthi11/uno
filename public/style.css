@@ -1155,3 +1155,37 @@ body.in-game .actions button { width: 100%; }
 .learn-page .learn-nav button:hover { background: var(--l-soft); }
 .learn-page .learn-nav button.on { background: var(--l-lav); color: var(--l-purple-d); }
 @media (max-width: 340px) { .learn-page .learn-head .flag { display: none; } .learn-page .learn-head { gap: 6px; padding-inline: 10px; } }
+
+/* ================= Lobby — the same soft pastel look as the Learn Hangul page ================= */
+.lobby-pastel {
+  --l-ink: #2b2a4c; --l-muted: #66658a; --l-line: #e6e2fa; --l-soft: #f6f4ff; --l-lav: #eeeafe; --l-purple: #6c55e6; --l-purple-d: #5740cf;
+  --l-mint: #d8f6ea; --l-mint-ink: #0f6b4a; --l-peach: #ffe8da; --l-peach-ink: #a24a1c; --l-shadow: 0 6px 20px rgba(108, 85, 230, .12); --l-shadow-s: 0 2px 8px rgba(108, 85, 230, .10);
+  max-width: 560px; border: 1px solid var(--l-line); border-radius: 26px; box-shadow: var(--l-shadow); color: var(--l-ink); text-align: left;
+  background: radial-gradient(700px 220px at 50% -70px, #efeaff 0%, rgba(255,255,255,0) 70%), #fff;
+  font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.lobby-pastel .lobby-hero { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 20px; background: #fff; border: 1px solid var(--l-line); box-shadow: var(--l-shadow-s); }
+.lobby-pastel .mascot { width: 54px; height: 54px; flex: none; }
+.lobby-pastel .lobby-title { flex: 1; min-width: 0; }
+.lobby-pastel h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -.01em; color: var(--l-ink); }
+.lobby-pastel .hint { color: var(--l-muted); font-weight: 600; font-size: 13px; margin-top: 2px; }
+.lobby-pastel .lchip { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: 999px; background: var(--l-mint); color: var(--l-mint-ink); font-size: 13px; font-weight: 800; white-space: nowrap; }
+.lobby-pastel #lobbyPlayers li { background: #fff; border: 1.5px solid var(--l-line); border-radius: 18px; padding: 10px 14px; box-shadow: var(--l-shadow-s); }
+.lobby-pastel #lobbyPlayers li .who { font-weight: 800; }
+.lobby-pastel #lobbyPlayers li.speaking { border-color: #1f9d6e; box-shadow: 0 0 0 3px rgba(31,157,110,.2); }
+.lobby-pastel .badge { background: var(--l-lav); color: var(--l-purple-d); border: 0; font-weight: 800; }
+.lobby-pastel #startBtn { min-height: 52px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: var(--l-purple); box-shadow: 0 8px 18px rgba(108, 85, 230, .34); }
+.lobby-pastel #startBtn:hover:not(:disabled) { background: var(--l-purple-d); }
+.lobby-pastel #startBtn:disabled { box-shadow: none; }
+.lobby-pastel #koreanBtn { min-height: 48px; border: 0; border-radius: 16px; font-size: 15px; font-weight: 800; background: var(--l-lav); color: var(--l-purple-d); box-shadow: none; }
+.lobby-pastel #chat { border-top: 1px solid var(--l-line); }
+.lobby-pastel #chatLog { background: var(--l-soft); border: 1px solid var(--l-line); border-radius: 18px; }
+.lobby-pastel #chatLog .msg .bubble { border: 1px solid var(--l-line); border-radius: 14px; }
+.lobby-pastel #chatLog .msg.mine .bubble { background: var(--l-lav); border-color: transparent; }
+.lobby-pastel #chatInput { border: 1.5px solid var(--l-line); border-radius: 14px; }
+.lobby-pastel #chatForm button { border: 0; border-radius: 14px; background: var(--l-purple); color: #fff; font-weight: 800; }
+.lobby-pastel #emojiBar button { border-color: var(--l-line); border-radius: 12px; }
+@media (max-width: 600px) {
+  /* full screen on a phone held upright: the card fills the page edge to edge */
+  .lobby-pastel { max-width: none; margin: 0; border: 0; border-radius: 0; box-shadow: none; padding: 14px 14px 22px; min-height: calc(var(--app-h, 100vh) - 56px); }
+}

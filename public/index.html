@@ -35,12 +35,15 @@
 </section>
 
 <!-- lobby -->
-<section id="lobby" class="center-box hidden">
-  <h2>Lobby</h2>
+<section id="lobby" class="center-box lobby-pastel hidden">
+  <div class="lobby-hero">
+    <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
+    <div class="lobby-title"><h2>Lobby</h2><p id="lobbyHint" class="hint"></p></div>
+    <span id="lobbyCount" class="lchip" title="Players here now">0</span>
+  </div>
   <ul id="lobbyPlayers"></ul>
   <button id="startBtn">Start game</button>
   <button id="koreanBtn" class="ghost hidden" type="button">🇰🇷 Learn Korean</button>
-  <p id="lobbyHint" class="hint"></p>
   <div id="chat">
     <div id="chatLog"></div>
     <div id="emojiBar"></div>

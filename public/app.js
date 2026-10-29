@@ -197,6 +197,7 @@ async function join() {
   $("joinBtn").disabled = true;
   removed = false;
   resetScreenCaches();
+  wantOrientation("portrait"); // the tap on Join is the permission the browser wants for full screen
   try {
     playerId = store("uno-id-" + room) || null;
     apply(await api({ op: "join", name: myName, password: myPassword }));
@@ -537,6 +538,7 @@ function render() {
   document.body.classList.toggle("in-game", inGame); // on phones a running game fills the screen exactly, no page scrolling
   renderRotateHint();
   placeChat(inGame);
+  wantOrientation(inGame && !document.body.classList.contains("learning") ? "landscape" : "portrait");
   renderChat(s);
   updateChatUi(s);
   $("lobby").classList.toggle("hidden", inGame);
@@ -595,6 +597,7 @@ function renderLobby(s) {
   }
   $("koreanBtn").classList.toggle("hidden", !s.private); // private games only: they hold the real admin and private players, nobody else
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
+  $("lobbyCount").textContent = s.players.length + (s.players.length === 1 ? " player" : " players");
   $("startBtn").classList.toggle("hidden", !isHost);
   $("startBtn").disabled = s.players.length < 2;
   $("lobbyHint").textContent = isHost
@@ -1458,6 +1461,31 @@ function renderRotateHint() {
   const portrait = window.innerHeight > window.innerWidth;
   const touch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   $("rotateHint").classList.toggle("hidden", !(document.body.classList.contains("in-game") && portrait && touch && !rotateDismissed));
+}
+/**
+ * Phones: the lobby and sign-in are full screen and upright; a game that starts goes full screen and sideways on its own.
+ * Browsers only allow fullscreen / rotation right after a tap, so when there was none (a refresh, a game started by
+ * someone else) the very next tap anywhere does it. Computers are left alone.
+ */
+let orientHave = null; // "portrait" | "landscape": what this page has already asked for
+let orientArmed = null;
+const coarse = () => Boolean(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+async function lockOrientation(mode) {
+  if (!coarse()) return true;
+  try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: "hide" }); } catch (e) { return false; }
+  try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock(mode); } catch (e) { /* this browser cannot lock the rotation: the rotate hint covers it */ }
+  return true;
+}
+function wantOrientation(mode) {
+  if (!coarse() || orientHave === mode) return;
+  orientHave = mode;
+  const go = () => lockOrientation(mode).then((ok) => { if (!ok && orientHave === mode) arm(); });
+  const arm = () => {
+    if (orientArmed) document.removeEventListener("pointerup", orientArmed);
+    orientArmed = () => { document.removeEventListener("pointerup", orientArmed); orientArmed = null; if (orientHave === mode) go(); };
+    document.addEventListener("pointerup", orientArmed);
+  };
+  go();
 }
 async function enterLandscape() {
   try { if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); } catch (e) { /* not allowed */ }
