@@ -123,7 +123,12 @@ async function adaptCamera() {
 setInterval(adaptCamera, 4000);
 
 /** Joins the call with a microphone, a camera, or both (opts.audio / opts.video); the automatic join uses the microphone only. */
-async function voiceJoin(opts = { audio: true }) {
+let voiceJoining = null; // a join in progress (the automatic microphone join can still be waiting for the permission prompt when the camera is tapped)
+function voiceJoin(opts = { audio: true }) {
+  if (!voiceJoining) voiceJoining = voiceJoinNow(opts).finally(() => { voiceJoining = null; });
+  return voiceJoining;
+}
+async function voiceJoinNow(opts) {
   if (voice.active) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     toast("This browser can't use the microphone or camera here.");
@@ -524,6 +529,7 @@ async function flipCamera() {
 
 /** The microphone and the camera are switched on and off separately; the call is left when both are off. */
 async function toggleDevice(kind) {
+  if (voiceJoining) await voiceJoining; // wait for a join already under way, then add to it instead of replacing it
   const audio = kind === "audio";
   if (!voice.active) {
     session(voiceOffKey(), null);
