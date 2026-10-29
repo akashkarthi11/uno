@@ -149,12 +149,16 @@ $("handRight").addEventListener("click", () => scrollHand(1));
 
 /** The real visible height of the screen (browser bars excluded), kept in a CSS variable the phone layout uses. */
 function setAppHeight() {
-  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  // the smaller of the two: in some phone browsers (Brave) the visual viewport can briefly report the height without the address bar
+  // that is still showing, which pushed the bottom of the hand off the screen
+  const h = window.visualViewport ? Math.min(window.visualViewport.height, window.innerHeight) : window.innerHeight;
   document.documentElement.style.setProperty("--app-h", Math.round(h) + "px");
 }
 setAppHeight();
 window.addEventListener("resize", setAppHeight);
 window.addEventListener("orientationchange", setAppHeight);
+// the bars take a moment to hide or show after full screen starts / ends: measure again as they settle
+document.addEventListener("fullscreenchange", () => [0, 150, 400, 900, 1800].forEach((ms) => setTimeout(setAppHeight, ms)));
 if (window.visualViewport) window.visualViewport.addEventListener("resize", setAppHeight);
 
 /** Forget everything remembered about the previous table (used when joining again or after being removed). */
