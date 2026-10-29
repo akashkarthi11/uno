@@ -1786,23 +1786,50 @@ function learnSel(s) {
   return { tab: kTab, idx: kIdx };
 }
 
+let learnPane = "letters";
+function setPane(p) {
+  learnPane = p;
+  document.querySelectorAll(".learn-nav button").forEach((b) => b.classList.toggle("on", b.dataset.pane === p));
+  [["letters", "paneLetters"], ["quiz", "paneQuiz"], ["ask", "paneAsk"]].forEach(([k, id]) => $(id).classList.toggle("hidden", k !== p));
+}
+document.querySelectorAll(".learn-nav button").forEach((b) => b.addEventListener("click", () => setPane(b.dataset.pane)));
+
+/** A short buzz on a result: a right answer feels different from a wrong one. */
+function learnFeedback(ok) {
+  try { if (navigator.vibrate) navigator.vibrate(ok ? [40] : [30, 40, 30]); } catch (e) { /* not allowed */ }
+}
+
 function renderLearn(s) {
   if (!hangul) return;
   const L = s.learn;
   const sel = learnSel(s);
   const following = Boolean(L) && (s.admin || $("learnFollow").checked);
+  const me = s.players.find((p) => p.id === s.you);
   $("learnRole").textContent = s.admin ? "👑 Teacher" : "Student";
   $("learnFollowRow").classList.toggle("hidden", s.admin);
   $("learnTeacher").classList.toggle("hidden", !s.admin);
+  const myPts = (L && me && L.scores[me.name]) || 0;
+  $("learnPts").textContent = "⭐ " + myPts;
+  $("learnPts").classList.toggle("hidden", !(L && Object.keys(L.scores).length));
   $("learnStatus").textContent = s.admin
-    ? "Tap a letter: everyone in the room sees it. Start a quiz when you like."
-    : L ? (following ? "Following the teacher." : "Exploring on your own — tick Follow to rejoin the teacher.") : (s.host ? "Waiting for the teacher to start. You can look around meanwhile." : "The teacher is not here yet. You can look around meanwhile.");
+    ? "You are the teacher — tap a letter and everyone sees it. Start a quiz when you like."
+    : L ? (following ? "Following the teacher live." : "Exploring on your own.") : (s.host ? "Waiting for the teacher to begin — look around meanwhile." : "The teacher has not arrived yet — look around meanwhile.");
 
-  // tabs
-  // while a question is open the letter grid (it shows every letter's sound) and the highlighted letter would give the answer away
+  // a question is open: the letter grid (it shows every letter's sound) and the highlighted letter would give the answer away
   const openQ = Boolean(L && L.mode === "quiz" && L.q && !L.q.revealed);
   $("koreanTabs").classList.toggle("hidden", openQ);
   $("koreanGrid").classList.toggle("hidden", openQ);
+  $("lettersHint").textContent = openQ
+    ? "🎯 A quiz question is open — the letters come back when the answers are shown."
+    : "Tap a letter to see how it sounds. ✓ means you have seen it, ⭐ means you got it right in a quiz (kept on this phone only).";
+
+  // switch to the quiz when a new question starts, and back to the letters when the quiz ends
+  const qn = L && L.q ? L.q.n : 0;
+  if (qn && renderLearn.autoQ !== qn) { renderLearn.autoQ = qn; setPane("quiz"); }
+  if (L && L.mode === "learn" && renderLearn.wasQuiz) setPane("letters");
+  renderLearn.wasQuiz = Boolean(L && L.mode === "quiz");
+
+  // groups
   const tabs = $("koreanTabs");
   tabs.textContent = "";
   for (const [key, label] of K_TABS) {
@@ -1826,6 +1853,8 @@ function renderLearn(s) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "ghost" + (i === sel.idx ? " on" : "");
+    b.setAttribute("aria-label", row[0] + ", " + row[1]);
+    b.lang = "ko";
     b.append(row[0]);
     const sm = document.createElement("small");
     const pr = prog[row[0]];
@@ -1850,12 +1879,21 @@ function renderLearn(s) {
     $("kSound").textContent = sound;
     $("kExample").textContent = word + " (" + wordRoman + ") — " + meaning;
     kSpeech = ch === "ㅇ" ? "응" : word;
+    const canStep = s.admin || !following;
+    $("kPrev").classList.toggle("hidden", !canStep);
+    $("kNext").classList.toggle("hidden", !canStep);
+    $("kPrev").disabled = sel.idx <= 0;
+    $("kNext").disabled = sel.idx >= hangul[sel.tab].length - 1;
     const key = ch + ":" + (L ? L.at : 0) + ":" + sel.tab + sel.idx;
     if (renderLearn.lastSeen !== key) { renderLearn.lastSeen = key; markLetter(ch, "seen"); }
   }
 
   // the live quiz
   $("learnQuiz").classList.toggle("hidden", !quiz);
+  $("learnQuizEmpty").classList.toggle("hidden", Boolean(quiz));
+  $("learnQuizEmpty").textContent = s.admin
+    ? "No question yet. Press “Start a quiz” — everyone gets the same question at the same moment."
+    : "No quiz right now. When the teacher starts one, it appears here by itself.";
   if (quiz) {
     const q = L.q;
     $("qLetter").textContent = q.letter;
@@ -1870,12 +1908,18 @@ function renderLearn(s) {
       b.addEventListener("click", () => learnSend({ op: "learnAnswer", choice: i }));
       opts.appendChild(b);
     });
-    $("qInfo").textContent = q.revealed
-      ? q.results.map((r) => (r.ok ? "✅ " : "❌ ") + r.name).join("   ")
-      : q.answered + " answered" + (q.mine !== null ? " — waiting for the others…" : "");
+    if (q.revealed) {
+      const right = q.mine !== null && q.mine === q.correct;
+      const head = q.mine === null ? "Time is up — the answer was " + q.opts[q.correct] + "." : right ? "🎉 Correct! +10" : "Not this time — it is " + q.opts[q.correct] + ".";
+      $("qInfo").textContent = head + "  " + q.results.map((r) => (r.ok ? "✅ " : "❌ ") + r.name).join("  ");
+    } else {
+      $("qInfo").textContent = q.mine !== null ? "Answer sent ✓ — waiting for the others (" + q.answered + " answered)…" : "Pick the sound. " + q.answered + " answered so far.";
+    }
     if (q.revealed && kQuizDone !== q.n) {
       kQuizDone = q.n;
-      if (q.mine !== null && q.mine === q.correct) markLetter(q.letter, "right");
+      const right = q.mine !== null && q.mine === q.correct;
+      if (right) markLetter(q.letter, "right");
+      if (q.mine !== null) learnFeedback(right);
     }
   }
   $("learnQuizBtn").classList.toggle("hidden", Boolean(quiz && !L.q.revealed));
@@ -1885,16 +1929,32 @@ function renderLearn(s) {
 
   renderAsks(s);
 
+  // a number on the Ask tab when somebody is waiting for my answer
+  const waiting = ((L && L.asks) || []).filter((a) => !a.mine && !a.myAnswer).length;
+  $("askBadge").textContent = String(waiting);
+  $("askBadge").classList.toggle("hidden", !waiting);
+
   // everyone's points in this lesson
   const sc = $("learnScores");
   sc.textContent = "";
   const entries = Object.entries((L && L.scores) || {}).sort((a, b) => b[1] - a[1]);
-  if (entries.length) {
-    const h = document.createElement("b");
-    h.textContent = "Points";
-    sc.appendChild(h);
-    for (const [name, pts] of entries) { const d = document.createElement("div"); d.textContent = name + " — " + pts; sc.appendChild(d); }
-  }
+  const medals = ["🥇", "🥈", "🥉"];
+  entries.forEach(([name, pts], i) => {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = (medals[i] || "⭐") + " " + name + " " + pts;
+    sc.appendChild(c);
+  });
+}
+
+$("kPrev").addEventListener("click", () => stepLetter(-1));
+$("kNext").addEventListener("click", () => stepLetter(1));
+function stepLetter(d) {
+  if (!state) return;
+  const sel = learnSel(state);
+  const idx = Math.max(0, Math.min(hangul[sel.tab].length - 1, sel.idx + d));
+  if (state.admin) learnSend({ op: "learnShow", tab: sel.tab, idx });
+  else { kTab = sel.tab; kIdx = idx; renderLearn(state); }
 }
 
 /* ---- questions between members: "write this word" ---- */
@@ -2022,6 +2082,8 @@ $("koreanBtn").addEventListener("click", async () => {
     if (!hangul) hangul = (await api({ op: "korean" })).hangul;
   } catch (e) { toast(e.message); return; }
   learnOpen = true;
+  renderLearn.autoQ = 0;
+  setPane("letters");
   document.body.classList.add("learning");
   $("learnPage").classList.remove("hidden");
   renderLearn(state);

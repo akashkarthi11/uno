@@ -230,49 +230,66 @@
 <!-- Learn Korean: a page of its own, shared live by the real admin (teacher) and the private players -->
 <section id="learnPage" class="learn-page hidden">
   <header class="learn-head">
-    <button id="learnBack" class="ghost" type="button">← Back</button>
-    <h2>🇰🇷 Hangul</h2>
+    <button id="learnBack" class="ghost" type="button" aria-label="Back to the lobby">← Back</button>
+    <h2>🇰🇷 Learn Hangul</h2>
+    <span id="learnPts" class="chip hidden" title="Your points in this lesson"></span>
     <span id="learnRole" class="badge"></span>
   </header>
+  <nav class="learn-nav" aria-label="Lesson sections">
+    <button type="button" data-pane="letters" class="on">📖 Letters</button>
+    <button type="button" data-pane="quiz">🎯 Quiz</button>
+    <button type="button" data-pane="ask">✍ Ask <span id="askBadge" class="nav-badge hidden"></span></button>
+  </nav>
   <div class="learn-body">
-    <div id="learnFollowRow" class="learn-row hidden">
-      <label><input id="learnFollow" type="checkbox" checked> Follow the teacher</label>
+    <div class="learn-banner">
+      <span id="learnStatus"></span>
+      <label id="learnFollowRow" class="switch hidden"><input id="learnFollow" type="checkbox" checked> <span>Follow the teacher</span></label>
     </div>
-    <p id="learnStatus" class="hint"></p>
-    <div id="koreanTabs" class="korean-tabs"></div>
-    <div id="koreanGrid" class="korean-grid"></div>
-    <div id="koreanDetail" class="korean-detail hidden">
-      <div id="kLetter" class="k-letter"></div>
-      <div class="k-info">
-        <div><b id="kRoman"></b> <button id="kSpeak" class="ghost" type="button" title="Hear it">🔊</button></div>
-        <div id="kSound" class="hint"></div>
-        <div id="kExample"></div>
+
+    <div id="paneLetters" class="learn-pane">
+      <div id="koreanTabs" class="korean-tabs"></div>
+      <div id="koreanGrid" class="korean-grid"></div>
+      <div id="koreanDetail" class="korean-detail hidden">
+        <div id="kLetter" class="k-letter" lang="ko"></div>
+        <div class="k-info">
+          <div class="k-roman"><b id="kRoman"></b> <button id="kSpeak" class="ghost round" type="button" title="Hear it" aria-label="Hear it">🔊</button></div>
+          <div id="kSound" class="hint"></div>
+          <div id="kExample"></div>
+          <div class="k-step"><button id="kPrev" class="ghost" type="button" aria-label="Previous letter">‹ Prev</button><button id="kNext" class="ghost" type="button" aria-label="Next letter">Next ›</button></div>
+        </div>
+      </div>
+      <p id="lettersHint" class="hint">Tap a letter to see how it sounds. ✓ means you have seen it, ⭐ means you got it right in a quiz (kept on this phone only).</p>
+    </div>
+
+    <div id="paneQuiz" class="learn-pane hidden">
+      <div id="learnQuizEmpty" class="empty-card"></div>
+      <div id="learnQuiz" class="learn-quiz hidden">
+        <div class="hint">What sound is this letter?</div>
+        <div id="qLetter" class="k-letter" lang="ko"></div>
+        <div id="qOpts" class="q-opts"></div>
+        <div id="qInfo" class="q-info"></div>
+      </div>
+      <div id="learnTeacher" class="learn-row hidden">
+        <button id="learnQuizBtn" type="button">🎯 Start a quiz on this group</button>
+        <button id="learnRevealBtn" class="ghost hidden" type="button">Show answers now</button>
+        <button id="learnNextBtn" class="hidden" type="button">Next question ›</button>
+        <button id="learnStopBtn" class="ghost hidden" type="button">Back to letters</button>
       </div>
     </div>
-    <div id="learnQuiz" class="learn-quiz hidden">
-      <div class="hint">What sound is this letter?</div>
-      <div id="qLetter" class="k-letter"></div>
-      <div id="qOpts" class="q-opts"></div>
-      <div id="qInfo" class="hint"></div>
-    </div>
-    <div id="learnTeacher" class="learn-row hidden">
-      <button id="learnQuizBtn" type="button">🎯 Quiz on this group</button>
-      <button id="learnRevealBtn" class="ghost hidden" type="button">Show answers</button>
-      <button id="learnNextBtn" class="ghost hidden" type="button">Next question</button>
-      <button id="learnStopBtn" class="ghost hidden" type="button">Back to letters</button>
-    </div>
-    <div class="learn-ask">
-      <h3 class="rooms-sub">✍ Ask someone to write a word</h3>
-      <div class="learn-row">
+
+    <div id="paneAsk" class="learn-pane hidden">
+      <div class="learn-ask">
+        <h3 class="rooms-sub">New question</h3>
         <select id="askTo" aria-label="Ask who"></select>
+        <input id="askText" type="text" maxlength="120" placeholder="e.g. Write “water” in Korean" autocomplete="off">
+        <input id="askExpect" type="text" maxlength="60" placeholder="Right answer (optional — then it is checked for you)" autocomplete="off">
+        <button id="askSend" type="button">Send question</button>
+        <h3 class="rooms-sub">Questions</h3>
+        <div id="askList"></div>
       </div>
-      <input id="askText" type="text" maxlength="120" placeholder="e.g. Write “water” in Korean" autocomplete="off">
-      <input id="askExpect" type="text" maxlength="60" placeholder="Right answer (optional — then it is checked for you)" autocomplete="off">
-      <button id="askSend" type="button">Send question</button>
-      <div id="askList"></div>
     </div>
+
     <div id="learnScores" class="learn-scores"></div>
-    <p class="hint">The teacher (the admin) picks the letter and starts the quizzes; everyone sees it at the same moment. The ✓ and ⭐ marks are kept on this phone only.</p>
   </div>
 </section>
 
