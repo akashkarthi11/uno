@@ -151,7 +151,7 @@ setInterval(adaptCamera, 4000);
 
 /** Joins the call with a microphone, a camera, or both (opts.audio / opts.video); the automatic join uses the microphone only. */
 let voiceJoining = null; // a join in progress (the automatic microphone join can still be waiting for the permission prompt when the camera is tapped)
-function voiceJoin(opts = { audio: true }) {
+function voiceJoin(opts = state && state.observing ? {} : { audio: true }) { // an observer joins to listen and watch only
   if (!voiceJoining) voiceJoining = voiceJoinNow(opts).finally(() => { voiceJoining = null; });
   return voiceJoining;
 }
@@ -162,7 +162,7 @@ async function voiceJoinNow(opts) {
     return;
   }
   try {
-    voice.stream = await getMedia({ audio: opts.audio ? MIC : false, video: opts.video ? CAM : false });
+    voice.stream = opts.audio || opts.video ? await getMedia({ audio: opts.audio ? MIC : false, video: opts.video ? CAM : false }) : new MediaStream();
   } catch (e) {
     toast(opts.video && !opts.audio ? "Camera blocked — allow it in the browser to share video." : "Microphone blocked — allow it in the browser to join voice.");
     return;

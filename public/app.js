@@ -568,6 +568,8 @@ function render() {
   const s = dealView(state);
   if (!s.dealing && dealTimer) { clearInterval(dealTimer); dealTimer = null; }
   $("privateChip").classList.toggle("hidden", !s.private);
+  $("observedChip").classList.toggle("hidden", !s.observed || s.observing); // everyone but the observer is told
+  $("observedChip").textContent = "👁 Admin is listening";
   renderSettings(s);
   renderRelayBtn(s);
   renderNotifyBtn(); // the alerts switch belongs to the kind of game on screen (public or private)
@@ -1434,6 +1436,37 @@ function closeWatch() {
   $("roomsModal").classList.remove("hidden");
   loadRooms();
 }
+/** Enters the watched room as an observer: not a player, hears the call and sees the cameras, and every player sees "Admin is listening". */
+async function observeRoom() {
+  const target = watchCode;
+  if (!target) return;
+  if (!confirm("Enter room " + target + " as an observer?\nYou will hear the call and see the cameras. The players will see a notice that the admin is listening.")) return;
+  let pw = myPassword;
+  if (!pw) pw = prompt("Admin password:") || "";
+  if (!pw) return;
+  clearInterval(watchTimer);
+  watchCode = null;
+  $("watchModal").classList.add("hidden");
+  if (typeof voiceStopLocal === "function") voiceStopLocal();
+  if (typeof autoJoinTried !== "undefined") autoJoinTried = false;
+  const from = room;
+  room = target;
+  removed = false;
+  resetScreenCaches();
+  playerId = null;
+  state = null;
+  try {
+    apply(await api({ op: "join", name: "Admin", password: pw, observer: true }));
+  } catch (e) {
+    room = from;
+    toast(e.message);
+    return;
+  }
+  myPassword = pw;
+  enterRoom();
+  toast("Observing room " + target + ".");
+}
+$("watchObserve").addEventListener("click", observeRoom);
 $("watchX").addEventListener("click", closeWatch);
 $("watchClose").addEventListener("click", closeWatch);
 

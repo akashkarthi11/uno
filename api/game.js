@@ -132,8 +132,8 @@ export default async function handler(req, res) {
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
         const role = admin ? 'admin' : coadmin ? 'public' : pw === PRIVATE_PASSWORD ? 'private' : 'public';
-        const me = G.join(s, { name: b.name, admin, role, playerId: b.playerId, coadmin }, now);
-        claim = { r: code, p: me.id, role, n: me.name, co: coadmin };
+        const me = G.join(s, { name: b.name, admin, role, playerId: b.playerId, coadmin, observer: admin && b.observer === true }, now);
+        claim = { r: code, p: me.id, role, n: me.name, co: coadmin, obs: Boolean(me.observer) };
         return G.view(s, me, now);
       });
       // tell the real admin (best effort: a failure here must never stop anyone joining)
@@ -166,8 +166,8 @@ export default async function handler(req, res) {
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
         const role = claim.role;
-        const me = G.join(s, { name: claim.n, admin: claim.role === 'admin', role, playerId: claim.p, coadmin: Boolean(claim.co) }, now);
-        renewed = { r: code, p: me.id, role, n: me.name, co: Boolean(claim.co) };
+        const me = G.join(s, { name: claim.n, admin: claim.role === 'admin', role, playerId: claim.p, coadmin: Boolean(claim.co), observer: Boolean(claim.obs) }, now);
+        renewed = { r: code, p: me.id, role, n: me.name, co: Boolean(claim.co), obs: Boolean(me.observer) };
         return G.view(s, me, now);
       });
       return res.json({ state: withIce(state), token: signToken(renewed, now, TOKEN_SALT) });

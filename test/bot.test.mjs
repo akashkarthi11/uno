@@ -88,3 +88,22 @@ test('bot: only the real admin can switch it off; off, players cannot start one 
   G.act(s, pub, { op: 'botMatch' }, now);
   assert.equal(s.started, true);
 });
+
+test('observer: the admin listens in without being a player; everyone is told; the admin can still remove people', () => {
+  const s = G.newRoom('o');
+  const now = 1000;
+  const a = G.join(s, { name: 'P1', admin: false, role: 'public' }, now);
+  const b = G.join(s, { name: 'P2', admin: false, role: 'public' }, now);
+  const boss = G.join(s, { name: 'Admin', admin: true, role: 'admin', observer: true }, now);
+  assert.equal(boss.observer, true);
+  const imposter = G.join(s, { name: 'X', admin: false, role: 'public', observer: true }, now);
+  assert.equal(imposter.observer, undefined, 'only the real admin can observe');
+  assert.equal(G.view(s, a, now).observed, true, 'players are told');
+  assert.equal(G.view(s, boss, now).observing, true);
+  assert.equal(G.view(s, a, now).players.some((p) => p.name === 'Admin'), false, 'not in the lobby list');
+  G.act(s, boss, { op: 'start' }, now); // the observer can start the game for the others...
+  assert.equal(s.seats.includes(boss.id), false, '...but is never dealt in');
+  assert.equal(s.seats.length, 3, 'P1, P2 and X');
+  G.act(s, boss, { op: 'kick', targetId: imposter.id }, now); // removing an unwanted user
+  assert.equal(s.members.some((m) => m.id === imposter.id), false);
+});

@@ -17,7 +17,7 @@
   <h1><span class="logo">G</span>GrowX Mindrelax</h1>
   <div id="roomInfo" class="hidden">
     <span id="ping" class="ping" title="Round trip to the game server (middle of the last 5 checks)"><i></i><span>-- ms</span></span>
-    <span class="roomtag">Room <b id="roomName"></b><span id="privateChip" class="badge hidden">🔒 Private</span></span>
+    <span class="roomtag">Room <b id="roomName"></b><span id="privateChip" class="badge hidden">🔒 Private</span><span id="observedChip" class="badge hidden">👁 Admin is listening</span></span>
     <span id="overlayCtl">
       <button id="settingsBtn" class="ico" type="button" title="Settings" aria-label="Settings">⚙</button>
       <button id="pauseBtn" class="ico hidden" type="button" title="Pause the game" aria-label="Pause or resume">⏸</button>
@@ -421,7 +421,8 @@
     <p id="watchSummary" class="hint">Loading…</p>
     <div id="watchPlayers"></div>
     <div id="watchChat" class="watch-chat"></div>
-    <p class="hint">Watching only: you are not in this room and nobody there can see you. You see every player's cards.</p>
+    <button id="watchObserve" class="ghost" type="button">🎧 Listen &amp; watch live (players are told)</button>
+    <p class="hint">This window: you are not in the room and nobody there is told. You see every player's cards. "Listen &amp; watch live" enters the room as an observer who hears the call and sees the cameras; the players then see "👁 Admin is listening".</p>
     <button id="watchClose" class="ghost sticky-close" type="button">Close</button>
   </div>
 </div>

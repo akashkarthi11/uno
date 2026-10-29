@@ -169,10 +169,11 @@ function advance(s, steps, now) {
 
 /* ---------------- membership ---------------- */
 
-export function join(s, { name, admin, role, playerId, coadmin }, now) {
+export function join(s, { name, admin, role, playerId, coadmin, observer }, now) {
   let p = playerId ? byId(s, playerId) : null;
   if (!p) {
     p = { id: randomUUID(), name: cleanName(name), admin: false, lastSeen: now, hand: [], saidUno: false, finished: false };
+    if (observer && admin) p.observer = true; // the admin listening in: not a player, and everyone is told
     s.members.push(p);
     addLog(s, p.name + ' joined' + (s.started && !s.over ? ' (waiting for the next game).' : '.'));
   } else if (!online(p, now)) {
@@ -517,14 +518,14 @@ function start(s, p, now, only = null) {
     s.botGame = false;
     s.botHost = null;
   }
-  if (s.members.length < 2) fail('At least 2 players are needed.');
+  if (s.members.filter((m) => !m.observer).length < 2) fail('At least 2 players are needed.');
   s.members.forEach((m) => {
     m.hand = [];
     m.saidUno = false;
     m.finished = false;
     m.skipNext = false;
   });
-  s.seats = (only || s.members.slice(0, MAX_SEATS)).map((m) => m.id);
+  s.seats = (only || s.members.filter((m) => !m.observer).slice(0, MAX_SEATS)).map((m) => m.id);
   s.deck = shuffle(buildDeck((kind) => superOn(s, kind))); // only the super cards the admin left ticked
   s.discard = [];
   const handSize = handSizeOf(s);
@@ -1208,7 +1209,7 @@ function botPlay(s, p, c, other, now) {
 
 /** One line about a room for the admin's Rooms window. */
 export function roomSummary(s, code, now) {
-  const members = (s.members || []).filter((m) => !m.bot);
+  const members = (s.members || []).filter((m) => !m.bot && !m.observer);
   return {
     code,
     mode: s.private ? 'private' : 'public',
@@ -1227,7 +1228,7 @@ export function roomSummary(s, code, now) {
  */
 export function peekView(s, code, now) {
   const members = s.members || [];
-  const seatedNow = s.started ? s.seats.map((id) => members.find((m) => m.id === id)).filter(Boolean) : members;
+  const seatedNow = s.started ? s.seats.map((id) => members.find((m) => m.id === id)).filter(Boolean) : members.filter((m) => !m.observer);
   const cur = s.started && !s.over ? members.find((m) => m.id === s.seats[s.cur]) : null;
   return {
     code, mode: s.private ? 'private' : 'public',
@@ -1312,8 +1313,10 @@ export function view(s, me, now) {
     host: me.admin ? me.id : (s.members.find((m) => m.admin && online(m, now)) || {}).id || null,
     started: s.started, over: s.over, winner: s.winner, loser: s.loser, ranking: s.ranking, notice: s.notice,
     seated: s.started && s.seats.includes(me.id),
+    observing: Boolean(me.observer), // I am the admin listening in
+    observed: s.members.some((m) => m.observer && online(m, now)), // somebody (the admin) is listening in: everyone sees a notice
     botHost: isBotHost(s, me), // the player running a bot match may pause it, restart it and play again
-    players: (s.started ? seated(s) : s.members.filter((m) => !m.bot && online(m, now))).map((p) => ({
+    players: (s.started ? seated(s) : s.members.filter((m) => !m.bot && !m.observer && online(m, now))).map((p) => ({
       id: p.id, name: p.name, count: p.hand.length, finished: s.started && p.finished, connected: online(p, now),
       isAdmin: me.admin ? Boolean(p.admin) : undefined, starter: Boolean(p.starter), // who the real admin is stays private
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
