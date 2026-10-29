@@ -228,69 +228,137 @@
 </div>
 
 <!-- Learn Korean: a page of its own, shared live by the real admin (teacher) and the private players -->
-<section id="learnPage" class="learn-page hidden">
+<section id="learnPage" class="learn-page hidden" aria-label="Learn Hangul">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v15H5.5C4.7 19 4 18.3 4 17.5v-12zM20 5.5c0-.8-.7-1.5-1.5-1.5H13v15h5.5c.8 0 1.5-.7 1.5-1.5v-12z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.9"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-7l-5 4v-4H5a2 2 0 01-2-2V7a2 2 0 012-2z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
+      <symbol id="i-speaker" viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" fill="currentColor"/><path d="M15.5 9a4.2 4.2 0 010 6M18 6.5a8 8 0 010 11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12l16-7-6 15-2.5-6L4 12z" fill="currentColor"/></symbol>
+      <symbol id="flag-kr" viewBox="0 0 36 24">
+        <rect width="36" height="24" rx="4" fill="#fff" stroke="#d9d4f5"/>
+        <path d="M12.5 12a5.5 5.5 0 0111 0z" fill="#e2494b"/><path d="M12.5 12a5.5 5.5 0 0011 0z" fill="#3b6fd8"/>
+        <g fill="#2b2a4c"><rect x="4" y="4" width="5" height="1.2" transform="rotate(35 6.5 4.6)"/><rect x="4" y="6.2" width="5" height="1.2" transform="rotate(35 6.5 6.8)"/><rect x="27" y="17.6" width="5" height="1.2" transform="rotate(35 29.5 18.2)"/><rect x="27" y="19.8" width="5" height="1.2" transform="rotate(35 29.5 20.4)"/></g>
+      </symbol>
+      <symbol id="mascot" viewBox="0 0 120 120">
+        <ellipse cx="60" cy="112" rx="30" ry="5" fill="#7058e8" opacity=".12"/>
+        <path d="M60 14c-6 0-9 5-9 9 3-2 6-3 9-3s6 1 9 3c0-4-3-9-9-9z" fill="#6bd3ad"/>
+        <circle cx="60" cy="64" r="44" fill="#a99bf5"/>
+        <ellipse cx="60" cy="74" rx="30" ry="24" fill="#c9bffa"/>
+        <circle cx="44" cy="58" r="6.5" fill="#2b2a4c"/><circle cx="76" cy="58" r="6.5" fill="#2b2a4c"/>
+        <circle cx="46.2" cy="55.8" r="2.2" fill="#fff"/><circle cx="78.2" cy="55.8" r="2.2" fill="#fff"/>
+        <ellipse cx="34" cy="72" rx="7" ry="4.5" fill="#ffb7a0" opacity=".85"/><ellipse cx="86" cy="72" rx="7" ry="4.5" fill="#ffb7a0" opacity=".85"/>
+        <path d="M51 73c3 6 15 6 18 0" fill="none" stroke="#2b2a4c" stroke-width="3.2" stroke-linecap="round"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <header class="learn-head">
-    <button id="learnBack" class="ghost" type="button" aria-label="Back to the lobby">← Back</button>
-    <h2>🇰🇷 Learn Hangul</h2>
-    <span id="learnPts" class="chip hidden" title="Your points in this lesson"></span>
-    <span id="learnRole" class="badge"></span>
+    <button id="learnBack" class="l-icon-btn" type="button" aria-label="Back to the lobby"><svg class="ico"><use href="#i-back"/></svg></button>
+    <svg class="flag" aria-hidden="true"><use href="#flag-kr"/></svg>
+    <h2>Learn Hangul</h2>
+    <span id="learnPts" class="lchip pts hidden" title="Your points in this lesson"></span>
+    <span id="learnRole" class="lbadge"></span>
   </header>
-  <nav class="learn-nav" aria-label="Lesson sections">
-    <button type="button" data-pane="letters" class="on">📖 Letters</button>
-    <button type="button" data-pane="quiz">🎯 Quiz</button>
-    <button type="button" data-pane="ask">✍ Ask <span id="askBadge" class="nav-badge hidden"></span></button>
-  </nav>
-  <div class="learn-body">
+
+  <main class="learn-body">
     <div class="learn-banner">
-      <span id="learnStatus"></span>
-      <label id="learnFollowRow" class="switch hidden"><input id="learnFollow" type="checkbox" checked> <span>Follow the teacher</span></label>
+      <svg class="mascot sm" aria-hidden="true"><use href="#mascot"/></svg>
+      <div class="banner-text">
+        <div id="learnStatus" class="banner-main"></div>
+        <div id="learnCheer" class="banner-sub"></div>
+      </div>
+      <label id="learnFollowRow" class="switch hidden"><input id="learnFollow" type="checkbox" checked><span class="track" aria-hidden="true"></span><span class="switch-label">Follow teacher</span></label>
     </div>
 
-    <div id="paneLetters" class="learn-pane">
-      <div id="koreanTabs" class="korean-tabs"></div>
-      <div id="koreanGrid" class="korean-grid"></div>
-      <div id="koreanDetail" class="korean-detail hidden">
+    <div id="learnLoading" class="learn-skeleton hidden" aria-busy="true"><span></span><span></span><span></span></div>
+    <div id="learnError" class="state-card error hidden" role="alert">
+      <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
+      <h3>Could not load the letters</h3>
+      <p id="learnErrorText">Check your connection and try again.</p>
+      <button id="learnRetry" class="l-btn primary" type="button">Try again</button>
+    </div>
+
+    <section id="paneLetters" class="learn-pane" role="tabpanel" aria-label="Letters">
+      <div id="koreanTabs" class="group-tabs" role="tablist" aria-label="Letter groups"></div>
+      <div id="groupProgress" class="progress-card">
+        <div class="progress-row"><span id="groupProgressText"></span><span id="allProgressText" class="muted"></span></div>
+        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="groupBar"><i id="groupBarFill"></i></div>
+      </div>
+      <div id="koreanDetail" class="detail-card hidden" aria-live="polite">
         <div id="kLetter" class="k-letter" lang="ko"></div>
         <div class="k-info">
-          <div class="k-roman"><b id="kRoman"></b> <button id="kSpeak" class="ghost round" type="button" title="Hear it" aria-label="Hear it">🔊</button></div>
-          <div id="kSound" class="hint"></div>
-          <div id="kExample"></div>
-          <div class="k-step"><button id="kPrev" class="ghost" type="button" aria-label="Previous letter">‹ Prev</button><button id="kNext" class="ghost" type="button" aria-label="Next letter">Next ›</button></div>
+          <div class="k-roman"><b id="kRoman"></b><button id="kSpeak" class="l-icon-btn speak" type="button" aria-label="Hear it"><svg class="ico"><use href="#i-speaker"/></svg></button></div>
+          <div id="kSound" class="k-sound"></div>
+          <div id="kExample" class="k-example" lang="ko"></div>
         </div>
+        <div class="k-step"><button id="kPrev" class="l-btn soft" type="button" aria-label="Previous letter">‹ Prev</button><span id="kCount" class="muted"></span><button id="kNext" class="l-btn soft" type="button" aria-label="Next letter">Next ›</button></div>
       </div>
-      <p id="lettersHint" class="hint">Tap a letter to see how it sounds. ✓ means you have seen it, ⭐ means you got it right in a quiz (kept on this phone only).</p>
-    </div>
+      <div id="koreanGrid" class="letter-grid"></div>
+      <p id="lettersHint" class="microcopy"></p>
+    </section>
 
-    <div id="paneQuiz" class="learn-pane hidden">
-      <div id="learnQuizEmpty" class="empty-card"></div>
-      <div id="learnQuiz" class="learn-quiz hidden">
-        <div class="hint">What sound is this letter?</div>
-        <div id="qLetter" class="k-letter" lang="ko"></div>
+    <section id="paneQuiz" class="learn-pane hidden" role="tabpanel" aria-label="Quiz">
+      <div id="learnQuizEmpty" class="state-card">
+        <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
+        <h3 id="quizEmptyTitle">No quiz yet</h3>
+        <p id="quizEmptyText"></p>
+      </div>
+      <div id="learnQuiz" class="quiz-card hidden">
+        <div class="quiz-top"><span id="qCount" class="lchip"></span><span class="muted">What sound is this letter?</span></div>
+        <div id="qLetter" class="k-letter big" lang="ko"></div>
         <div id="qOpts" class="q-opts"></div>
-        <div id="qInfo" class="q-info"></div>
+        <div id="qInfo" class="q-info" role="status" aria-live="polite"></div>
       </div>
-      <div id="learnTeacher" class="learn-row hidden">
-        <button id="learnQuizBtn" type="button">🎯 Start a quiz on this group</button>
-        <button id="learnRevealBtn" class="ghost hidden" type="button">Show answers now</button>
-        <button id="learnNextBtn" class="hidden" type="button">Next question ›</button>
-        <button id="learnStopBtn" class="ghost hidden" type="button">Back to letters</button>
+      <div id="learnTeacher" class="teacher-bar hidden">
+        <button id="learnQuizBtn" class="l-btn primary big" type="button">Start a quiz</button>
+        <button id="learnRevealBtn" class="l-btn soft hidden" type="button">Show answers now</button>
+        <button id="learnNextBtn" class="l-btn primary hidden" type="button">Next question ›</button>
+        <button id="learnStopBtn" class="l-btn soft hidden" type="button">Back to letters</button>
       </div>
-    </div>
+      <div class="tips-card">
+        <h3>Tips</h3>
+        <ul>
+          <li>Everyone gets the same question at the same moment.</li>
+          <li>Answer by tapping a sound — you can answer once.</li>
+          <li>The answers appear when everyone has replied or the teacher shows them.</li>
+          <li>Each right answer is worth 10 points.</li>
+        </ul>
+      </div>
+    </section>
 
-    <div id="paneAsk" class="learn-pane hidden">
-      <div class="learn-ask">
-        <h3 class="rooms-sub">New question</h3>
-        <select id="askTo" aria-label="Ask who"></select>
-        <input id="askText" type="text" maxlength="120" placeholder="e.g. Write “water” in Korean" autocomplete="off">
-        <input id="askExpect" type="text" maxlength="60" placeholder="Right answer (optional — then it is checked for you)" autocomplete="off">
-        <button id="askSend" type="button">Send question</button>
-        <h3 class="rooms-sub">Questions</h3>
-        <div id="askList"></div>
+    <section id="paneAsk" class="learn-pane hidden" role="tabpanel" aria-label="Ask">
+      <form id="askForm" class="form-card" autocomplete="off" onsubmit="return false">
+        <h3>Ask someone to write a word</h3>
+        <label for="askTo">Who do you want to ask?</label>
+        <select id="askTo"></select>
+        <label for="askText">Your question</label>
+        <input id="askText" type="text" maxlength="120" placeholder="e.g. Write “water” in Korean">
+        <div class="counter"><span id="askTextCount">0 / 120</span></div>
+        <label for="askExpect">Right answer <span class="muted">(optional)</span></label>
+        <input id="askExpect" type="text" maxlength="60" lang="ko" placeholder="Checked automatically if you add it">
+        <div class="counter"><span id="askExpectCount">0 / 60</span></div>
+        <button id="askSend" class="l-btn primary big" type="button"><svg class="ico"><use href="#i-send"/></svg> Send question</button>
+        <div id="askMsg" class="form-msg hidden" role="status" aria-live="polite"></div>
+      </form>
+      <h3 class="section-title">Questions</h3>
+      <div id="askList"></div>
+      <div id="askEmptyCard" class="state-card small hidden">
+        <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
+        <p>No questions yet. Ask a friend to write a letter or a word — little steps, big progress.</p>
       </div>
-    </div>
+    </section>
 
-    <div id="learnScores" class="learn-scores"></div>
-  </div>
+    <div id="learnScores" class="learn-scores" aria-label="Points"></div>
+  </main>
+
+  <nav class="learn-nav" aria-label="Lesson sections">
+    <button type="button" data-pane="letters" class="on"><svg class="ico"><use href="#i-book"/></svg><span>Letters</span></button>
+    <button type="button" data-pane="quiz"><svg class="ico"><use href="#i-target"/></svg><span>Quiz</span></button>
+    <button type="button" data-pane="ask"><svg class="ico"><use href="#i-chat"/></svg><span>Ask</span><em id="askBadge" class="nav-badge hidden"></em></button>
+  </nav>
 </section>
 
 <div id="chatFloat" aria-live="polite"></div>

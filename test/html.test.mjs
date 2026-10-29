@@ -8,8 +8,8 @@ const html = fs.readFileSync(new URL('../public/index.html', import.meta.url), '
 const js = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8') + fs.readFileSync(new URL('../public/voice.js', import.meta.url), 'utf8');
 
 test('the Korean quiz hides the letter grid (it labels every letter with its sound) while a question is open', () => {
-  assert.match(js, /openQ[\s\S]{0,200}koreanGrid"\)\.classList\.toggle\("hidden", openQ\)/);
-  assert.match(js, /koreanTabs"\)\.classList\.toggle\("hidden", openQ\)/);
+  assert.ok(js.includes('["koreanTabs", "koreanGrid", "groupProgress"].forEach((id) => $(id).classList.toggle("hidden", openQ))'));
+  assert.ok(js.indexOf('const openQ') < js.indexOf('"koreanGrid", "groupProgress"]'));
 });
 
 test('every id in the page is unique', () => {
