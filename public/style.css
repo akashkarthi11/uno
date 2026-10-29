@@ -1270,3 +1270,9 @@ html[data-theme="classic"] .learn-page {
   --l-forme: #fff4de; --l-forme-line: #f4b9bc; --l-sk1: #f3e7cc; --l-sk2: #fff4de;
 }
 html[data-theme="classic"] .learn-page .letter-grid button.star { border-color: #f1d68a; }
+
+/* the admin's watch window: each player's cards, face up and small */
+#watchPlayers .wp-hand { display: flex; flex-wrap: wrap; gap: 4px; margin: -2px 0 6px 6px; }
+#watchPlayers .wp-hand .card { width: 36px; height: 52px; font-size: 18px; border-width: 2px; border-radius: 6px; }
+#watchPlayers .wp-hand .card .c { font-size: 8px; }
+#watchPlayers .wp-hand .card::before { inset: 7px 3px; }

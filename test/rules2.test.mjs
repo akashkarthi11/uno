@@ -458,8 +458,8 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   const peek = await call({ op: 'peek', room: A, playerId: admin.body.state.you, target: B });
   assert.equal(peek.code, 200);
   assert.deepEqual([peek.body.peek.mode, peek.body.peek.phase, peek.body.peek.players.length], ['private', 'playing', 2]);
-  assert.ok(peek.body.peek.players.every((p) => typeof p.count === 'number' && !('hand' in p)), 'card counts only');
-  assert.equal(JSON.stringify(peek.body).includes('"hand"'), false, 'no cards in the answer');
+  assert.ok(peek.body.peek.players.every((p) => typeof p.count === 'number' && Array.isArray(p.hand) && p.hand.length === p.count), 'the admin sees every hand');
+  // nothing is written to the room and the admin is not a member: nobody in it can tell
   const afterPeek = (await call({ op: 'state', room: B, playerId: bPriv.body.state.you })).body.state;
   assert.equal(afterPeek.players.length, before.players.length, 'the watcher is not a member');
   assert.equal(afterPeek.version, before.version, 'watching changes nothing');

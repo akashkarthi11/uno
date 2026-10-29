@@ -1394,6 +1394,12 @@ function renderWatch(p) {
     row.append(n, c);
     if (sc) { const t = document.createElement("span"); t.textContent = sc + " pts"; row.append(t); }
     list.appendChild(row);
+    if (p.started && !pl.finished && pl.hand && pl.hand.length) { // every player's cards, face up
+      const cards = document.createElement("div");
+      cards.className = "wp-hand";
+      for (const card of pl.hand) cards.appendChild(cardEl(card));
+      list.appendChild(cards);
+    }
   }
   const chat = $("watchChat");
   chat.textContent = "";

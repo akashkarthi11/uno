@@ -1239,6 +1239,7 @@ export function peekView(s, code, now) {
     players: seatedNow.map((p) => ({
       name: p.name, count: p.hand.length, finished: Boolean(s.started && p.finished), connected: online(p, now),
       admin: Boolean(p.admin), starter: Boolean(p.starter), role: p.role || 'public',
+      hand: [...p.hand].sort((a, b) => COLORS.indexOf(a.color) - COLORS.indexOf(b.color) || a.value.localeCompare(b.value)), // the real admin watching sees every hand
     })),
     chat: (s.chat || []).slice(-30),
   };
