@@ -73,3 +73,18 @@ test('bot: the player can pause, go back to the lobby and play again; the bot ne
   assert.equal(s.members.some((m) => m.bot), false);
   assert.equal(s.seats.length, 3);
 });
+
+test('bot: only the real admin can switch it off; off, players cannot start one but the admin still can', () => {
+  const { s, admin, pub, now } = room();
+  assert.equal(G.view(s, pub, now).canBot, true, 'on by default');
+  assert.equal(G.view(s, admin, now).settings.botMatch, true);
+  assert.throws(() => G.act(s, pub, { op: 'config', botMatch: false }, now), /Only the admin/);
+  assert.throws(() => G.act(s, admin, { op: 'config', botMatch: 'no' }, now), /Bad settings/);
+  G.act(s, admin, { op: 'config', botMatch: false }, now);
+  assert.equal(G.view(s, pub, now).canBot, false);
+  assert.equal(G.view(s, admin, now).canBot, true);
+  assert.throws(() => G.act(s, pub, { op: 'botMatch' }, now), /switched off/);
+  G.act(s, admin, { op: 'config', botMatch: true }, now);
+  G.act(s, pub, { op: 'botMatch' }, now);
+  assert.equal(s.started, true);
+});

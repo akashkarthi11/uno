@@ -467,7 +467,17 @@ function togglePublicVideo() {
   send({ op: "config", publicVideo: on }, () => { state = before; render(); });
 }
 $("pubVoiceBtn").addEventListener("click", togglePublicVoice);
+/** Admin: may players start a practice match against the bot? (on by default; off removes the button for everyone but the admin) */
+function toggleBotSwitch() {
+  if (busy || !state || !state.admin) return;
+  const on = !(state.settings && state.settings.botMatch === false) ? false : true;
+  const before = state;
+  state = { ...state, settings: { ...state.settings, botMatch: on }, canBot: true };
+  render();
+  send({ op: "config", botMatch: on }, () => { state = before; render(); });
+}
 $("pubVideoBtn").addEventListener("click", togglePublicVideo);
+$("botSwitchBtn").addEventListener("click", toggleBotSwitch);
 
 function renderRelayBtn(s) {
   const pv = $("pubVoiceBtn");
@@ -486,6 +496,12 @@ function renderRelayBtn(s) {
   pvid.title = pvidOn
     ? "Public players can use their camera. Click to hide public video (you and private players keep it)."
     : "Public players cannot use a camera. Click to allow it again.";
+  const bsw = $("botSwitchBtn");
+  bsw.classList.toggle("hidden", !s.admin); // the real admin only, in public and private games alike
+  const botOn = !(s.settings && s.settings.botMatch === false);
+  bsw.textContent = "🤖 Vs Bot: " + (botOn ? "on" : "off");
+  bsw.classList.toggle("on", botOn);
+  bsw.title = botOn ? "Players can start a match against the bot. Click to switch it off." : "The bot is off for players (you can still start one). Click to switch it on.";
   const btn = $("relayBtn");
   btn.classList.toggle("hidden", !s.admin); // only the real admin, not a co-admin
   const on = Boolean(s.settings && s.settings.voiceRelay);
@@ -623,7 +639,7 @@ function renderLobby(s) {
   }
   $("koreanBtn").classList.toggle("hidden", !s.private); // private games only: they hold the real admin and private players, nobody else
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
-  $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over)); // anyone may start a practice match against the bot
+  $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over) || s.canBot === false); // anyone may start a practice match against the bot
   $("lobbyCount").textContent = s.players.length + (s.players.length === 1 ? " player" : " players");
   $("startBtn").classList.toggle("hidden", !isHost);
   $("startBtn").disabled = s.players.length < 2;

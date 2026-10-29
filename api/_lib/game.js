@@ -373,6 +373,9 @@ function chat(s, p, raw, now) {
 /** Voice chat is for the admin and private players. */
 export const canVoice = (s, p) => Boolean(p.admin || p.role === 'private' || publicVoiceOf(s));
 // Public players' camera: allowed unless the real admin switched it off (the admin and private players always may).
+// The practice match against the bot: on unless the real admin switched it off (the real admin can always start one).
+export const botOf = (s) => !(s.settings && s.settings.botMatch === false);
+export const canBot = (s, p) => Boolean(p.admin || botOf(s));
 export const publicVideoOf = (s) => !(s.settings && s.settings.publicVideo === false);
 export const canVideo = (s, p) => canVoice(s, p) && Boolean(p.admin || p.role === 'private' || publicVideoOf(s));
 export const publicVoiceOf = (s) => Boolean(s.settings && s.settings.publicVoice && !s.private); // never in a private game
@@ -581,15 +584,16 @@ function start(s, p, now, only = null) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
-  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, publicVideo, stacking, challenge: challengeOpt } = b || {};
+  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, publicVideo, botMatch: botOpt, stacking, challenge: challengeOpt } = b || {};
   const hasSupers = supers && typeof supers === 'object';
   // the voice route and public voice are the real admin's alone (a co-admin has the rest of the game settings)
-  if ((voiceRelay !== undefined || publicVoice !== undefined || publicVideo !== undefined) && !p.admin) fail('Only the admin can do that.');
-  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && publicVideo === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
+  if ((voiceRelay !== undefined || publicVoice !== undefined || publicVideo !== undefined || botOpt !== undefined) && !p.admin) fail('Only the admin can do that.');
+  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && publicVideo === undefined && botOpt === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
   if (stacking !== undefined && typeof stacking !== 'boolean') fail('Bad settings.');
   if (challengeOpt !== undefined && typeof challengeOpt !== 'boolean') fail('Bad settings.');
   if (publicVoice !== undefined && typeof publicVoice !== 'boolean') fail('Bad settings.');
   if (publicVideo !== undefined && typeof publicVideo !== 'boolean') fail('Bad settings.');
+  if (botOpt !== undefined && typeof botOpt !== 'boolean') fail('Bad settings.');
   if (publicVoice === true && s.private) fail('Public voice is only for public games.');
   if (turnSecs !== undefined && !(Number.isInteger(turnSecs) && turnSecs >= TURN_MIN_SECS && turnSecs <= TURN_MAX_SECS)) {
     fail(`Turn time must be a whole number of seconds from ${TURN_MIN_SECS} to ${TURN_MAX_SECS}.`);
@@ -611,6 +615,7 @@ function setConfig(s, p, b) {
     voiceRelay: voiceRelay !== undefined ? voiceRelay : voiceRelayOf(s),
     publicVoice: publicVoice !== undefined ? publicVoice : publicVoiceOf(s),
     publicVideo: publicVideo !== undefined ? publicVideo : publicVideoOf(s),
+    botMatch: botOpt !== undefined ? botOpt : botOf(s),
     stacking: stacking !== undefined ? stacking : stackingOf(s),
     challenge: challengeOpt !== undefined ? challengeOpt : challengeOf(s),
     turnSecs: turnSecs !== undefined ? turnSecs : turnMsOf(s) / 1000,
@@ -1153,6 +1158,7 @@ const isBotHost = (s, p) => Boolean(s.botGame && s.botHost === p.id);
  * bot are dealt in; anybody else in the room watches. The match is not counted in the table's stats.
  */
 function botMatch(s, p, now) {
+  if (!canBot(s, p)) fail('The bot is switched off.');
   if (s.started && !s.over) fail('A game is already running.');
   s.members = s.members.filter((m) => !m.bot);
   const bot = { id: 'bot-' + randomUUID(), name: BOT_NAME, admin: false, role: 'public', bot: true, lastSeen: now, hand: [], saidUno: false, finished: false };
@@ -1310,10 +1316,11 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), botMatch: botOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
     learn: learnView(s, me), // the live Korean lesson: undefined (not even sent) for anyone but the admin and private players
     canVoice: canVoice(s, me),
     canVideo: canVideo(s, me),
+    canBot: canBot(s, me),
     voice: canVoice(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
   };
   if (!s.started) return out;
