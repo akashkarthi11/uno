@@ -1176,16 +1176,16 @@ body.in-game .actions button { width: 100%; }
   --l-ink: #2b2a4c; --l-muted: #66658a; --l-line: #e6e2fa; --l-soft: #f6f4ff; --l-lav: #eeeafe; --l-purple: #6c55e6; --l-purple-d: #5740cf;
   --l-mint: #d8f6ea; --l-mint-ink: #0f6b4a; --l-peach: #ffe8da; --l-peach-ink: #a24a1c; --l-shadow: 0 6px 20px rgba(108, 85, 230, .12); --l-shadow-s: 0 2px 8px rgba(108, 85, 230, .10);
   max-width: 560px; border: 1px solid var(--l-line); border-radius: 26px; box-shadow: var(--l-shadow); color: var(--l-ink); text-align: left;
-  background: radial-gradient(700px 220px at 50% -70px, #efeaff 0%, rgba(255,255,255,0) 70%), #fff;
+  background: radial-gradient(700px 220px at 50% -70px, var(--l-glow, #efeaff) 0%, rgba(255,255,255,0) 70%), var(--l-card, #fff);
   font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-.lobby-pastel .lobby-hero { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 20px; background: #fff; border: 1px solid var(--l-line); box-shadow: var(--l-shadow-s); }
+.lobby-pastel .lobby-hero { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 20px; background: var(--l-card, #fff); border: 1px solid var(--l-line); box-shadow: var(--l-shadow-s); }
 .lobby-pastel .mascot { width: 54px; height: 54px; flex: none; }
 .lobby-pastel .lobby-title { flex: 1; min-width: 0; }
 .lobby-pastel h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -.01em; color: var(--l-ink); }
 .lobby-pastel .hint { color: var(--l-muted); font-weight: 600; font-size: 13px; margin-top: 2px; }
 .lobby-pastel .lchip { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: 999px; background: var(--l-mint); color: var(--l-mint-ink); font-size: 13px; font-weight: 800; white-space: nowrap; }
-.lobby-pastel #lobbyPlayers li { background: #fff; border: 1.5px solid var(--l-line); border-radius: 18px; padding: 10px 14px; box-shadow: var(--l-shadow-s); }
+.lobby-pastel #lobbyPlayers li { background: var(--l-card, #fff); border: 1.5px solid var(--l-line); border-radius: 18px; padding: 10px 14px; box-shadow: var(--l-shadow-s); }
 .lobby-pastel #lobbyPlayers li .who { font-weight: 800; }
 .lobby-pastel #lobbyPlayers li.speaking { border-color: #1f9d6e; box-shadow: 0 0 0 3px rgba(31,157,110,.2); }
 .lobby-pastel .badge { background: var(--l-lav); color: var(--l-purple-d); border: 0; font-weight: 800; }
@@ -1207,7 +1207,43 @@ body.in-game .actions button { width: 100%; }
 
 /* sign-in: the same card as the lobby */
 #joinScreen.lobby-pastel label { color: var(--l-ink); font-weight: 800; }
-#joinScreen.lobby-pastel input { border: 1.5px solid var(--l-line); border-radius: 14px; background: #fff; color: var(--l-ink); font-weight: 600; }
+#joinScreen.lobby-pastel input { border: 1.5px solid var(--l-line); border-radius: 14px; background: var(--l-input, #fff); color: var(--l-ink); font-weight: 600; }
 #joinScreen.lobby-pastel input:focus { border-color: var(--l-purple); box-shadow: 0 0 0 3px rgba(108, 85, 230, .18); outline: 0; }
 #joinScreen.lobby-pastel #joinBtn { min-height: 52px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: var(--l-purple); box-shadow: 0 8px 18px rgba(108, 85, 230, .34); }
 #joinScreen.lobby-pastel #joinBtn:hover:not(:disabled) { background: var(--l-purple-d); }
+
+/* ---------- dark mode: the Midnight theme, and a phone / computer set to dark (sign-in and lobby only) ---------- */
+
+html[data-theme="midnight"] .lobby-pastel {
+  --l-ink: #ece9ff; --l-muted: #a9a6cc; --l-line: #35315f; --l-soft: #1d1a3a; --l-lav: #2c2658; --l-purple: #7b63f0; --l-purple-d: #6a52e0;
+  --l-mint: #123a2d; --l-mint-ink: #8be8c1; --l-card: #181538; --l-glow: #2a2457; --l-input: #110f2b;
+  --l-shadow: 0 6px 24px rgba(0,0,0,.45); --l-shadow-s: 0 2px 10px rgba(0,0,0,.35);
+}
+html[data-theme="midnight"] body:has(#joinScreen:not(.hidden)), html[data-theme="midnight"] body:has(#lobby:not(.hidden)) { background: radial-gradient(900px 300px at 50% -90px, #2a2457 0%, rgba(12,10,32,0) 70%), #0e0c24; }
+html[data-theme="midnight"] body:has(#joinScreen:not(.hidden)) header, html[data-theme="midnight"] body:has(#lobby:not(.hidden)) header { background: rgba(14,12,36,.9); border-color: #35315f; }
+html[data-theme="midnight"] .lobby-pastel input { background: #110f2b; color: #ece9ff; }
+html[data-theme="midnight"] .lobby-pastel input::placeholder { color: #8280ad; }
+html[data-theme="midnight"] .lobby-pastel #chatLog .msg .bubble { background: #221e4a; color: #ece9ff; }
+html[data-theme="midnight"] .lobby-pastel #chatLog .msg .who { color: #a9a6cc; }
+html[data-theme="midnight"] .lobby-pastel #emojiBar button { background: #221e4a; }
+html[data-theme="midnight"] .lobby-pastel button.ghost { background: #221e4a; color: #ece9ff; border-color: #35315f; }
+html[data-theme="midnight"] .lobby-pastel #koreanBtn { background: var(--l-lav); color: #cfc6ff; }
+html[data-theme="midnight"] .lobby-pastel .badge { color: #cfc6ff; }
+
+@media (prefers-color-scheme: dark) {
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel {
+  --l-ink: #ece9ff; --l-muted: #a9a6cc; --l-line: #35315f; --l-soft: #1d1a3a; --l-lav: #2c2658; --l-purple: #7b63f0; --l-purple-d: #6a52e0;
+  --l-mint: #123a2d; --l-mint-ink: #8be8c1; --l-card: #181538; --l-glow: #2a2457; --l-input: #110f2b;
+  --l-shadow: 0 6px 24px rgba(0,0,0,.45); --l-shadow-s: 0 2px 10px rgba(0,0,0,.35);
+}
+html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#joinScreen:not(.hidden)), html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#lobby:not(.hidden)) { background: radial-gradient(900px 300px at 50% -90px, #2a2457 0%, rgba(12,10,32,0) 70%), #0e0c24; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#joinScreen:not(.hidden)) header, html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#lobby:not(.hidden)) header { background: rgba(14,12,36,.9); border-color: #35315f; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel input { background: #110f2b; color: #ece9ff; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel input::placeholder { color: #8280ad; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #chatLog .msg .bubble { background: #221e4a; color: #ece9ff; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #chatLog .msg .who { color: #a9a6cc; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #emojiBar button { background: #221e4a; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel button.ghost { background: #221e4a; color: #ece9ff; border-color: #35315f; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel #koreanBtn { background: var(--l-lav); color: #cfc6ff; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) .lobby-pastel .badge { color: #cfc6ff; }
+}
