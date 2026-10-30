@@ -50,6 +50,8 @@
   </div>
   <ul id="lobbyPlayers"></ul>
   <button id="startBtn">Start game</button>
+  <button id="koreanBtn" class="ghost hidden" type="button">🇰🇷 Learn Korean</button>
+  <button id="videoBtn" class="ghost hidden" type="button">🎬 AI videos</button>
   <div id="chat">
     <div id="chatLog"></div>
     <div id="emojiBar"></div>
@@ -61,12 +63,9 @@
     </form>
   </div>
   <nav id="lobbyNav" class="lobby-nav" aria-label="Lobby menu">
+    <button id="lnChat" type="button" title="Chat" aria-pressed="false"><span class="ic">💬</span><span class="lb">Chat</span><em id="lnChatBadge" class="nav-badge hidden"></em></button>
     <button id="botBtn" type="button" title="Play against the bot"><span class="ic">🤖</span><span class="lb">Bot</span></button>
-    <button id="koreanBtn" class="hidden" type="button" title="Learn Korean"><span class="ic">🇰🇷</span><span class="lb">Korean</span></button>
-    <button id="videoBtn" class="hidden" type="button" title="AI videos"><span class="ic">🎬</span><span class="lb">Videos</span></button>
     <button id="lnStats" type="button" title="Stats"><span class="ic">📊</span><span class="lb">Stats</span></button>
-    <button id="lnRules" type="button" title="Rules"><span class="ic">📖</span><span class="lb">Rules</span></button>
-    <button id="lnRooms" class="hidden" type="button" title="Rooms"><span class="ic">🗂</span><span class="lb">Rooms</span></button>
     <button id="lnSettings" type="button" title="Settings"><span class="ic">⚙</span><span class="lb">Settings</span></button>
   </nav>
 </section>

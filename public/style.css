@@ -1430,3 +1430,16 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
 @media (min-width: 700px) { .lobby-nav { max-width: 640px; left: 50%; right: auto; width: 100%; transform: translateX(-50%); border-radius: 18px 18px 0 0; border: 1px solid var(--l-line, #e6e2fa); border-bottom: 0; } }
 .lobby-pastel .lobby-nav :is(#botBtn, #koreanBtn, #videoBtn, #lnStats, #lnRules, #lnRooms, #lnSettings) { background: transparent !important; color: var(--l-muted, #66658a) !important; border: 0 !important; }
 .lobby-pastel .lobby-nav :is(#botBtn, #koreanBtn, #videoBtn, #lnStats, #lnRules, #lnRooms, #lnSettings):hover { background: var(--l-lav, #eeeafe) !important; color: var(--l-purple-d, #5740cf) !important; }
+
+/* lobby: the Chat button in the bottom bar swaps the players list for the chat, which then fills the screen */
+#lobby.chat-view { display: flex; flex-direction: column; min-height: calc(var(--app-h, 100vh) - 56px); padding-bottom: 92px; }
+#lobby.chat-view > :not(#chat):not(.lobby-nav) { display: none; }
+#lobby.chat-view #chat { flex: 1; min-height: 0; border-top: 0; padding-top: 0; }
+#lobby.chat-view #chatLog { flex: 1; height: auto; min-height: 220px; }
+.lobby-pastel .lobby-nav :is(#lnChat).on { background: var(--l-lav, #eeeafe) !important; color: var(--l-purple-d, #5740cf) !important; }
+.lobby-nav #lnChat { position: relative; }
+.lobby-nav .nav-badge { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--l-red, #d6455a); color: #fff; font: 800 11px/18px system-ui, sans-serif; text-align: center; font-style: normal; }
+#lobby:not(.chat-view) #chat { display: none; } /* in the lobby the chat lives behind the bar's Chat button */
+#lobby.chat-view { height: calc(var(--app-h, 100vh) - 56px); min-height: 0; overflow: hidden; }
+#lobby.chat-view #chatLog { min-height: 80px; }
+#lobby.chat-view { position: fixed; left: 0; right: 0; top: var(--hdr-h, 86px); bottom: 0; height: auto; min-height: 0; max-width: none; margin: 0; border-radius: 0; padding: 10px 12px 84px; }

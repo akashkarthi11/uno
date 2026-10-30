@@ -161,6 +161,9 @@ if (window.visualViewport) window.visualViewport.addEventListener("resize", setA
 function resetScreenCaches() {
   chatShown = 10;
   replyTo = null;
+  lobbyChatOpen = false;
+  $("lobby").classList.remove("chat-view");
+  $("lnChat").classList.remove("on");
   chatSig = "";
   hangul = null; // the letters are fetched again after a new sign-in, so they never outlive the right to see them
   if (typeof closeLearn === "function") closeLearn();
@@ -993,12 +996,14 @@ let chatSig = "";
 let chatOpen = false; // the floating panel during a game
 let chatSeenT = 0; // newest message the player has had a chance to read
 let chatInGame = false;
+let lobbyChatOpen = false; // the lobby shows the chat instead of the players list
 
 /** The chat sits in the lobby card; during a game it moves into a floating panel opened by the 💬 button. */
 function placeChat(inGame) {
   chatInGame = inGame;
   const chat = $("chat");
   if (inGame) {
+    if (lobbyChatOpen) setLobbyChat(false);
     if (chat.parentElement !== $("chatDock")) $("chatDock").appendChild(chat);
   } else {
     const home = learnOpen ? $("chatHost") : $("lobby"); // the Learn page has a Chat tab of its own while it is open
@@ -1012,7 +1017,7 @@ function placeChat(inGame) {
 function updateChatUi(s) {
   const msgs = s.chat || [];
   const newest = msgs.length ? msgs[msgs.length - 1].t : 0;
-  const reading = learnOpen ? learnPane === "chat" : !chatInGame || chatOpen; // is the chat on screen right now?
+  const reading = learnOpen ? learnPane === "chat" : chatInGame ? chatOpen : lobbyChatOpen; // is the chat on screen right now?
   if (reading) chatSeenT = Math.max(chatSeenT, newest);
   const unread = msgs.filter((m) => m.t > chatSeenT && m.from !== s.you).length;
   const badge = $("chatBadge");
@@ -1020,6 +1025,8 @@ function updateChatUi(s) {
   badge.classList.toggle("hidden", unread === 0);
   $("chatNavBadge").textContent = unread > 9 ? "9+" : String(unread);
   $("chatNavBadge").classList.toggle("hidden", unread === 0 || !learnOpen);
+  $("lnChatBadge").textContent = unread > 9 ? "9+" : String(unread);
+  $("lnChatBadge").classList.toggle("hidden", unread === 0 || lobbyChatOpen);
   // chat belongs to one game: once it has finished, writing waits for the next one
   $("chatInput").disabled = s.over;
   $("chatAttach").classList.toggle("hidden", !s.private); // pictures are for private games (the admin and private players)
@@ -3139,12 +3146,18 @@ function desktopOnPhone(screenW, screenH, innerW) {
   setInterval(tick, 1000);
 })();
 
-/* ---- the lobby menu: one bar along the bottom, like the Learn page's; the new buttons press the ones that already exist ---- */
-[["lnStats", "statsBtn"], ["lnRules", "rulesBtn"], ["lnSettings", "settingsBtn"], ["lnRooms", "roomsBtn"]].forEach(([nav, real]) => {
-  $(nav).addEventListener("click", () => $(real).click());
+/* ---- the lobby menu: one bar along the bottom (Chat, Bot, Stats, Settings), like the Learn page's ---- */
+[["lnStats", "statsBtn"], ["lnSettings", "settingsBtn"]].forEach(([nav, real]) => {
+  $(nav).addEventListener("click", () => $(real).click()); // the same windows the old buttons open
 });
-{
-  const syncRooms = () => $("lnRooms").classList.toggle("hidden", $("roomsBtn").classList.contains("hidden"));
-  new MutationObserver(syncRooms).observe($("roomsBtn"), { attributes: true, attributeFilter: ["class"] });
-  syncRooms();
+/** Chat is a screen of its own in the lobby: the bar's Chat button swaps the players list for the chat and back. */
+function setLobbyChat(on) {
+  lobbyChatOpen = on;
+  $("lobby").style.setProperty("--hdr-h", Math.ceil(document.querySelector("header").getBoundingClientRect().bottom) + "px");
+  $("lobby").classList.toggle("chat-view", on);
+  $("lnChat").classList.toggle("on", on);
+  $("lnChat").setAttribute("aria-pressed", on ? "true" : "false");
+  if (state) updateChatUi(state);
+  if (on) { const log = $("chatLog"); log.scrollTop = log.scrollHeight; }
 }
+$("lnChat").addEventListener("click", () => setLobbyChat(!lobbyChatOpen));
