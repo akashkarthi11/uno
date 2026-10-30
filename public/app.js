@@ -164,6 +164,7 @@ function resetScreenCaches() {
   lobbyChatOpen = false;
   $("lobby").classList.remove("chat-view");
   $("lnChat").classList.remove("on");
+  $("lnHome").classList.add("on");
   chatSig = "";
   hangul = null; // the letters are fetched again after a new sign-in, so they never outlive the right to see them
   if (typeof closeLearn === "function") closeLearn();
@@ -3147,7 +3148,7 @@ function desktopOnPhone(screenW, screenH, innerW) {
 })();
 
 /* ---- the lobby menu: one bar along the bottom (Chat, Bot, Stats, Settings), like the Learn page's ---- */
-[["lnStats", "statsBtn"], ["lnSettings", "settingsBtn"]].forEach(([nav, real]) => {
+[["lnStats", "statsBtn"], ["lnSettings", "settingsBtn"], ["lnExit", "leaveBtn"]].forEach(([nav, real]) => {
   $(nav).addEventListener("click", () => $(real).click()); // the same windows the old buttons open
 });
 /** Chat is a screen of its own in the lobby: the bar's Chat button swaps the players list for the chat and back. */
@@ -3156,8 +3157,11 @@ function setLobbyChat(on) {
   $("lobby").style.setProperty("--hdr-h", Math.ceil(document.querySelector("header").getBoundingClientRect().bottom) + "px");
   $("lobby").classList.toggle("chat-view", on);
   $("lnChat").classList.toggle("on", on);
+  $("lnHome").classList.toggle("on", !on);
+  $("lnHome").setAttribute("aria-pressed", on ? "false" : "true");
   $("lnChat").setAttribute("aria-pressed", on ? "true" : "false");
   if (state) updateChatUi(state);
   if (on) { const log = $("chatLog"); log.scrollTop = log.scrollHeight; }
 }
 $("lnChat").addEventListener("click", () => setLobbyChat(!lobbyChatOpen));
+$("lnHome").addEventListener("click", () => setLobbyChat(false));

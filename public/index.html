@@ -50,6 +50,7 @@
   </div>
   <ul id="lobbyPlayers"></ul>
   <button id="startBtn">Start game</button>
+  <button id="botBtn" class="ghost" type="button">🤖 Play vs Bot</button>
   <button id="koreanBtn" class="ghost hidden" type="button">🇰🇷 Learn Korean</button>
   <button id="videoBtn" class="ghost hidden" type="button">🎬 AI videos</button>
   <div id="chat">
@@ -62,11 +63,12 @@
       <button type="submit">Send</button>
     </form>
   </div>
-  <nav id="lobbyNav" class="lobby-nav" aria-label="Lobby menu">
-    <button id="lnChat" type="button" title="Chat" aria-pressed="false"><span class="ic">💬</span><span class="lb">Chat</span><em id="lnChatBadge" class="nav-badge hidden"></em></button>
-    <button id="botBtn" type="button" title="Play against the bot"><span class="ic">🤖</span><span class="lb">Bot</span></button>
-    <button id="lnStats" type="button" title="Stats"><span class="ic">📊</span><span class="lb">Stats</span></button>
-    <button id="lnSettings" type="button" title="Settings"><span class="ic">⚙</span><span class="lb">Settings</span></button>
+  <nav id="lobbyNav" class="lobby-nav icons-only" aria-label="Lobby menu">
+    <button id="lnHome" class="on" type="button" title="Home" aria-label="Home" aria-pressed="true"><span class="ic">🏠</span></button>
+    <button id="lnChat" type="button" title="Chat" aria-label="Chat" aria-pressed="false"><span class="ic">💬</span><em id="lnChatBadge" class="nav-badge hidden"></em></button>
+    <button id="lnStats" type="button" title="Stats" aria-label="Stats"><span class="ic">📊</span></button>
+    <button id="lnSettings" type="button" title="Settings" aria-label="Settings"><span class="ic">⚙</span></button>
+    <button id="lnExit" type="button" title="Exit to the login screen" aria-label="Exit to the login screen"><span class="ic">🚪</span></button>
   </nav>
 </section>
 

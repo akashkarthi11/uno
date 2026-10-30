@@ -1428,8 +1428,8 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
 .lobby-pastel .lobby-nav button:hover, .lobby-pastel .lobby-nav #botBtn:hover, .lobby-pastel .lobby-nav #koreanBtn:hover, .lobby-pastel .lobby-nav #videoBtn:hover { background: var(--l-lav, #eeeafe); color: var(--l-purple-d, #5740cf); }
 .lobby-pastel .lobby-nav button:active { transform: scale(.95); }
 @media (min-width: 700px) { .lobby-nav { max-width: 640px; left: 50%; right: auto; width: 100%; transform: translateX(-50%); border-radius: 18px 18px 0 0; border: 1px solid var(--l-line, #e6e2fa); border-bottom: 0; } }
-.lobby-pastel .lobby-nav :is(#botBtn, #koreanBtn, #videoBtn, #lnStats, #lnRules, #lnRooms, #lnSettings) { background: transparent !important; color: var(--l-muted, #66658a) !important; border: 0 !important; }
-.lobby-pastel .lobby-nav :is(#botBtn, #koreanBtn, #videoBtn, #lnStats, #lnRules, #lnRooms, #lnSettings):hover { background: var(--l-lav, #eeeafe) !important; color: var(--l-purple-d, #5740cf) !important; }
+.lobby-pastel .lobby-nav :is(#lnHome, #lnChat, #lnStats, #lnSettings, #lnExit) { background: transparent !important; color: var(--l-muted, #66658a) !important; border: 0 !important; }
+.lobby-pastel .lobby-nav :is(#lnHome, #lnChat, #lnStats, #lnSettings, #lnExit):hover { background: var(--l-lav, #eeeafe) !important; color: var(--l-purple-d, #5740cf) !important; }
 
 /* lobby: the Chat button in the bottom bar swaps the players list for the chat, which then fills the screen */
 #lobby.chat-view { display: flex; flex-direction: column; min-height: calc(var(--app-h, 100vh) - 56px); padding-bottom: 92px; }
@@ -1443,3 +1443,10 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
 #lobby.chat-view { height: calc(var(--app-h, 100vh) - 56px); min-height: 0; overflow: hidden; }
 #lobby.chat-view #chatLog { min-height: 80px; }
 #lobby.chat-view { position: fixed; left: 0; right: 0; top: var(--hdr-h, 86px); bottom: 0; height: auto; min-height: 0; max-width: none; margin: 0; border-radius: 0; padding: 10px 12px 84px; }
+
+/* the lobby bar is icons only: Home, Chat, Stats, Settings, Exit */
+.lobby-nav.icons-only { gap: 6px; }
+.lobby-pastel .lobby-nav.icons-only button { max-width: 84px; min-height: 52px; }
+.lobby-nav.icons-only .ic { font-size: 26px; }
+.lobby-pastel .lobby-nav :is(#lnHome).on { background: var(--l-lav, #eeeafe) !important; color: var(--l-purple-d, #5740cf) !important; }
+.lobby-nav.icons-only .nav-badge { left: calc(50% + 8px); }
