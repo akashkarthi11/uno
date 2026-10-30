@@ -270,7 +270,7 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
 - **Co-admin:** the first public player into an empty public room is its co-admin (shown as "admin", can start games, change game
   settings, pause / resume / restart; no relay / public voice / public-private switch, no removing players). The real admin can
   also appoint or remove co-admins. The old 12345678 password is gone.
-- **Own login (needs the Neon database, `DATABASE_URL`):** in a public room the shared password 123456 only opens the door the first
+- **Own login (needs the Neon database: `SG_DATABASE_URL` (Singapore), else `DATABASE_URL`):** in a public room the shared password 123456 only opens the door the first
   time. The person then chooses their own password (6 to 32 characters) and from then on signs in with their name and that
   password. Usernames are unique (any letter case). Passwords are stored only as salted scrypt hashes in the `growx_users` table.
   The admin, private and observer passwords never use accounts. Without `DATABASE_URL` everything works the old way.

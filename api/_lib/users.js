@@ -6,7 +6,8 @@
 // (the shared public password), so a missing database never locks anyone out. GAME_USERS_MEMORY=1 uses an in-memory table for tests.
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
-const URL_ENV = () => process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
+// The Singapore database (a second Neon resource, variables prefixed SG_) is preferred; DATABASE_URL / POSTGRES_URL are the older one in US East.
+const URL_ENV = () => process.env.SG_DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
 export const usersEnabled = () => Boolean(URL_ENV()) || process.env.GAME_USERS_MEMORY === '1';
 
 export const MIN_PASSWORD = 6;
