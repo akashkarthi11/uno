@@ -505,7 +505,7 @@ async function toggleShutdown() {
   try {
     const r = await api({ op: "shutdown", on: turnOn });
     shutdownOn = r.shutdown;
-    toast(turnOn ? "Public play is shut down (" + r.closed + " public room" + (r.closed === 1 ? "" : "s") + " closed)." : "Public play is open again.");
+    toast(turnOn ? "Shut down is ON: public play is closed (" + r.closed + " public room" + (r.closed === 1 ? "" : "s") + " closed)." : "Shut down is OFF: public play is open again.");
   } catch (e) { toast(e.message); return; }
   renderRelayBtn(state);
 }
@@ -552,9 +552,9 @@ function renderRelayBtn(s) {
   ob.title = observerOffNow ? "Observers cannot sign in. Click to allow the observer account again." : "Click to remove every observer and stop the observer account signing in.";
   const sd = $("shutdownBtn");
   sd.classList.toggle("hidden", !s.admin); // the real admin only
-  sd.textContent = shutdownOn ? "✅ Open public play again" : "⛔ Shut down public";
+  sd.textContent = "⛔ Shut down public: " + (shutdownOn ? "on" : "off");
   sd.classList.toggle("on", shutdownOn);
-  sd.title = shutdownOn ? "Public sign-in is off everywhere. Click to open it again." : "Closes every public room and stops public players signing in, until you open it again.";
+  sd.title = shutdownOn ? "Shut down is ON: public sign-in is off everywhere. Click to switch it off and open public play again." : "Shut down is OFF. Click to switch it on: every public room closes and public players cannot sign in until you switch it off.";
   const bsw = $("botSwitchBtn");
   bsw.classList.toggle("hidden", !s.admin); // the real admin only, in public and private games alike
   const botOn = !(s.settings && s.settings.botMatch === false);
