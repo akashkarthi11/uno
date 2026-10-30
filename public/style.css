@@ -1359,3 +1359,15 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
 }
 
 @media (max-width: 440px) { .learn-page .learn-head .flag { display: none; } }
+
+/* ---------- Learn page, Chat tab: only the chat, filling the screen, with the call icons beside it ---------- */
+.learn-page.chatting :is(.learn-banner, .learn-scores, .microcopy) { display: none; }
+.learn-page.chatting .learn-body { display: flex; flex-direction: column; padding-top: 8px; padding-bottom: 8px; }
+.learn-page.chatting #paneChat { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.learn-page.chatting #paneChat.hidden { display: none; }
+.learn-page #chatHost { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.learn-page #chatHost #chat { flex: 1; min-height: 0; }
+.learn-page.chatting #chatLog { flex: 1; height: auto; min-height: 180px; }
+.learn-page #chatHost .learn-media { flex: none; order: -1; }
+.learn-page.chatting .learn-media { display: flex; }
+.learn-page.chatting .learn-media.hidden { display: none; }

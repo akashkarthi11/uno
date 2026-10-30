@@ -1907,6 +1907,11 @@ function setPane(p) {
   const page = $("learnPage");
   if (page) page.scrollTo({ top: 0 });
   if (p === "words") loadLearnBackups();
+  // the Chat tab is only the chat; the mic, mute, camera and call count sit with it there instead of under the header
+  const chatting = p === "chat";
+  $("learnPage").classList.toggle("chatting", chatting);
+  const media = $("learnMedia"), mediaHome = chatting ? $("chatHost") : document.querySelector(".learn-head");
+  if (media.parentElement !== mediaHome) { if (chatting) mediaHome.prepend(media); else mediaHome.appendChild(media); }
   if (p === "chat") { const log = $("chatLog"); log.scrollTop = log.scrollHeight; if (state) updateChatUi(state); }
 }
 document.querySelectorAll(".learn-nav button").forEach((b) => b.addEventListener("click", () => setPane(b.dataset.pane)));
