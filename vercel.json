@@ -1,7 +1,7 @@
 {
   "regions": ["bom1"],
   "functions": {
-    "api/game.js": { "maxDuration": 10 }
+    "api/game.js": { "maxDuration": 60 }
   },
   "headers": [
     {

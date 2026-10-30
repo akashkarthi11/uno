@@ -1371,3 +1371,19 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
 .learn-page #chatHost .learn-media { flex: none; order: -1; }
 .learn-page.chatting .learn-media { display: flex; }
 .learn-page.chatting .learn-media.hidden { display: none; }
+
+/* AI videos */
+#videoForm { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; }
+#videoPrompt { width: 100%; resize: vertical; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; }
+.video-pick { display: flex; align-items: center; gap: 10px; }
+.video-file { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 12px; cursor: pointer; font-size: 14px; font-weight: 700; }
+#videoPicked { display: inline-flex; align-items: center; gap: 6px; }
+#videoThumb { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+#videoList { display: flex; flex-direction: column; gap: 12px; margin: 6px 0 10px; }
+.video-card { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface-soft); }
+.video-card video { width: 100%; display: block; background: #000; max-height: 340px; }
+.video-wait { padding: 22px 14px; text-align: center; font-weight: 700; color: var(--muted); }
+.video-wait.failed { color: #b42318; }
+.video-info { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.video-prompt { font-weight: 700; word-break: break-word; }
+.video-src { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }

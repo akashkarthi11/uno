@@ -679,6 +679,9 @@ function renderLobby(s) {
     ul.appendChild(li);
   }
   $("koreanBtn").classList.toggle("hidden", !s.private); // private games only: they hold the real admin and private players, nobody else
+  const canVid = Boolean(s.canAiVideo);
+  $("videoBtn").classList.toggle("hidden", !canVid);
+  $("videoBtn2").classList.toggle("hidden", !canVid);
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
   $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over) || s.canBot === false); // anyone may start a practice match against the bot
   $("lobbyCount").textContent = s.players.length + (s.players.length === 1 ? " player" : " players");
@@ -2644,6 +2647,126 @@ async function openLearn() {
   renderLearn(state);
 }
 $("koreanBtn").addEventListener("click", openLearn);
+
+/* ---------- AI videos (private rooms): make one from words or from a picture, and keep a list until it is deleted ---------- */
+let videoTimer = null;
+let videoPick = null; // the shrunk picture (a data URL) chosen for the next video
+const fmtMB = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
+
+function shrinkPicture(file, max = 1024) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k);
+      c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That picture could not be read.")); };
+    img.src = url;
+  });
+}
+
+function renderVideos(r) {
+  const L = r.limits;
+  $("videoLimits").textContent = "Today " + L.day + " of " + L.dayMax + " · this month " + L.month + " of " + L.monthMax + " · stored " + fmtMB(L.bytes) + " of " + fmtMB(L.bytesMax);
+  $("videoMake").disabled = !r.ready;
+  if (!r.ready) $("videoLimits").textContent = "Video storage is not set up yet.";
+  const list = $("videoList");
+  list.textContent = "";
+  for (const v of r.videos) {
+    const card = document.createElement("div");
+    card.className = "video-card";
+    if (v.status === "ready") {
+      const el = document.createElement("video");
+      el.src = v.videoUrl;
+      el.controls = true;
+      el.playsInline = true;
+      el.preload = "metadata";
+      card.appendChild(el);
+    } else {
+      const wait = document.createElement("div");
+      wait.className = "video-wait " + v.status;
+      wait.textContent = v.status === "making" ? "⏳ Making the video… (a minute or two)" : "⚠ " + (v.error || "Failed");
+      card.appendChild(wait);
+    }
+    const info = document.createElement("div");
+    info.className = "video-info";
+    const p = document.createElement("div");
+    p.className = "video-prompt";
+    p.textContent = (v.mode === "image" ? "🖼 " : "") + (v.prompt || "(picture only)");
+    const meta = document.createElement("div");
+    meta.className = "hint";
+    meta.textContent = v.by + " · " + fmtAt(v.at) + (v.bytes ? " · " + fmtMB(v.bytes) : "");
+    info.append(p, meta);
+    if (v.imageUrl) {
+      const th = document.createElement("img");
+      th.className = "video-src";
+      th.src = v.imageUrl;
+      th.alt = "";
+      info.appendChild(th);
+    }
+    if (v.canDelete) {
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "ghost remove";
+      del.textContent = "Delete";
+      del.addEventListener("click", async () => {
+        if (!confirm("Delete this video" + (v.imageUrl ? " and its picture" : "") + " for good?")) return;
+        try { renderVideos(await api({ op: "videoDelete", id: v.id })); } catch (e) { toast(e.message); }
+      });
+      info.appendChild(del);
+    }
+    card.appendChild(info);
+    list.appendChild(card);
+  }
+  if (!r.videos.length) { const n = document.createElement("div"); n.className = "none hint"; n.textContent = "No videos yet."; list.appendChild(n); }
+  clearTimeout(videoTimer);
+  if (!$("videoModal").classList.contains("hidden") && r.videos.some((v) => v.status === "making")) {
+    videoTimer = setTimeout(checkVideos, 6000); // finished ones appear by themselves
+  }
+}
+async function checkVideos() {
+  try { renderVideos(await api({ op: "videoCheck" })); } catch (e) { /* the next look tries again */ }
+}
+async function openVideos() {
+  settingsModal.classList.add("hidden");
+  $("videoModal").classList.remove("hidden");
+  $("videoLimits").textContent = "Loading…";
+  try { renderVideos(await api({ op: "videoList" })); checkVideos(); } catch (e) { $("videoLimits").textContent = e.message; }
+}
+function closeVideos() { clearTimeout(videoTimer); $("videoModal").classList.add("hidden"); }
+function clearPick() { videoPick = null; $("videoPicked").classList.add("hidden"); $("videoImage").value = ""; }
+$("videoBtn").addEventListener("click", openVideos);
+$("videoBtn2").addEventListener("click", openVideos);
+$("videoX").addEventListener("click", closeVideos);
+$("videoClose").addEventListener("click", closeVideos);
+$("videoUnpick").addEventListener("click", clearPick);
+$("videoImage").addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    videoPick = await shrinkPicture(f);
+    $("videoThumb").src = videoPick;
+    $("videoPicked").classList.remove("hidden");
+  } catch (err) { toast(err.message); clearPick(); }
+});
+$("videoMake").addEventListener("click", async () => {
+  const prompt = $("videoPrompt").value.trim();
+  if (!videoPick && prompt.length < 3) { toast("Describe the video, or add a picture."); return; }
+  $("videoMake").disabled = true;
+  try {
+    renderVideos(await api({ op: "videoMake", prompt, image: videoPick || undefined }));
+    $("videoPrompt").value = "";
+    clearPick();
+    toast("Making your video…");
+  } catch (e) { toast(e.message); }
+  $("videoMake").disabled = false;
+});
 $("learnRetry").addEventListener("click", openLearn);
 $("learnBack").addEventListener("click", closeLearn);
 

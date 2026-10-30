@@ -1342,6 +1342,7 @@ export function view(s, me, now) {
     canVoice: canVoice(s, me),
     canVideo: canVideo(s, me),
     canBot: canBot(s, me),
+    canAiVideo: Boolean(s.private && canLearn(me)), // the AI video window: private rooms, the real admin and private players
     voice: canCall(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
     // who in the call may hear and be heard (only told to people who may themselves, so a camera-only player learns nothing about roles)
     voiceAudio: canVoice(s, me) ? (s.voice || []).filter((id) => { const m = byId(s, id); return m && canVoice(s, m); }) : undefined,

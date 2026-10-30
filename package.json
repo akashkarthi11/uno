@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.34.3",
+    "@vercel/blob": "^2.8.2",
+    "ai": "^7.0.157",
     "ioredis": "^5.4.1"
   }
 }

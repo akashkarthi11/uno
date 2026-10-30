@@ -174,6 +174,25 @@ export async function setObserverOff(off) {
   if (off) await r.set(obsOffKey, '1'); else await r.del(obsOffKey);
 }
 
+/** AI videos: one small JSON value (the list and the counters), kept with no expiry. Edited under a lock; fn(db) changes it in place. */
+const VIDEO_KEY = 'growx:video:index';
+let videoMem = null;
+export async function videoRead() {
+  if (!usingRedis) return structuredClone(videoMem || { items: [], meta: {} });
+  const v = await (await client()).get(VIDEO_KEY);
+  if (!v) return { items: [], meta: {} };
+  return typeof v === 'string' ? JSON.parse(v) : v;
+}
+export function videoUpdate(fn) {
+  return locked('__video__', async () => {
+    const db = await videoRead();
+    const out = await fn(db);
+    if (usingRedis) await (await client()).set(VIDEO_KEY, JSON.stringify(db));
+    else videoMem = structuredClone(db);
+    return out;
+  });
+}
+
 export async function pushJoin(evt) {
   if (!usingRedis) {
     joinsMem = [...joinsMem, evt].slice(-100);

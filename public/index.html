@@ -52,6 +52,7 @@
   <button id="startBtn">Start game</button>
   <button id="botBtn" class="ghost" type="button">🤖 Play vs Bot</button>
   <button id="koreanBtn" class="ghost hidden" type="button">🇰🇷 Learn Korean</button>
+  <button id="videoBtn" class="ghost hidden" type="button">🎬 AI videos</button>
   <div id="chat">
     <div id="chatLog"></div>
     <div id="emojiBar"></div>
@@ -133,6 +134,7 @@
         <button id="fsBtn" class="ghost" type="button">⛶ Landscape / full screen</button>
         <button id="installBtn" class="ghost" type="button">📲 Install app (no address bar)</button>
         <button id="statsBtn" class="ghost" type="button">📊 Stats</button>
+        <button id="videoBtn2" class="ghost hidden" type="button">🎬 AI videos</button>
         <button id="rulesBtn" class="ghost" type="button">📖 Rules</button>
         <button id="copyLink" class="ghost" type="button">🔗 Copy invite link</button>
         <button id="roomsBtn" class="ghost hidden" type="button">🗂 Rooms</button>
@@ -428,6 +430,27 @@
 
 <div id="chatFloat" aria-live="polite"></div>
 <div id="videoStrip"><button id="vToggle" class="hidden" type="button" aria-label="Show or hide video">📹</button><div id="vTiles"></div></div>
+
+<div id="videoModal" class="modal hidden">
+  <div class="box sheet">
+    <div class="sheet-head">
+      <h2>🎬 AI videos</h2>
+      <button id="videoX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
+    </div>
+    <p id="videoLimits" class="hint">Loading…</p>
+    <div id="videoForm">
+      <textarea id="videoPrompt" maxlength="200" rows="2" placeholder="Describe the video…"></textarea>
+      <div class="video-pick">
+        <label class="ghost video-file">🖼 Add a picture <input id="videoImage" type="file" accept="image/*" hidden></label>
+        <span id="videoPicked" class="hidden"><img id="videoThumb" alt=""><button id="videoUnpick" class="icon ghost" type="button" title="Remove the picture" aria-label="Remove the picture">✕</button></span>
+      </div>
+      <button id="videoMake" type="button">Make the video</button>
+      <p class="hint">With a picture, the picture is brought to life (the words are optional). A video takes a minute or two; you can close this window and come back. Videos stay in the list until somebody deletes them.</p>
+    </div>
+    <div id="videoList"></div>
+    <button id="videoClose" class="ghost sticky-close" type="button">Close</button>
+  </div>
+</div>
 
 <div id="watchModal" class="modal hidden">
   <div class="box sheet">

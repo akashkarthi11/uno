@@ -2,7 +2,8 @@ import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
 import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, isShutdown, setShutdown, isObserverOff, setObserverOff } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, isShutdown, setShutdown, isObserverOff, setObserverOff, videoRead, videoUpdate } from './_lib/store.js';
+import * as V from './_lib/video.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -320,6 +321,119 @@ export default async function handler(req, res) {
 
     // The private "Learn Korean" page: only the real admin and private players get anything; everyone else gets the same
     // answer as for an action that does not exist, so there is nothing to find.
+    // AI videos: the real admin and private players, in private rooms only; anybody else gets what a made-up action gets.
+    if (['videoList', 'videoMake', 'videoCheck', 'videoDelete'].includes(b.op)) {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      if (!me || !s.private || !G.canLearn(me)) return res.status(400).json({ error: 'Unknown action.' });
+      const day = new Date(now).toISOString().slice(0, 10), month = day.slice(0, 7);
+      const roll = (meta) => {
+        if (meta.day !== day) { meta.day = day; meta.dayN = 0; }
+        if (meta.month !== month) { meta.month = month; meta.monthN = 0; }
+      };
+      const view = (db) => ({
+        videos: db.items.slice().sort((x, y) => y.at - x.at).map((i) => ({
+          id: i.id, prompt: i.prompt, by: i.by, at: i.at, mode: i.mode, status: i.status, error: i.error,
+          videoUrl: i.videoUrl, imageUrl: i.imageUrl, bytes: i.bytes || 0, canDelete: Boolean(me.admin || i.byId === me.id),
+        })),
+        limits: {
+          day: db.meta.day === day ? db.meta.dayN || 0 : 0, dayMax: V.videoDaily(),
+          month: db.meta.month === month ? db.meta.monthN || 0 : 0, monthMax: V.videoMonthly(),
+          bytes: db.items.reduce((n, i) => n + (i.bytes || 0), 0), bytesMax: V.STORAGE_MAX,
+        },
+        ready: V.videoReady(),
+      });
+
+      if (b.op === 'videoList') return res.json(view(await videoRead()));
+
+      if (b.op === 'videoDelete') {
+        const id = String(b.id ?? '');
+        const db0 = await videoRead();
+        const it = db0.items.find((i) => i.id === id);
+        if (!it || !(me.admin || it.byId === me.id)) throw new G.GameError('That video is not there (or is not yours).');
+        await V.delFiles([it.videoUrl, it.imageUrl]).catch(() => {});
+        await videoUpdate((db) => { db.items = db.items.filter((i) => i.id !== id); });
+        return res.json(view(await videoRead()));
+      }
+
+      if (b.op === 'videoMake') {
+        if (!V.videoReady()) throw new G.GameError('Video storage is not set up yet.');
+        const text = String(b.prompt ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+        let image = null;
+        if (b.image) {
+          const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(b.image));
+          if (!m) throw new G.GameError('Use a JPEG, PNG or WebP picture.');
+          image = { type: m[1], bytes: Buffer.from(m[2], 'base64') };
+          if (image.bytes.length > V.IMAGE_MAX) throw new G.GameError('That picture is too big — pick a smaller one.');
+        }
+        if (!image && text.length < 3) throw new G.GameError('Describe the video (a few words) or add a picture.');
+        const id = 'v' + now.toString(36) + Math.random().toString(36).slice(2, 6);
+        // reserve first (the caps are checked and the counters raised under the lock), then do the slow work
+        await videoUpdate((db) => {
+          roll(db.meta);
+          if (db.meta.dayN >= V.videoDaily()) throw new G.GameError('Daily limit reached (' + V.videoDaily() + ' videos a day). Try again tomorrow.');
+          if (db.meta.monthN >= V.videoMonthly()) throw new G.GameError('Monthly limit reached (' + V.videoMonthly() + ' videos).');
+          if (db.items.reduce((n, i) => n + (i.bytes || 0), 0) > V.STORAGE_MAX) throw new G.GameError('Video storage is full — delete some old videos first.');
+          db.meta.dayN++;
+          db.meta.monthN++;
+          db.items.push({ id, prompt: text, by: me.name, byId: me.id, at: now, mode: image ? 'image' : 'text', status: 'making' });
+        });
+        try {
+          let imageUrl = null, imageBytes = 0;
+          if (image) {
+            imageUrl = (await V.putFile('video-in/' + id + (image.type === 'image/png' ? '.png' : image.type === 'image/webp' ? '.webp' : '.jpg'), image.bytes, image.type)).url;
+            imageBytes = image.bytes.length;
+          }
+          const op = await V.startVideo({ imageUrl, text: text || 'Bring this picture to life with gentle, natural motion.' });
+          await videoUpdate((db) => { const it = db.items.find((i) => i.id === id); if (it) { it.op = op; it.model = V.modelFor(Boolean(imageUrl)); it.imageUrl = imageUrl || undefined; it.imgBytes = imageBytes; it.bytes = imageBytes; } });
+        } catch (e) {
+          console.error('video start failed', e && e.message);
+          await videoUpdate((db) => { // it never started, so it costs nothing: take the count back
+            roll(db.meta);
+            const it = db.items.find((i) => i.id === id);
+            if (it) { it.status = 'failed'; it.error = 'Could not start: ' + String((e && e.message) || e).slice(0, 120); db.meta.dayN = Math.max(0, db.meta.dayN - 1); db.meta.monthN = Math.max(0, db.meta.monthN - 1); }
+          });
+        }
+        return res.json(view(await videoRead()));
+      }
+
+      // videoCheck: look at every video that is still being made; finished ones are copied into Blob and become playable
+      const db0 = await videoRead();
+      for (const it of db0.items.filter((i) => i.status === 'making')) {
+        if (!it.op) {
+          if (now - it.at > 120000) await videoUpdate((db) => { const x = db.items.find((i) => i.id === it.id); if (x && !x.op) { x.status = 'failed'; x.error = 'Could not start.'; } });
+          continue;
+        }
+        if (it.finalizing && now - it.finalizing < 60000) continue;
+        let st;
+        try { st = await V.getStatus(it.op, it.model); } catch (e) { console.error('video status failed', e && e.message); continue; }
+        if (st.state === 'pending') {
+          if (now - it.at > 20 * 60000) await videoUpdate((db) => { const x = db.items.find((i) => i.id === it.id); if (x) { x.status = 'failed'; x.error = 'Took too long.'; delete x.op; } });
+          continue;
+        }
+        if (st.state === 'error') {
+          await videoUpdate((db) => { const x = db.items.find((i) => i.id === it.id); if (x) { x.status = 'failed'; x.error = st.message; delete x.op; } });
+          continue;
+        }
+        const claimed = await videoUpdate((db) => { const x = db.items.find((i) => i.id === it.id); if (!x || x.status !== 'making' || (x.finalizing && now - x.finalizing < 60000)) return false; x.finalizing = now; return true; });
+        if (!claimed) continue;
+        try {
+          let bytes = st.bytes;
+          if (!bytes) {
+            const r = await fetch(st.url);
+            if (!r.ok) throw new Error('download ' + r.status);
+            bytes = Buffer.from(await r.arrayBuffer());
+          }
+          const saved = await V.putFile('video-out/' + it.id + '.mp4', bytes, 'video/mp4');
+          await videoUpdate((db) => { const x = db.items.find((i) => i.id === it.id); if (x) { x.status = 'ready'; x.videoUrl = saved.url; x.bytes = (x.imgBytes || 0) + bytes.length; delete x.op; delete x.finalizing; } });
+        } catch (e) {
+          console.error('video save failed', e && e.message);
+          await videoUpdate((db) => { const x = db.items.find((i) => i.id === it.id); if (x) delete x.finalizing; }); // tried again on the next check
+        }
+      }
+      return res.json(view(await videoRead()));
+    }
+
     if (b.op === 'korean') {
       const s = await readRoom(code);
       const me = s && s.members.find((m) => m.id === b.playerId);
