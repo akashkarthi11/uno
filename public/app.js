@@ -494,6 +494,21 @@ async function toggleShutdown() {
 }
 $("shutdownBtn").addEventListener("click", toggleShutdown);
 
+/** The real admin: switch the observer account off (every observer is removed and cannot sign in) or back on. */
+let observerOffNow = false;
+async function toggleObserverSwitch() {
+  if (!state || !state.admin) return;
+  const turnOff = !observerOffNow;
+  if (turnOff && !confirm("Switch the observer account off?\n\nEvery observer is removed from every room right now, and nobody can sign in as an observer until you switch it on again.")) return;
+  try {
+    const r = await api({ op: "observerSwitch", off: turnOff });
+    observerOffNow = r.observerOff;
+    toast(turnOff ? "Observer account is off (" + r.removed + " removed)." : "Observer account is on again.");
+  } catch (e) { toast(e.message); return; }
+  renderRelayBtn(state);
+}
+$("observerSwitchBtn").addEventListener("click", toggleObserverSwitch);
+
 function renderRelayBtn(s) {
   const pv = $("pubVoiceBtn");
   pv.classList.toggle("hidden", !s.admin || s.private); // a private game has no public players, so the switch is not needed there
@@ -512,6 +527,12 @@ function renderRelayBtn(s) {
     ? "Public players can use their camera. Click to hide public video (you and private players keep it)."
     : "Public players cannot use a camera. Click to allow it again.";
   if (s.shutdown !== undefined) shutdownOn = s.shutdown;
+  if (s.observerOff !== undefined) observerOffNow = s.observerOff;
+  const ob = $("observerSwitchBtn");
+  ob.classList.toggle("hidden", !s.admin); // the real admin only
+  ob.textContent = "👁 Observer account: " + (observerOffNow ? "off" : "on");
+  ob.classList.toggle("on", !observerOffNow);
+  ob.title = observerOffNow ? "Observers cannot sign in. Click to allow the observer account again." : "Click to remove every observer and stop the observer account signing in.";
   const sd = $("shutdownBtn");
   sd.classList.toggle("hidden", !s.admin); // the real admin only
   sd.textContent = shutdownOn ? "✅ Open public play again" : "⛔ Shut down public";
@@ -1357,7 +1378,7 @@ function renderRooms(r) {
     badge.className = "badge";
     badge.textContent = (room.mode === "private" ? "🔒 private" : "public") + " · " + room.phase;
     const stat = document.createElement("div");
-    stat.textContent = room.online + " online of " + room.players + " · last seen " + ago(room.last) + (room.gameNo ? " · game #" + room.gameNo : "");
+    stat.textContent = room.online + " online of " + room.players + " · last seen " + ago(room.last) + (room.gameNo ? " · game #" + room.gameNo : "") + (room.observers ? " · 👁 " + room.observers + " observing" : "");
     const who = document.createElement("span");
     who.className = "who";
     who.textContent = room.names.join(", ") || "—";

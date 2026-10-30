@@ -538,7 +538,7 @@ test('rooms: a room summary says who is online and what the room is doing', () =
   const now = 100000;
   const a = G.join(s, { name: 'Ann', admin: true }, now);
   const b = G.join(s, { name: 'Bob', admin: false, role: 'public' }, now - 60000); // not seen for a minute: offline
-  assert.deepEqual(G.roomSummary(s, 'x', now), { code: 'x', mode: 'public', phase: 'lobby', players: 2, online: 1, names: ['Ann', 'Bob'], gameNo: 0, last: now });
+  assert.deepEqual(G.roomSummary(s, 'x', now), { code: 'x', mode: 'public', phase: 'lobby', players: 2, online: 1, names: ['Ann', 'Bob'], gameNo: 0, last: now, observers: 0 });
   b.lastSeen = now;
   G.act(s, a, { op: 'start' }, now);
   assert.equal(G.roomSummary(s, 'x', now).phase, 'playing');

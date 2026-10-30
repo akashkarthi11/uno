@@ -50,3 +50,32 @@ test('shutdown: public sign-in stops everywhere and public rooms close; private 
   assert.equal((await call({ op: 'shutdown', room: V, playerId: vadmin, on: false })).code, 200);
   assert.equal((await call({ op: 'join', room: P, name: 'Back', password: '123456' })).code, 200, 'public players can sign in again');
 });
+
+test('observer switch: off removes every observer and blocks the account; on lets it back; only the real admin', async () => {
+  const R = 'obsw' + (Date.now() % 100000), R2 = 'obsx' + (Date.now() % 100000);
+  const admin = (await call({ op: 'join', room: R, name: 'Boss', password: '110299' })).body.state.you;
+  const pat = await call({ op: 'join', room: R, name: 'Pat', password: '123456' });
+  const o1 = await call({ op: 'join', room: R, name: 'x', password: '1102' });
+  const o2 = await call({ op: 'join', room: R2, name: 'x', password: '1102' });
+  assert.equal(o1.code, 200);
+  const list = (await call({ op: 'rooms', room: R, playerId: admin })).body;
+  assert.equal(list.observerOff, false);
+  assert.equal(list.rooms.find((r) => r.code === R).observers, 1, 'the admin sees who is observing');
+  assert.equal(JSON.stringify(list.rooms.find((r) => r.code === R).names).includes('Observer'), false);
+
+  assert.equal((await call({ op: 'observerSwitch', room: R, playerId: pat.body.state.you, off: true })).code, 400, 'a player cannot');
+  assert.equal((await call({ op: 'observerSwitch', room: R, playerId: o1.body.state.you, off: true })).code, 400, 'nor an observer');
+
+  const off = await call({ op: 'observerSwitch', room: R, playerId: admin, off: true });
+  assert.equal(off.code, 200);
+  assert.equal(off.body.removed, 2, 'both observers, in two rooms');
+  assert.equal((await call({ op: 'state', room: R, playerId: o1.body.state.you })).body.kicked, true, 'they are told they were removed');
+  assert.equal((await call({ op: 'state', room: R2, playerId: o2.body.state.you })).body.kicked, true);
+  assert.equal((await call({ op: 'join', room: R, name: 'x', password: '1102' })).code, 401, 'the account cannot sign in');
+  assert.equal((await call({ op: 'session', room: R, token: o1.body.token })).code, 401);
+  assert.equal((await call({ op: 'state', room: R, playerId: pat.body.state.you })).code, 200, 'players are not affected');
+  assert.equal((await call({ op: 'join', room: R, name: 'Boss', password: '110299' })).body.state.observerOff, true);
+
+  assert.equal((await call({ op: 'observerSwitch', room: R, playerId: admin, off: false })).code, 200);
+  assert.equal((await call({ op: 'join', room: R, name: 'x', password: '1102' })).code, 200, 'back on');
+});

@@ -161,6 +161,19 @@ export async function setShutdown(on) {
   if (on) await r.set(shutKey, '1'); else await r.del(shutKey);
 }
 
+/** The observer switch (the real admin's button): while it is off the observer account cannot sign in. */
+const obsOffKey = 'growx:observeroff';
+let obsOffMem = false;
+export async function isObserverOff() {
+  if (!usingRedis) return obsOffMem;
+  return Boolean(await (await client()).get(obsOffKey));
+}
+export async function setObserverOff(off) {
+  if (!usingRedis) { obsOffMem = Boolean(off); return; }
+  const r = await client();
+  if (off) await r.set(obsOffKey, '1'); else await r.del(obsOffKey);
+}
+
 export async function pushJoin(evt) {
   if (!usingRedis) {
     joinsMem = [...joinsMem, evt].slice(-100);

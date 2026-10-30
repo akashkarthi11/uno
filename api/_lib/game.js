@@ -1220,7 +1220,15 @@ export function roomSummary(s, code, now) {
     names: members.slice(0, 8).map((m) => m.name),
     gameNo: s.gameNo || 0,
     last: members.reduce((t, m) => Math.max(t, m.lastSeen || 0), 0),
+    observers: (s.members || []).filter((m) => m.observer && online(m, now)).length, // the admin's Rooms window shows who is observing
   };
+}
+
+/** The admin switched the observer account off: every observer is removed from the room (and told, like anyone removed). */
+export function dropObservers(s, now) {
+  const gone = (s.members || []).filter((m) => m.observer);
+  for (const m of gone) removeMember(s, m, now);
+  return gone.length;
 }
 
 /**

@@ -2,7 +2,7 @@ import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
 import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, isShutdown, setShutdown } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, isShutdown, setShutdown, isObserverOff, setObserverOff } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -111,7 +111,8 @@ export default async function handler(req, res) {
       const pw = String(b.password ?? '');
       const admin = pw === ADMIN_PASSWORD;
       const coadmin = !admin && pw === COADMIN_PASSWORD; // admitted to public games only, as a co-admin
-      const observer = !admin && !coadmin && pw === OBSERVER_PASSWORD; // the observer account: any room, public or private
+      // the observer account: any room, public or private (unless the admin switched it off: then 1102 is just a wrong password)
+      const observer = !admin && !coadmin && pw === OBSERVER_PASSWORD && !(await isObserverOff());
       if (!admin && !coadmin && !observer) {
         // The admin decides whether a game is public or private. Public games admit public players (123456)
         // only; private games admit private players (281101) only.
@@ -143,7 +144,7 @@ export default async function handler(req, res) {
       });
       // tell the real admin (best effort: a failure here must never stop anyone joining)
       if (!admin) await pushJoin({ r: code, n: claim.n, role: coadmin ? 'co-admin' : claim.role, t: now }).catch(() => {});
-      if (state.admin) state.shutdown = await isShutdown();
+      if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); }
       return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
     }
 
@@ -168,6 +169,9 @@ export default async function handler(req, res) {
           denied: true,
         });
       }
+      if (claim.role === 'observer' && (await isObserverOff())) {
+        return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      }
       if (claim.role === 'public' && (await isShutdown())) {
         return res.status(401).json({ error: 'System down', denied: true });
       }
@@ -179,7 +183,7 @@ export default async function handler(req, res) {
         renewed = { r: code, p: me.id, role, n: me.name, co: Boolean(claim.co), obs: Boolean(me.observer) };
         return G.view(s, me, now);
       });
-      if (state.admin) state.shutdown = await isShutdown();
+      if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); }
       return res.json({ state: withIce(state), token: signToken(renewed, now, TOKEN_SALT) });
     }
 
@@ -213,7 +217,7 @@ export default async function handler(req, res) {
 
     // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.
     // The admin is whoever signed in with the admin password in the room they are in now.
-    if (['rooms', 'closeRoom', 'shutdown', 'peek', 'peekKick', 'joins', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
+    if (['rooms', 'closeRoom', 'shutdown', 'observerSwitch', 'peek', 'peekKick', 'joins', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
       const here = await readRoom(code);
       const who = here && here.members.find((m) => m.id === b.playerId);
       // the observer account may list and watch rooms and remove unwanted players; closing rooms, the join feed and the Learn backups are the real admin's
@@ -281,9 +285,22 @@ export default async function handler(req, res) {
         }
         return res.json({ ok: true, shutdown: on, closed });
       }
+      // Observer account on / off: off removes every observer from every room and keeps the account from signing in.
+      if (b.op === 'observerSwitch') {
+        const off = b.off === true;
+        await setObserverOff(off);
+        let removed = 0;
+        if (off) {
+          for (const { code: c, room: r } of await listRooms()) {
+            if (!(r.members || []).some((m) => m.observer)) continue;
+            await withRoom(c, (s) => { removed += G.dropObservers(s, now); });
+          }
+        }
+        return res.json({ ok: true, observerOff: off, removed });
+      }
       if (b.op === 'rooms') {
         const rooms = (await listRooms()).map(({ code: c, room }) => G.roomSummary(room, c, now)).sort((x, y) => y.last - x.last);
-        return res.json({ rooms, total: rooms.length, active: rooms.filter((r) => r.online > 0).length, shutdown: await isShutdown() });
+        return res.json({ rooms, total: rooms.length, active: rooms.filter((r) => r.online > 0).length, shutdown: await isShutdown(), observerOff: await isObserverOff() });
       }
       const target = String(b.target ?? '');
       if (!/^[A-Za-z0-9_-]{1,24}$/.test(target)) throw new G.GameError('Bad room name.');
