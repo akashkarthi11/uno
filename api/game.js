@@ -3,7 +3,8 @@ import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
 import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, videoRead, videoUpdate } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, getAuthMode, setAuthMode, videoRead, videoUpdate } from './_lib/store.js';
+import { auth0Config, readTicket } from './_lib/auth0.js';
 import * as V from './_lib/video.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -109,6 +110,29 @@ export default async function handler(req, res) {
       return res.json({ region: process.env.VERCEL_REGION || 'local', ...(await benchmark()) });
     }
 
+    // What the sign-in screen shows: the name + password form, or the Auth0 button (the admin password form stays in both).
+    if (b.op === 'authInfo') {
+      return res.json({ mode: (await getAuthMode()) === 'auth0' && auth0Config() ? 'auth0' : 'current' });
+    }
+
+    // Public player coming back from Auth0 with the ticket /api/auth0 gave the page: joins as a public player.
+    if (b.op === 'join' && b.ticket) {
+      const cfg = auth0Config();
+      const ticket = cfg && (await getAuthMode()) === 'auth0' ? readTicket(String(b.ticket), code, cfg, now) : null;
+      if (!ticket) return res.status(401).json({ error: 'Auth0 sign-in expired — try again.', denied: true });
+      const existing = await readRoom(code);
+      if ((existing && existing.private) || (await isShutdown())) return res.status(401).json({ error: 'System down', denied: true });
+      let claim;
+      const state = await withRoom(code, (s) => {
+        G.tick(s, now);
+        const me = G.join(s, { name: ticket.n, admin: false, role: 'public', playerId: b.playerId, coadmin: false, observer: false }, now);
+        claim = { r: code, p: me.id, role: 'public', n: me.name, co: false, obs: false, a0: true };
+        return G.view(s, me, now);
+      });
+      await pushJoin({ r: code, n: claim.n, role: 'public', t: now }).catch(() => {});
+      return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
+    }
+
     if (b.op === 'join') {
       const pw = String(b.password ?? '');
       const admin = pw === ADMIN_PASSWORD;
@@ -125,6 +149,10 @@ export default async function handler(req, res) {
           // "System down" (the co-admin password gets the same). Any other wrong password is "Wrong password."
           const msg = isPrivate && pw === PLAYER_PASSWORD ? 'System down' : 'Wrong password.';
           return res.status(401).json({ error: msg, denied: true });
+        }
+        // Auth0 mode: public players sign in through Auth0, not with the public password (admin, co-admin, private and observer passwords still work).
+        if (!isPrivate && (await getAuthMode()) === 'auth0' && auth0Config()) {
+          return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
         }
       } else if (coadmin) {
         const existing = await readRoom(code);
@@ -146,7 +174,7 @@ export default async function handler(req, res) {
       });
       // tell the real admin (best effort: a failure here must never stop anyone joining)
       if (!admin) await pushJoin({ r: code, n: claim.n, role: coadmin ? 'co-admin' : claim.role, t: now }).catch(() => {});
-      if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); }
+      if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); state.authMode = await getAuthMode(); state.auth0Ready = Boolean(auth0Config()); }
       return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
     }
 
@@ -177,15 +205,19 @@ export default async function handler(req, res) {
       if (claim.role === 'public' && (await isShutdown())) {
         return res.status(401).json({ error: 'System down', denied: true });
       }
+      // The admin switched the sign-in method: a public sign-in made the other way is over (admin, co-admin, private, observer are not affected).
+      if (claim.role === 'public' && !claim.co && Boolean(claim.a0) !== ((await getAuthMode()) === 'auth0' && Boolean(auth0Config()))) {
+        return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      }
       let renewed;
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
         const role = claim.role;
         const me = G.join(s, { name: claim.n, admin: claim.role === 'admin', role, playerId: claim.p, coadmin: Boolean(claim.co), observer: Boolean(claim.obs) }, now);
-        renewed = { r: code, p: me.id, role, n: me.name, co: Boolean(claim.co), obs: Boolean(me.observer) };
+        renewed = { r: code, p: me.id, role, n: me.name, co: Boolean(claim.co), obs: Boolean(me.observer), a0: Boolean(claim.a0) };
         return G.view(s, me, now);
       });
-      if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); }
+      if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); state.authMode = await getAuthMode(); state.auth0Ready = Boolean(auth0Config()); }
       return res.json({ state: withIce(state), token: signToken(renewed, now, TOKEN_SALT) });
     }
 
@@ -219,7 +251,7 @@ export default async function handler(req, res) {
 
     // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.
     // The admin is whoever signed in with the admin password in the room they are in now.
-    if (['rooms', 'closeRoom', 'shutdown', 'observerSwitch', 'peek', 'peekKick', 'joins', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
+    if (['rooms', 'closeRoom', 'shutdown', 'observerSwitch', 'authSwitch', 'peek', 'peekKick', 'joins', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
       const here = await readRoom(code);
       const who = here && here.members.find((m) => m.id === b.playerId);
       // the observer account may list and watch rooms and remove unwanted players; closing rooms, the join feed and the Learn backups are the real admin's
@@ -299,6 +331,13 @@ export default async function handler(req, res) {
           }
         }
         return res.json({ ok: true, observerOff: off, removed });
+      }
+      // Sign-in method for public players: "current" (name + password) or "auth0". The admin password works in both.
+      if (b.op === 'authSwitch') {
+        const mode = b.mode === 'auth0' ? 'auth0' : 'current';
+        if (mode === 'auth0' && !auth0Config()) throw new G.GameError('Auth0 is not set up yet: add AUTH0_DOMAIN, AUTH0_CLIENT_ID and AUTH0_CLIENT_SECRET to the Vercel project first.');
+        await setAuthMode(mode);
+        return res.json({ ok: true, authMode: mode });
       }
       if (b.op === 'rooms') {
         const rooms = (await listRooms()).map(({ code: c, room }) => G.roomSummary(room, c, now)).sort((x, y) => y.last - x.last);

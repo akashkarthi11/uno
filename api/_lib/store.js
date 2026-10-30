@@ -381,3 +381,17 @@ export async function getImage(id) {
   if (!usingRedis) return imgMem.get(id) || null;
   return (await (await client()).get('growx:img:' + id)) || null;
 }
+
+/** The sign-in switch (the real admin's button): "current" is the name + password sign-in, "auth0" sends public players to Auth0. */
+const authKey = 'growx:authmode';
+let authMem = 'current';
+export async function getAuthMode() {
+  if (!usingRedis) return authMem;
+  return (await (await client()).get(authKey)) === 'auth0' ? 'auth0' : 'current';
+}
+export async function setAuthMode(mode) {
+  const m = mode === 'auth0' ? 'auth0' : 'current';
+  if (!usingRedis) { authMem = m; return; }
+  const r = await client();
+  if (m === 'auth0') await r.set(authKey, 'auth0'); else await r.del(authKey);
+}

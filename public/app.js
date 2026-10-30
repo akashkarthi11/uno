@@ -511,6 +511,22 @@ async function toggleShutdown() {
 }
 $("shutdownBtn").addEventListener("click", toggleShutdown);
 
+/** The real admin: choose how public players sign in. "current" is name + password; "auth0" sends them to Auth0. The admin password works in both. */
+let authModeNow = "current";
+let auth0Ready = false;
+async function toggleAuthSwitch() {
+  if (!state || !state.admin) return;
+  const to = authModeNow === "auth0" ? "current" : "auth0";
+  if (to === "auth0" && !confirm("Switch sign-in to Auth0?\n\nPublic players who signed in with the password are signed out and must use Auth0. Your admin password (and the private, co-admin and observer passwords) still work.")) return;
+  try {
+    const r = await api({ op: "authSwitch", mode: to });
+    authModeNow = r.authMode;
+    toast(authModeNow === "auth0" ? "Sign-in is now Auth0 for public players." : "Sign-in is back to the current name + password.");
+  } catch (e) { toast(e.message); return; }
+  renderRelayBtn(state);
+}
+$("authSwitchBtn").addEventListener("click", toggleAuthSwitch);
+
 /** The real admin: switch the observer account off (every observer is removed and cannot sign in) or back on. */
 let observerOffNow = false;
 async function toggleObserverSwitch() {
@@ -555,6 +571,15 @@ function renderRelayBtn(s) {
   sd.textContent = "⛔ Shut down public: " + (shutdownOn ? "on" : "off");
   sd.classList.toggle("on", shutdownOn);
   sd.title = shutdownOn ? "Shut down is ON: public sign-in is off everywhere. Click to switch it off and open public play again." : "Shut down is OFF. Click to switch it on: every public room closes and public players cannot sign in until you switch it off.";
+  if (s.authMode !== undefined) authModeNow = s.authMode;
+  if (s.auth0Ready !== undefined) auth0Ready = s.auth0Ready;
+  const au = $("authSwitchBtn");
+  au.classList.toggle("hidden", !s.admin); // the real admin only
+  au.textContent = "🔑 Sign-in: " + (authModeNow === "auth0" ? "Auth0" : "current");
+  au.classList.toggle("on", authModeNow === "auth0");
+  au.title = authModeNow === "auth0"
+    ? "Public players sign in with Auth0. Click to go back to the current name + password."
+    : auth0Ready ? "Public players use the name + password. Click to make them sign in with Auth0 instead." : "Auth0 is not set up yet (the keys are not on the Vercel project), so this cannot be switched on.";
   const bsw = $("botSwitchBtn");
   bsw.classList.toggle("hidden", !s.admin); // the real admin only, in public and private games alike
   const botOn = !(s.settings && s.settings.botMatch === false);
@@ -3103,11 +3128,41 @@ $("statsModal").addEventListener("click", (e) => { if (e.target === $("statsModa
   const n = store("uno-name");
   if (n) $("nameInput").value = n;
   const wanted = (r || "main").trim();
+  const ticket = new URLSearchParams(location.search).get("a0");
+  const a0err = new URLSearchParams(location.search).get("a0err");
+  if (ticket || a0err) history.replaceState(null, "", "?room=" + encodeURIComponent(wanted)); // the ticket must not stay in the address bar
   if (/^[A-Za-z0-9_-]{1,24}$/.test(wanted)) {
     room = wanted;
-    resumeSession(); // a refresh goes straight back to the table when this tab already signed in
+    if (ticket) joinWithTicket(ticket);
+    else resumeSession(); // a refresh goes straight back to the table when this tab already signed in
   }
+  if (a0err) toast(a0err.slice(0, 80));
+  // the Auth0 button shows only while the admin has Auth0 switched on
+  api({ op: "authInfo" }).then((d) => { if (d.mode === "auth0") $("auth0Btn").classList.remove("hidden"); }).catch(() => {});
 })();
+
+/** Back from Auth0 with the short ticket /api/auth0 made: join as a public player. */
+async function joinWithTicket(ticket) {
+  $("joinScreen").classList.add("hidden");
+  removed = false;
+  resetScreenCaches();
+  try {
+    playerId = store("uno-id-" + room) || null;
+    apply(await api({ op: "join", ticket }));
+    const me = state && state.players.find((p) => p.id === state.you);
+    myName = (me && me.name) || "";
+    myPassword = "";
+    enterRoom();
+  } catch (e) {
+    $("joinScreen").classList.remove("hidden");
+    toast(e.message);
+  }
+}
+$("auth0Btn").addEventListener("click", () => {
+  const rm = $("roomInput").value.trim() || "main";
+  if (!/^[A-Za-z0-9_-]{1,24}$/.test(rm)) { toast("Room: letters, digits, - and _ only"); return; }
+  location.href = "/api/auth0?room=" + encodeURIComponent(rm);
+});
 
 /* ---------- phone helpers: "Desktop site" hint and ?debug=1 diagnostics ---------- */
 
