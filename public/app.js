@@ -3138,3 +3138,13 @@ function desktopOnPhone(screenW, screenH, innerW) {
   tick();
   setInterval(tick, 1000);
 })();
+
+/* ---- the lobby menu: one bar along the bottom, like the Learn page's; the new buttons press the ones that already exist ---- */
+[["lnStats", "statsBtn"], ["lnRules", "rulesBtn"], ["lnSettings", "settingsBtn"], ["lnRooms", "roomsBtn"]].forEach(([nav, real]) => {
+  $(nav).addEventListener("click", () => $(real).click());
+});
+{
+  const syncRooms = () => $("lnRooms").classList.toggle("hidden", $("roomsBtn").classList.contains("hidden"));
+  new MutationObserver(syncRooms).observe($("roomsBtn"), { attributes: true, attributeFilter: ["class"] });
+  syncRooms();
+}

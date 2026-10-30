@@ -1414,3 +1414,19 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
 .learn-page #chatAttach { min-height: 48px; border: 1.5px solid var(--l-line); border-radius: 14px; background: var(--l-soft); }
 .lightbox { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(0,0,0,.88); cursor: zoom-out; padding: 12px; }
 .lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px; }
+
+/* ---------- lobby menu: a bar along the bottom, the same look as the Learn page's ---------- */
+#lobby { padding-bottom: 92px; }
+.lobby-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; justify-content: center; gap: 4px; padding: 8px 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); background: var(--l-card, #fff); border-top: 1px solid var(--l-line, #e6e2fa); box-shadow: 0 -6px 18px rgba(108, 85, 230, .08); }
+.lobby-pastel .lobby-nav button, .lobby-pastel .lobby-nav #botBtn, .lobby-pastel .lobby-nav #koreanBtn, .lobby-pastel .lobby-nav #videoBtn {
+  flex: 1 1 0; min-width: 0; max-width: 96px; min-height: 56px; margin: 0; padding: 4px 2px; width: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border: 0; border-radius: 16px; background: transparent; box-shadow: none; color: var(--l-muted, #66658a); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; transition: background .15s, color .15s, transform .12s;
+}
+.lobby-pastel .lobby-nav button.hidden { display: none; }
+.lobby-nav .ic { font-size: 22px; line-height: 1; }
+.lobby-nav .lb { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.lobby-pastel .lobby-nav button:hover, .lobby-pastel .lobby-nav #botBtn:hover, .lobby-pastel .lobby-nav #koreanBtn:hover, .lobby-pastel .lobby-nav #videoBtn:hover { background: var(--l-lav, #eeeafe); color: var(--l-purple-d, #5740cf); }
+.lobby-pastel .lobby-nav button:active { transform: scale(.95); }
+@media (min-width: 700px) { .lobby-nav { max-width: 640px; left: 50%; right: auto; width: 100%; transform: translateX(-50%); border-radius: 18px 18px 0 0; border: 1px solid var(--l-line, #e6e2fa); border-bottom: 0; } }
+.lobby-pastel .lobby-nav :is(#botBtn, #koreanBtn, #videoBtn, #lnStats, #lnRules, #lnRooms, #lnSettings) { background: transparent !important; color: var(--l-muted, #66658a) !important; border: 0 !important; }
+.lobby-pastel .lobby-nav :is(#botBtn, #koreanBtn, #videoBtn, #lnStats, #lnRules, #lnRooms, #lnSettings):hover { background: var(--l-lav, #eeeafe) !important; color: var(--l-purple-d, #5740cf) !important; }
