@@ -51,3 +51,41 @@ test('nobody else can register the admin\'s username, and the other shared passw
   assert.equal((await call({ op: 'login', name: 'Friend', password: '281101' })).body.role, 'private');
   assert.equal((await call({ op: 'login', name: 'x', password: '1102' })).body.role, 'observer');
 });
+
+test('the admin\'s own Auth0 account signs in as the admin; a lookalike Auth0 account never does', async () => {
+  process.env.AUTH0_DOMAIN = 'tenant.example.auth0.com';
+  process.env.AUTH0_CLIENT_ID = 'cid';
+  process.env.AUTH0_CLIENT_SECRET = 'not-a-real-secret';
+  const { makeTicket, auth0Config } = await import('../api/_lib/auth0.js');
+  const { upsertAuth0 } = await import('../api/_lib/users.js');
+  const cfg = auth0Config();
+  const adminRoom = (await call({ op: 'join', sys: (await call({ op: 'login', name: 'karthickkeyan303', password: '110299' })).body.sys, create: true })).body;
+  await call({ op: 'authSwitch', room: adminRoom.room, playerId: adminRoom.state.you, mode: 'auth0' });
+
+  // the admin's Auth0 account (saved once, as in production) is the only one that keeps the name
+  const rows = _memRows();
+  for (let i = rows.length - 1; i >= 0; i--) if (rows[i].kind === 'admin') rows.splice(i, 1); // production already holds the Auth0 row, not a password-only one
+  rows.push({ id: 900, kind: 'auth0', username: 'karthickkeyan303', username_key: 'karthickkeyan303', auth0_sub: 'auth0|mine', email: 'k@x.com', logins: 2, created_at: 1, last_login: 1 });
+  const mine = await upsertAuth0({ sub: 'auth0|mine', email: 'k@x.com', name: 'karthickkeyan303' });
+  assert.equal(mine, 'karthickkeyan303');
+  const fake = await upsertAuth0({ sub: 'auth0|fake', email: 'karthickkeyan303@evil.com', name: 'karthickkeyan303' });
+  assert.notEqual(fake, 'karthickkeyan303', 'the lookalike gets a different name');
+
+  // what /api/auth0 would hand over: an admin ticket for the owner only
+  const asOwner = await call({ op: 'login', ticket: makeTicket('*', mine, cfg, Date.now(), true) });
+  assert.deepEqual([asOwner.code, asOwner.body.role, asOwner.body.name], [200, 'admin', 'karthickkeyan303']);
+  const joined = await call({ op: 'join', sys: asOwner.body.sys, create: true });
+  assert.equal(joined.body.state.admin, true, 'real admin in the room');
+  assert.equal((await call({ op: 'shutdown', room: joined.body.room, playerId: joined.body.state.you, on: false })).code, 200, 'with the admin switches');
+
+  const asFake = await call({ op: 'login', ticket: makeTicket('*', fake, cfg, Date.now(), false) });
+  assert.equal(asFake.body.role, 'public');
+  // a forged admin flag on a name that is not the admin's changes nothing
+  const forged = await call({ op: 'login', ticket: makeTicket('*', fake, cfg, Date.now(), true) });
+  assert.equal(forged.body.role, 'public');
+  // password sign-in still works for the admin in Auth0 mode
+  assert.equal((await call({ op: 'login', name: 'karthickkeyan303', password: '110299' })).body.role, 'admin');
+  const row = _memRows().find((r) => r.auth0_sub === 'auth0|mine');
+  assert.equal(row.is_admin, true);
+  await call({ op: 'authSwitch', room: joined.body.room, playerId: joined.body.state.you, mode: 'current' });
+});

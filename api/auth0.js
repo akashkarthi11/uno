@@ -3,7 +3,7 @@
 // A sign-in belongs to the system, not to a room, so the state and the ticket are made for the room name "*".
 import { auth0Config, makeState, readState, makeTicket, nameFromCode } from './_lib/auth0.js';
 import { getAuthMode } from './_lib/store.js';
-import { usersEnabled, upsertAuth0 } from './_lib/users.js';
+import { usersEnabled, upsertAuth0, isOgAdminName } from './_lib/users.js';
 
 const SYSTEM = '*';
 
@@ -26,8 +26,14 @@ export default async function handler(req, res) {
     if (!readState(String(q.get('state') || ''), SYSTEM, cfg, now)) return back({ a0err: 'Sign-in expired — try again.' });
     try {
       const who = await nameFromCode(String(q.get('code')), redirectUri, cfg);
-      if (usersEnabled()) who.name = await upsertAuth0(who).catch(() => who.name); // saving the user must never stop the sign-in
-      return back({ a0: makeTicket(SYSTEM, who.name, cfg, now) });
+      let saved = false;
+      if (usersEnabled()) {
+        try { who.name = await upsertAuth0(who); saved = true; } catch { /* saving the user must never stop the sign-in */ }
+      }
+      // the Auth0 account that owns the admin's username signs in as the admin; only that account can hold that name (see upsertAuth0),
+      // so a name that was not checked against the saved users never counts
+      const admin = saved && isOgAdminName(who.name);
+      return back({ a0: makeTicket(SYSTEM, who.name, cfg, now, admin) });
     } catch {
       return back({ a0err: 'Auth0 sign-in failed — try again.' });
     }

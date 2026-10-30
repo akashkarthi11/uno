@@ -109,13 +109,13 @@ export async function upsertAuth0({ sub, email, name }) {
   if (!saved) for (let i = 2; (await taken(final)) || (isOgAdmin(final) && !saved); i++) final = `${name.slice(0, 13)} ${i}`;
   if (useMem()) {
     const r = mem.rows.find((x) => x.auth0_sub === sub);
-    if (r) { Object.assign(r, { email, logins: r.logins + 1, last_login: Date.now() }); return r.username; }
+    if (r) { Object.assign(r, { email, logins: r.logins + 1, last_login: Date.now(), is_admin: Boolean(r.is_admin) || isOgAdmin(r.username) }); return r.username; }
     mem.rows.push({ id: mem.seq++, kind: 'auth0', username: final, username_key: key(final), auth0_sub: sub, email, logins: 1, created_at: Date.now(), last_login: Date.now() });
     return final;
   }
-  const rows = await q(`INSERT INTO growx_users (kind, username, username_key, auth0_sub, email) VALUES ('auth0', $1, $2, $3, $4)
-    ON CONFLICT (auth0_sub) DO UPDATE SET email = EXCLUDED.email, last_login = now(), logins = growx_users.logins + 1 RETURNING username`,
-  [final, key(final), sub, email || null]);
+  const rows = await q(`INSERT INTO growx_users (kind, username, username_key, auth0_sub, email, is_admin) VALUES ('auth0', $1, $2, $3, $4, $5)
+    ON CONFLICT (auth0_sub) DO UPDATE SET email = EXCLUDED.email, last_login = now(), logins = growx_users.logins + 1, is_admin = growx_users.is_admin OR $5 RETURNING username`,
+  [final, key(final), sub, email || null, isOgAdmin(final)]);
   return rows[0].username;
 }
 

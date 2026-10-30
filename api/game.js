@@ -129,6 +129,7 @@ export default async function handler(req, res) {
         const ticket = auth0Mode ? readTicket(String(b.ticket), '*', cfg, now) : null;
         if (!ticket) return res.status(401).json({ error: 'Auth0 sign-in expired — try again.', denied: true });
         if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
+        if (ticket.adm && usersEnabled() && isOgAdminName(ticket.n)) return done('admin', ogAdminName(), true); // the admin's own Auth0 account
         return done('public', ticket.n, true);
       }
       if (pw === ADMIN_PASSWORD && !adminNameOk(String(b.name ?? ''))) return res.status(401).json({ error: 'Wrong password.', denied: true }); // the admin password belongs to the admin's username only
