@@ -5,7 +5,7 @@ import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, getAuthMode, setAuthMode, videoRead, videoUpdate } from './_lib/store.js';
 import { auth0Config, readTicket } from './_lib/auth0.js';
-import { usersEnabled, findLocal, createLocal, touchLocal, checkPassword, MIN_PASSWORD } from './_lib/users.js';
+import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, isOgAdminName, ogAdminName, checkPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -137,6 +137,11 @@ export default async function handler(req, res) {
       const observer = !admin && pw === OBSERVER_PASSWORD && !(await isObserverOff());
       let publicLogin = false; // a public player who signed in with their own account
       let joinName = b.name;
+      // The real admin signing in under their own username (the Auth0 user with that name): the sign-in is recorded on that user row.
+      if (admin && usersEnabled() && isOgAdminName(String(b.name ?? ''))) {
+        joinName = ogAdminName();
+        await touchAdmin(joinName).catch(() => {}); // recording it must never stop the sign-in
+      }
       if (!admin && !observer) {
         // The admin decides whether a game is public or private. Public games admit public players (123456)
         // only; private games admit private players (281101) only.
@@ -147,6 +152,8 @@ export default async function handler(req, res) {
         if (accounts && !String(b.name ?? '').replace(/[<>&"']/g, '').trim()) return res.status(400).json({ error: 'Enter your name.' });
         if (accounts) {
           // 123456 only opens the door the first time: the person then chooses their own password, and from then on signs in with it.
+          // a name that is the real admin's, or an Auth0 user's, is not for anyone else to register or sign in with
+          if (await nameTaken(G.cleanName(b.name))) return res.status(401).json({ error: 'That name is taken.', denied: true });
           account = await findLocal(G.cleanName(b.name));
           const ok = account ? checkPassword(pw, account.pw_hash) : pw === PLAYER_PASSWORD;
           if (!ok) return res.status(401).json({ error: 'Wrong password.', denied: true });

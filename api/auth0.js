@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     if (!claim) return back(room, { a0err: 'Sign-in expired — try again.' });
     try {
       const who = await nameFromCode(String(q.get('code')), redirectUri, cfg);
-      if (usersEnabled()) await upsertAuth0(who).catch(() => {}); // saving the user must never stop the sign-in
+      if (usersEnabled()) who.name = await upsertAuth0(who).catch(() => who.name); // saving the user must never stop the sign-in
       return back(claim.r, { a0: makeTicket(claim.r, who.name, cfg, now) });
     } catch {
       return back(claim.r, { a0err: 'Auth0 sign-in failed — try again.' });

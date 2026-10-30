@@ -82,10 +82,10 @@ test('the shutdown switch stops accounts too', async () => {
 
 test('Auth0 users are saved with email and name, and kept up to date', async () => {
   await upsertAuth0({ sub: 'auth0|1', email: 'a@x.com', name: 'Asha K' });
-  await upsertAuth0({ sub: 'auth0|1', email: 'a@x.com', name: 'Asha Kumar' });
+  await upsertAuth0({ sub: 'auth0|1', email: 'a2@x.com', name: 'Asha Kumar' }); // the saved username stays; the email is kept current
   const rows = _memRows().filter((r) => r.auth0_sub === 'auth0|1');
   assert.equal(rows.length, 1);
-  assert.deepEqual([rows[0].username, rows[0].email, rows[0].logins], ['Asha Kumar', 'a@x.com', 2]);
+  assert.deepEqual([rows[0].username, rows[0].email, rows[0].logins], ['Asha K', 'a2@x.com', 2]);
 });
 
 test('the first public player into a new public room is its co-admin; later ones are not', async () => {
@@ -121,4 +121,39 @@ test('the old co-admin password is not a shared password any more: it is just a 
   const r = await call({ op: 'join', room: 'old1', name: 'Co', password: '123456', newPassword: '12345678' });
   assert.equal(r.code, 200, 'it is only a password like any other now');
   assert.equal(r.body.state.canStart, true, 'and this player is co-admin only because they were first into the room');
+});
+
+test('names are not shared: the admin\'s username and Auth0 names cannot be taken; the admin password signs in under the admin username', async () => {
+  const { upsertAuth0: up } = await import('../api/_lib/users.js');
+  // an Auth0 user named like the admin, then the admin signs in with the admin password under that username
+  _memRows().push({ id: 99, kind: 'auth0', username: 'karthickkeyan303', username_key: 'karthickkeyan303', auth0_sub: 'auth0|admin', email: 'k@x.com', logins: 2, created_at: 1, last_login: 1 }); // the admin's Auth0 user, already saved
+  assert.equal(await up({ sub: 'auth0|impostor', email: 'fake@x.com', name: 'karthickkeyan303' }), 'karthickkeyan 2', "a different Auth0 account cannot take the admin's name");
+  const name = await up({ sub: 'auth0|admin', email: 'k@x.com', name: 'karthickkeyan303' });
+  assert.equal(name, 'karthickkeyan303', 'the real admin keeps the name');
+  const row = () => _memRows().find((r) => r.auth0_sub === 'auth0|admin');
+  const before = row().logins;
+  const adminJoin = await call({ op: 'join', room: 'adm1', name: 'Karthickkeyan303', password: '110299' });
+  assert.equal(adminJoin.code, 200);
+  assert.equal(adminJoin.body.state.admin, true);
+  assert.equal(adminJoin.body.state.players.find((p) => p.id === adminJoin.body.state.you).name, 'karthickkeyan303', 'the stored name is used');
+  assert.equal(row().logins, before + 1, 'the admin sign-in is recorded on the same user');
+  assert.equal(row().is_admin, true, 'and marked as the admin\'s');
+
+  // nobody else gets that name: not with the shared password, and not by registering
+  for (const pw of ['123456', 'whatever']) {
+    const r = await call({ op: 'join', room: 'adm1', name: 'KarthickKeyan303', password: pw });
+    assert.equal(r.code, 401, pw);
+  }
+  assert.equal((await call({ op: 'join', room: 'adm1', name: 'karthickkeyan303', password: '123456', newPassword: 'abcdef12' })).code, 401);
+
+  // another Auth0 user with the same name gets a number added, a local name taken by a local user is also not reused
+  assert.equal(await up({ sub: 'auth0|other', email: 'o@x.com', name: 'Asha' }), 'Asha 2', 'Asha is a local account already');
+  assert.equal(await up({ sub: 'auth0|other', email: 'o@x.com', name: 'Asha' }), 'Asha 2', 'and the same person keeps it');
+  // an Auth0 name blocks the local sign-in with that name
+  assert.equal((await call({ op: 'join', room: 'adm1', name: 'Asha 2', password: '123456' })).body.error, 'That name is taken.');
+
+  // the admin password under another name still works as before and records nothing
+  const count = _memRows().length;
+  assert.equal((await call({ op: 'join', room: 'adm2', name: 'SomeoneElse', password: '110299' })).body.state.admin, true);
+  assert.equal(_memRows().length, count);
 });
