@@ -485,7 +485,7 @@ function layoutTiles() {
         top = r.top - h - 4;
         if (top < 2) top = r.bottom + 4; // no room above the seat: below it
       } else {
-        left = W - w - 8; top = 100 + spare * (h + 8); spare++;
+        left = W - w - 8; top = (document.body.classList.contains("learning") ? 128 : 100) + spare * (h + 8); spare++;
       }
     }
     tile.style.left = Math.max(0, Math.min(W - w, left)) + "px";

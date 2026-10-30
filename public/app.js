@@ -942,7 +942,8 @@ function placeChat(inGame) {
   if (inGame) {
     if (chat.parentElement !== $("chatDock")) $("chatDock").appendChild(chat);
   } else {
-    if (chat.parentElement !== $("lobby")) $("lobby").appendChild(chat);
+    const home = learnOpen ? $("chatHost") : $("lobby"); // the Learn page has a Chat tab of its own while it is open
+    if (chat.parentElement !== home) home.appendChild(chat);
     chatOpen = false;
   }
   $("chatToggle").classList.toggle("hidden", !inGame);
@@ -952,11 +953,14 @@ function placeChat(inGame) {
 function updateChatUi(s) {
   const msgs = s.chat || [];
   const newest = msgs.length ? msgs[msgs.length - 1].t : 0;
-  if (!chatInGame || chatOpen) chatSeenT = Math.max(chatSeenT, newest);
+  const reading = learnOpen ? learnPane === "chat" : !chatInGame || chatOpen; // is the chat on screen right now?
+  if (reading) chatSeenT = Math.max(chatSeenT, newest);
   const unread = msgs.filter((m) => m.t > chatSeenT && m.from !== s.you).length;
   const badge = $("chatBadge");
   badge.textContent = unread > 9 ? "9+" : String(unread);
   badge.classList.toggle("hidden", unread === 0);
+  $("chatNavBadge").textContent = unread > 9 ? "9+" : String(unread);
+  $("chatNavBadge").classList.toggle("hidden", unread === 0 || !learnOpen);
   // chat belongs to one game: once it has finished, writing waits for the next one
   $("chatInput").disabled = s.over;
   $("chatInput").placeholder = s.over ? "Chat starts fresh with the next game" : "Say something…";
@@ -1877,10 +1881,11 @@ function setPane(p) {
     b.classList.toggle("on", b.dataset.pane === p);
     b.setAttribute("aria-current", b.dataset.pane === p ? "page" : "false");
   });
-  [["letters", "paneLetters"], ["quiz", "paneQuiz"], ["words", "paneWords"], ["ask", "paneAsk"]].forEach(([k, id]) => $(id).classList.toggle("hidden", k !== p));
+  [["letters", "paneLetters"], ["quiz", "paneQuiz"], ["words", "paneWords"], ["chat", "paneChat"], ["ask", "paneAsk"]].forEach(([k, id]) => $(id).classList.toggle("hidden", k !== p));
   const page = $("learnPage");
   if (page) page.scrollTo({ top: 0 });
   if (p === "words") loadLearnBackups();
+  if (p === "chat") { const log = $("chatLog"); log.scrollTop = log.scrollHeight; if (state) updateChatUi(state); }
 }
 document.querySelectorAll(".learn-nav button").forEach((b) => b.addEventListener("click", () => setPane(b.dataset.pane)));
 
@@ -2047,6 +2052,7 @@ function renderLearn(s) {
 
   renderAsks(s);
   renderWords(s);
+  syncLearnMedia();
 
   // a number on the Ask tab when somebody is waiting for my answer
   const waiting = ((L && L.asks) || []).filter((a) => !a.mine && !a.myAnswer).length;
@@ -2472,8 +2478,36 @@ $("kSpeak").addEventListener("click", () => {
   } catch (e) { toast("This browser cannot speak."); }
 });
 
+/* ---- mic, video and chat on the Learn page: the same call and chat as the lobby, with buttons of its own ---- */
+const MEDIA = [["voiceBtn", "lVoice", (on) => (on ? "Mic on" : "Mic off")], ["muteBtn", "lMute", (on, src) => (src.textContent === "🔇" ? "Unmute" : "Mute")], ["camBtn", "lCam", (on) => (on ? "Camera on" : "Camera off")]];
+function syncLearnMedia() {
+  let any = false;
+  for (const [srcId, dstId, label] of MEDIA) {
+    const src = $(srcId), dst = $(dstId);
+    const hidden = src.classList.contains("hidden");
+    const on = src.classList.contains("on");
+    dst.classList.toggle("hidden", hidden);
+    dst.classList.toggle("on", on);
+    dst.classList.toggle("speaking", src.classList.contains("speaking"));
+    dst.classList.toggle("muted", src.textContent === "🔇");
+    dst.querySelector(".ic").textContent = src.textContent;
+    dst.querySelector(".lb").textContent = label(on, src);
+    dst.title = src.title;
+    dst.setAttribute("aria-pressed", on ? "true" : "false");
+    if (!hidden) any = true;
+  }
+  $("learnMedia").classList.toggle("hidden", !any);
+  const n = Number($("voiceBtn").dataset.count || 0);
+  $("lCall").textContent = n ? n + " in the call" : "";
+}
+for (const [srcId, dstId] of MEDIA) {
+  $(dstId).addEventListener("click", () => { $(srcId).click(); setTimeout(syncLearnMedia, 600); });
+  new MutationObserver(syncLearnMedia).observe($(srcId), { attributes: true, attributeFilter: ["class", "title", "data-count"], childList: true, characterData: true, subtree: true });
+}
+
 function closeLearn() {
   learnOpen = false;
+  placeChat(chatInGame); // the chat goes back to the lobby
   $("learnPage").classList.add("hidden");
   document.body.classList.remove("learning");
   try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* nothing speaking */ }
@@ -2484,6 +2518,8 @@ async function openLearn() {
   learnOpen = true;
   renderLearn.autoQ = 0;
   document.body.classList.add("learning");
+  placeChat(chatInGame); // the chat moves onto the Learn page's Chat tab
+  syncLearnMedia();
   $("learnPage").classList.remove("hidden");
   setPane("letters");
   $("learnError").classList.add("hidden");

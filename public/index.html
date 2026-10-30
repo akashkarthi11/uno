@@ -271,6 +271,12 @@
     <h2>Learn Hangul</h2>
     <span id="learnPts" class="lchip pts hidden" title="Your points in this lesson"></span>
     <span id="learnRole" class="lbadge"></span>
+    <div id="learnMedia" class="learn-media hidden" aria-label="Voice and video">
+      <button id="lVoice" class="l-pill hidden" type="button"><span class="ic">🎤</span><span class="lb">Mic</span></button>
+      <button id="lMute" class="l-pill hidden" type="button"><span class="ic">🎙</span><span class="lb">Mute</span></button>
+      <button id="lCam" class="l-pill hidden" type="button"><span class="ic">📷</span><span class="lb">Camera</span></button>
+      <span id="lCall" class="muted"></span>
+    </div>
   </header>
 
   <main class="learn-body">
@@ -398,6 +404,10 @@
       </div>
     </section>
 
+    <section id="paneChat" class="learn-pane hidden" role="tabpanel" aria-label="Chat">
+      <div id="chatHost" class="form-card"><h3>💬 Group chat</h3></div>
+    </section>
+
     <div id="learnScores" class="learn-scores" aria-label="Points"></div>
   </main>
 
@@ -405,7 +415,8 @@
     <button type="button" data-pane="letters" class="on"><svg class="ico"><use href="#i-book"/></svg><span>Letters</span></button>
     <button type="button" data-pane="quiz"><svg class="ico"><use href="#i-target"/></svg><span>Quiz</span></button>
     <button type="button" data-pane="words"><svg class="ico"><use href="#i-book"/></svg><span>Words</span></button>
-    <button type="button" data-pane="ask"><svg class="ico"><use href="#i-chat"/></svg><span>Ask</span><em id="askBadge" class="nav-badge hidden"></em></button>
+    <button type="button" data-pane="chat"><svg class="ico"><use href="#i-chat"/></svg><span>Chat</span><em id="chatNavBadge" class="nav-badge hidden"></em></button>
+    <button type="button" data-pane="ask"><svg class="ico"><use href="#i-send"/></svg><span>Ask</span><em id="askBadge" class="nav-badge hidden"></em></button>
   </nav>
 </section>
 

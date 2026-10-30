@@ -332,7 +332,7 @@ body.learning { overflow: hidden; }
 
 /* header */
 .learn-page .learn-head {
-  position: sticky; top: 0; z-index: 5; display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 5; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 10px;
   padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); background: var(--l-head, rgba(255,255,255,.92)); backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--l-line); box-shadow: none;
 }
@@ -1276,3 +1276,47 @@ html[data-theme="classic"] .learn-page .letter-grid button.star { border-color: 
 #watchPlayers .wp-hand .card { width: 36px; height: 52px; font-size: 18px; border-width: 2px; border-radius: 6px; }
 #watchPlayers .wp-hand .card .c { font-size: 8px; }
 #watchPlayers .wp-hand .card::before { inset: 7px 3px; }
+
+/* ---------- Learn page: microphone, camera and chat, the same call and chat as the lobby ---------- */
+.learn-page .learn-media { flex: 0 0 100%; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.l-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--l-line); background: var(--l-card, #fff); color: var(--l-ink); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: var(--l-shadow-s); transition: transform .12s, background .15s, border-color .15s; }
+.l-pill:active { transform: scale(.96); }
+.l-pill .ic { font-size: 17px; line-height: 1; }
+.l-pill.on { background: var(--l-mint); border-color: var(--l-mint-d); color: var(--l-mint-ink); }
+.l-pill.muted { background: var(--l-red-soft); border-color: var(--l-red); color: var(--l-red-ink, #8f2234); }
+.l-pill.speaking { box-shadow: 0 0 0 3px color-mix(in srgb, var(--l-mint-d) 45%, transparent); }
+.learn-page .learn-media .muted { margin-left: auto; }
+body.learning #videoStrip { z-index: 70; }
+body.learning #chatFloat { z-index: 70; top: 120px; }
+body.learning #vToggle { top: auto; bottom: 84px; right: 8px; }
+#chatHost h3 { font-size: 17px; font-weight: 800; margin-bottom: 4px; }
+.learn-page #chatHost #chat { border-top: 0; padding-top: 0; gap: 10px; }
+.learn-page #chatLog { height: min(48vh, 420px); background: var(--l-soft); border: 1px solid var(--l-line); border-radius: 18px; padding: 10px 12px; font-size: 15px; }
+.learn-page #chatLog .empty { color: var(--l-muted); font-weight: 600; }
+.learn-page #chatLog .msg .bubble { background: var(--l-card, #fff); color: var(--l-ink); border: 1px solid var(--l-line); border-radius: 14px; padding: 6px 12px; }
+.learn-page #chatLog .msg.mine .bubble { background: var(--l-lav); border-color: transparent; }
+.learn-page #chatLog .msg .who { color: var(--l-muted); font-weight: 800; }
+.learn-page #emojiBar button { background: var(--l-card, #fff); border: 1px solid var(--l-line); border-radius: 12px; min-height: 40px; padding: 4px 10px; font-size: 22px; box-shadow: none; }
+.learn-page #chatForm { gap: 8px; }
+.learn-page #chatInput { flex: 1; min-width: 0; min-height: 48px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--l-line); background: var(--l-soft); color: var(--l-ink); font: inherit; font-size: 16px; font-weight: 600; }
+.learn-page #chatInput:focus { outline: none; border-color: var(--l-purple); box-shadow: 0 0 0 3px color-mix(in srgb, var(--l-purple) 18%, transparent); }
+.learn-page #chatForm button { min-height: 48px; padding: 0 18px; border: 0; border-radius: 14px; background: var(--l-purple); color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+@media (max-width: 380px) { .learn-nav button { font-size: 11px; } .learn-nav { gap: 2px; padding-left: 6px; padding-right: 6px; } .l-pill { padding: 0 11px; } }
+
+/* the header must not pick up the app header's lobby colours; the Learn page also goes dark when the phone is set to dark (as the lobby does) */
+.learn-page .learn-head { background: var(--l-head, rgba(255,255,255,.92)) !important; border-color: var(--l-line) !important; color: var(--l-ink); }
+.learn-page .learn-head h2 { color: var(--l-ink); }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="classic"]):not([data-theme="midnight"]) .learn-page {
+    --l-bg: #0e0c24; --l-card: #181538; --l-glow: #2a2457; --l-head: rgba(14,12,36,.94);
+    --l-ink: #ece9ff; --l-muted: #a9a6cc; --l-line: #35315f; --l-soft: #1d1a3a; --l-lav: #2c2658; --l-lav-h: #3a3270;
+    --l-purple: #7b63f0; --l-purple-d: #b9abff;
+    --l-blue: #1b2a52; --l-blue-ink: #a9c8ff; --l-mint: #123a2d; --l-mint-ink: #8be8c1; --l-mint-d: #2fbf8a;
+    --l-peach: #3d2a1f; --l-peach-ink: #ffc4a0; --l-red: #ff7a8a; --l-red-soft: #3a1d27; --l-red-ink: #ffb0bc;
+    --l-seen: #12301f; --l-seen-line: #2c6b52; --l-track: #4a4577; --l-bar: rgba(0,0,0,.35);
+    --l-forme: #1d1a3a; --l-forme-line: #4d44a0; --l-sk1: #211e44; --l-sk2: #2c2858;
+    --l-shadow: 0 6px 24px rgba(0,0,0,.45); --l-shadow-s: 0 2px 10px rgba(0,0,0,.35);
+  }
+  html:not([data-theme="classic"]):not([data-theme="midnight"]) .learn-page .l-btn.primary:hover:not(:disabled) { background: var(--l-purple); filter: brightness(1.12); }
+  html:not([data-theme="classic"]):not([data-theme="midnight"]) .learn-page .form-card input:focus, html:not([data-theme="classic"]):not([data-theme="midnight"]) .learn-page .ask-card input:focus { background: #110f2b; }
+}
