@@ -2531,6 +2531,24 @@ for (const [srcId, dstId] of MEDIA) {
   new MutationObserver(syncLearnMedia).observe($(srcId), { attributes: true, attributeFilter: ["class", "title", "data-count"], childList: true, characterData: true, subtree: true });
 }
 
+/* ---- full screen for the Learn page (the whole page, so the call tiles and the chat stay with it) ---- */
+function updateLearnFull() {
+  const on = Boolean(document.fullscreenElement);
+  $("learnFull").classList.toggle("on", on);
+  $("learnFull").setAttribute("aria-pressed", on ? "true" : "false");
+  $("learnFull").setAttribute("aria-label", on ? "Exit full screen" : "Full screen");
+  $("learnFull").title = on ? "Exit full screen" : "Full screen";
+}
+$("learnFull").addEventListener("click", async () => {
+  if (document.fullscreenElement) { await exitFullscreen(); updateLearnFull(); return; }
+  const el = document.documentElement;
+  const ask = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!ask) { toast("This browser has no full screen for web pages. Browser menu → Add to Home screen, then open the game from its icon."); return; }
+  try { await ask.call(el); } catch (e) { toast("The browser refused full screen."); }
+  updateLearnFull();
+});
+document.addEventListener("fullscreenchange", updateLearnFull);
+
 /* ---- focus: hide everything except the lesson (by choice, and automatically while a quiz question is open) ---- */
 function setFocus(on, keep) {
   $("learnPage").classList.toggle("focus", on);
@@ -2575,6 +2593,7 @@ async function openLearn() {
   document.body.classList.add("learning");
   placeChat(chatInGame); // the chat moves onto the Learn page's Chat tab
   setFocus(store("uno-learn-focus") === "1", true);
+  updateLearnFull();
   syncLearnMedia();
   $("learnPage").classList.remove("hidden");
   setPane("letters");

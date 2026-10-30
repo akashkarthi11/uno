@@ -1357,3 +1357,5 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
   .learn-page .section-title { margin-top: 14px; }
   .learn-page .word-card .l-icon-btn { width: 44px; height: 44px; }
 }
+
+@media (max-width: 440px) { .learn-page .learn-head .flag { display: none; } }

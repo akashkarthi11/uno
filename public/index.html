@@ -242,6 +242,7 @@
 <section id="learnPage" class="learn-page hidden" aria-label="Learn Hangul">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
+      <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-focus" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></symbol>
       <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v15H5.5C4.7 19 4 18.3 4 17.5v-12zM20 5.5c0-.8-.7-1.5-1.5-1.5H13v15h5.5c.8 0 1.5-.7 1.5-1.5v-12z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></symbol>
@@ -271,6 +272,7 @@
     <button id="learnBack" class="l-icon-btn" type="button" aria-label="Back to the lobby"><svg class="ico"><use href="#i-back"/></svg></button>
     <svg class="flag" aria-hidden="true"><use href="#flag-kr"/></svg>
     <h2>Learn Hangul</h2>
+    <button id="learnFull" class="l-icon-btn" type="button" aria-pressed="false" aria-label="Full screen" title="Full screen"><svg class="ico"><use href="#i-full"/></svg></button>
     <button id="learnFocus" class="l-icon-btn" type="button" aria-pressed="false" aria-label="Focus mode: hide everything except the lesson" title="Focus mode"><svg class="ico"><use href="#i-focus"/></svg></button>
     <span id="learnPts" class="lchip pts hidden" title="Your points in this lesson"></span>
     <span id="learnRole" class="lbadge"></span>
