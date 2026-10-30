@@ -159,6 +159,8 @@ if (window.visualViewport) window.visualViewport.addEventListener("resize", setA
 
 /** Forget everything remembered about the previous table (used when joining again or after being removed). */
 function resetScreenCaches() {
+  chatShown = 10;
+  replyTo = null;
   chatSig = "";
   hangul = null; // the letters are fetched again after a new sign-in, so they never outlive the right to see them
   if (typeof closeLearn === "function") closeLearn();
@@ -388,19 +390,30 @@ async function send(body, onFail) {
 }
 
 /** A chat message appears in your own chat box immediately; the server's reply then replaces it with the real one. */
-function sendChat(text) {
+let replyTo = null; // the message being answered (WhatsApp-style), shown above the box until it is sent or cancelled
+function sendChat(text, img) {
   if (busy || !state) return;
   const before = state;
-  const me = state.players.find((p) => p.id === state.you);
-  const mine = { from: state.you, name: me ? me.name : "You", text, t: Date.now() };
-  state = { ...state, chat: [...(state.chat || []), mine] };
-  renderChat(state);
-  floatOne(mine, state.you);
-  send({ op: "chat", text }, () => {
+  const reply = replyTo;
+  replyTo = null;
+  renderReplyBar();
+  const body = { op: "chat", text };
+  if (reply) { body.replyT = reply.t; body.replyFrom = reply.from; }
+  if (img) body.img = img;
+  const undo = () => {
     state = before; // refused (for example: too fast, or the game just ended): take it back
     chatSig = "";
     renderChat(state);
-  });
+    if (reply) { replyTo = reply; renderReplyBar(); }
+  };
+  if (img) { send(body, undo); return; } // a picture waits for the server's copy (it has the picture's id)
+  const me = state.players.find((p) => p.id === state.you);
+  const mine = { from: state.you, name: me ? me.name : "You", text, t: Date.now() };
+  if (reply) mine.reply = { name: reply.name, text: reply.text.slice(0, 80), img: reply.img, from: reply.from, t: reply.t };
+  state = { ...state, chat: [...(state.chat || []), mine] };
+  renderChat(state);
+  floatOne(mine, state.you);
+  send(body, undo);
 }
 
 /** Playing a plain card: show it on the pile at once; the server's reply (about a third of a second later) replaces it. */
@@ -1009,6 +1022,7 @@ function updateChatUi(s) {
   $("chatNavBadge").classList.toggle("hidden", unread === 0 || !learnOpen);
   // chat belongs to one game: once it has finished, writing waits for the next one
   $("chatInput").disabled = s.over;
+  $("chatAttach").classList.toggle("hidden", !s.private); // pictures are for private games (the admin and private players)
   $("chatInput").placeholder = s.over ? "Chat starts fresh with the next game" : "Say something…";
 }
 
@@ -1043,19 +1057,71 @@ function floatOne(m, you) {
   el.className = "float-msg" + (m.from === you ? " mine" : "");
   const who = document.createElement("b");
   who.textContent = (m.from === you ? "You" : m.name) + " ";
-  el.append(who, document.createTextNode(m.text));
+  el.append(who, document.createTextNode((m.img ? "📷 " : "") + (m.text || (m.img ? "Photo" : ""))));
   box.appendChild(el);
   setTimeout(() => el.remove(), 6000);
   while (box.children.length > 4) box.firstChild.remove();
 }
 
+const imgCache = new Map(); // picture id -> data URL (fetched once per picture)
+function loadChatImg(el, id) {
+  if (imgCache.has(id)) { el.src = imgCache.get(id); return; }
+  api({ op: "chatImage", id }).then((r) => { imgCache.set(id, r.data); el.src = r.data; }).catch(() => {
+    const gone = document.createElement("span");
+    gone.className = "chat-img-gone";
+    gone.textContent = "📷 Picture no longer available";
+    el.replaceWith(gone);
+  });
+}
+function openLightbox(src) {
+  const box = document.createElement("div");
+  box.className = "lightbox";
+  const im = document.createElement("img");
+  im.src = src;
+  im.alt = "Picture";
+  box.appendChild(im);
+  box.addEventListener("click", () => box.remove());
+  document.body.appendChild(box);
+}
+function setReply(m) {
+  if (!state) return;
+  replyTo = { from: m.from, t: m.t, name: m.from === state.you ? "You" : m.name, text: m.text || "", img: Boolean(m.img) };
+  renderReplyBar();
+  $("chatInput").focus();
+}
+function renderReplyBar() {
+  const bar = $("replyBar");
+  bar.classList.toggle("hidden", !replyTo);
+  if (!replyTo) return;
+  $("rbName").textContent = replyTo.name;
+  $("rbText").textContent = replyTo.text || (replyTo.img ? "📷 Photo" : "");
+}
+$("rbClose").addEventListener("click", () => { replyTo = null; renderReplyBar(); });
+
+let chatShown = 10; // how many messages are drawn; the rest appear as you scroll up
+let chatOlder = false;
+$("chatLog").addEventListener("scroll", () => {
+  const log = $("chatLog");
+  if (log.scrollTop > 30 || !state || (state.chat || []).length <= chatShown) return;
+  chatShown += 10;
+  chatOlder = true;
+  chatSig = "";
+  renderChat(state);
+});
+
 function renderChat(s) {
   floatNewMessages(s);
   const msgs = s.chat || [];
-  const sig = msgs.length + ":" + (msgs.length ? msgs[msgs.length - 1].t : 0);
+  const shown = msgs.slice(-chatShown); // only the latest few are drawn; scrolling up brings the earlier ones
+  const hidden = msgs.length - shown.length;
+  const sig = msgs.length + ":" + (msgs.length ? msgs[msgs.length - 1].t : 0) + ":" + shown.length;
   if (sig === chatSig) return; // nothing new: leave the scroll position alone
   chatSig = sig;
   const log = $("chatLog");
+  const older = chatOlder;
+  chatOlder = false;
+  const prevTop = log.scrollTop, prevH = log.scrollHeight;
+  const nearBottom = !prevH || prevH - prevTop - log.clientHeight < 80;
   log.innerHTML = "";
   if (!msgs.length) {
     const e = document.createElement("div");
@@ -1064,9 +1130,11 @@ function renderChat(s) {
     log.appendChild(e);
     return;
   }
-  for (const m of msgs) {
+  if (hidden) { const more = document.createElement("div"); more.className = "older"; more.textContent = "↑ Scroll up for earlier messages (" + hidden + ")"; log.appendChild(more); }
+  for (const m of shown) {
     const row = document.createElement("div");
-    row.className = "msg" + (m.from === s.you ? " mine" : "") + (isEmojiOnly(m.text) ? " big" : "");
+    row.className = "msg" + (m.from === s.you ? " mine" : "") + (m.text && !m.img && !m.reply && isEmojiOnly(m.text) ? " big" : "");
+    row.dataset.key = m.from + ":" + m.t;
     const av = document.createElement("span");
     av.className = "avatar";
     paintAvatar(av, m.name);
@@ -1075,11 +1143,63 @@ function renderChat(s) {
     const who = document.createElement("span");
     who.className = "who";
     who.textContent = m.from === s.you ? "You" : m.name;
-    bubble.append(who, document.createTextNode(m.text));
+    bubble.appendChild(who);
+    if (m.reply) {
+      const q = document.createElement("div");
+      q.className = "quote";
+      const qn = document.createElement("b");
+      qn.textContent = m.reply.from === s.you ? "You" : m.reply.name;
+      const qt = document.createElement("span");
+      qt.textContent = m.reply.text || (m.reply.img ? "📷 Photo" : "");
+      q.append(qn, qt);
+      q.addEventListener("click", () => { // jump to the message that was answered
+        const target = log.querySelector('[data-key="' + CSS.escape(m.reply.from + ":" + m.reply.t) + '"]');
+        if (!target) return;
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        target.classList.add("flash");
+        setTimeout(() => target.classList.remove("flash"), 1200);
+      });
+      bubble.appendChild(q);
+    }
+    if (m.img) {
+      const im = document.createElement("img");
+      im.className = "chat-img";
+      im.alt = "Picture";
+      im.loading = "lazy";
+      im.addEventListener("click", () => { if (im.src) openLightbox(im.src); });
+      loadChatImg(im, m.img);
+      bubble.appendChild(im);
+    }
+    if (m.text) bubble.appendChild(document.createTextNode(m.text));
+    const rb = document.createElement("button");
+    rb.type = "button";
+    rb.className = "reply-btn";
+    rb.textContent = "↩";
+    rb.title = "Reply";
+    rb.setAttribute("aria-label", "Reply to " + m.name);
+    rb.addEventListener("click", () => setReply(m));
+    bubble.appendChild(rb);
     row.append(av, bubble);
+    // swipe the message to the right to reply, as in WhatsApp
+    let sx = null, sy = 0;
+    row.addEventListener("touchstart", (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    row.addEventListener("touchmove", (e) => {
+      if (sx === null) return;
+      const dx = e.touches[0].clientX - sx, dy = Math.abs(e.touches[0].clientY - sy);
+      if (dx > 0 && dx > dy) row.style.transform = "translateX(" + Math.min(dx, 70) + "px)";
+    }, { passive: true });
+    row.addEventListener("touchend", (e) => {
+      if (sx === null) return;
+      const dx = e.changedTouches[0].clientX - sx;
+      sx = null;
+      row.style.transform = "";
+      if (dx > 60) setReply(m);
+    }, { passive: true });
     log.appendChild(row);
   }
-  log.scrollTop = log.scrollHeight;
+  if (older) log.scrollTop = log.scrollHeight - prevH + prevTop; // the messages that just appeared above push the view down: stay on the same message
+  else if (nearBottom) log.scrollTop = log.scrollHeight;
+  else log.scrollTop = prevTop;
 }
 
 EMOJIS.forEach((e) => {
@@ -1097,6 +1217,44 @@ $("chatForm").addEventListener("submit", (ev) => {
   if (!text) return;
   $("chatInput").value = "";
   sendChat(text);
+});
+
+/* ---- pictures in the chat: shrunk on the phone first, so each one is small ---- */
+function pictureData(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read that picture.")); };
+    im.onload = () => {
+      URL.revokeObjectURL(url);
+      let max = 720, q = 0.72;
+      for (let i = 0; i < 5; i++) {
+        const k = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(im.naturalWidth * k));
+        c.height = Math.max(1, Math.round(im.naturalHeight * k));
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        const data = c.toDataURL("image/jpeg", q);
+        if (data.length <= 200000) { resolve(data); return; }
+        max *= 0.8;
+        q = Math.max(0.4, q - 0.08);
+      }
+      reject(new Error("That picture is too big."));
+    };
+    im.src = url;
+  });
+}
+$("chatAttach").addEventListener("click", () => $("chatFile").click());
+$("chatFile").addEventListener("change", async () => {
+  const f = $("chatFile").files[0];
+  $("chatFile").value = "";
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { toast("Pick a picture."); return; }
+  let data;
+  try { data = await pictureData(f); } catch (e) { toast(e.message); return; }
+  const caption = $("chatInput").value.trim();
+  $("chatInput").value = "";
+  sendChat(caption, data);
 });
 
 /* ---------- small visual helpers ---------- */

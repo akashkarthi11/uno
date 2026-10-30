@@ -56,7 +56,9 @@
   <div id="chat">
     <div id="chatLog"></div>
     <div id="emojiBar"></div>
+    <div id="replyBar" class="reply-bar hidden"><div class="rb-text"><b id="rbName"></b><span id="rbText"></span></div><button id="rbClose" type="button" aria-label="Cancel reply">✕</button></div>
     <form id="chatForm" autocomplete="off">
+      <button id="chatAttach" class="hidden" type="button" title="Send a picture" aria-label="Send a picture">📎</button><input id="chatFile" class="hidden" type="file" accept="image/*">
       <input id="chatInput" maxlength="200" placeholder="Say something to the lobby…">
       <button type="submit">Send</button>
     </form>

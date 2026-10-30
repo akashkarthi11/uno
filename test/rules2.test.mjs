@@ -510,6 +510,19 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal((await call({ op: 'learnBackupDelete', room: B, playerId: aa, id: lsaved.body.id })).code, 200);
   assert.equal((await call({ op: 'learnBackupRestore', room: B, playerId: aa, id: lsaved.body.id })).code, 400, 'removed');
 
+  // pictures in the chat travel through the API: stored apart, the message holds an id, only members of a private game can fetch it
+  const pic = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+  const sentPic = await call({ op: 'chat', room: B, playerId: pp, text: 'my notes', img: pic });
+  assert.equal(sentPic.code, 200);
+  const picMsg = sentPic.body.state.chat.find((m) => m.img);
+  assert.ok(picMsg && picMsg.text === 'my notes' && !JSON.stringify(sentPic.body).includes('base64'), 'the state carries an id, not the picture');
+  assert.equal((await call({ op: 'chatImage', room: B, playerId: aa, id: picMsg.img })).body.data, pic, 'another member can fetch it');
+  assert.equal((await call({ op: 'chatImage', room: B, playerId: pp, id: 'nosuchid' })).code, 400);
+  assert.equal((await call({ op: 'chat', room: B, playerId: pp, text: 'x', img: 'data:text/html;base64,PGI+' })).code, 400, 'not a picture');
+  assert.equal((await call({ op: 'chat', room: B, playerId: pp, text: 'x', img: 'data:image/jpeg;base64,' + 'A'.repeat(230000) })).code, 400, 'too big');
+  assert.equal((await call({ op: 'chat', room: A, playerId: aPub.body.state.you, text: 'x', img: pic })).code, 400, 'a public player cannot send pictures');
+  assert.equal((await call({ op: 'chatImage', room: A, playerId: aPub.body.state.you, id: picMsg.img })).code, 400, 'or fetch them');
+
   // the admin is told about every sign-in (any room, any role); nobody else can read that feed; each one is delivered once
   const feed = await call({ op: 'joins', room: A, playerId: admin.body.state.you });
   assert.equal(feed.code, 200);

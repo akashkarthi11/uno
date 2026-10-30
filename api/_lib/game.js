@@ -360,14 +360,21 @@ function learnView(s, me) {
   };
 }
 
-function chat(s, p, raw, now) {
+function chat(s, p, raw, now, extra = {}) {
   if (p.observer) fail('Observers only watch.');
   if (s.over) fail('The game has finished — the chat starts fresh with the next game.');
   const text = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200);
-  if (!text) fail('Type a message first.');
+  const img = extra.imgId ? String(extra.imgId).slice(0, 40) : '';
+  if (img && !canLearn(p)) fail('Unknown action.'); // pictures belong to the admin and private players
+  if (!text && !img) fail('Type a message first.');
   if (p.lastChat && now - p.lastChat < 600) fail('Slow down a little.');
   p.lastChat = now;
-  s.chat = [...(s.chat || []), { from: p.id, name: p.name, text, t: now }].slice(-50);
+  const msg = { from: p.id, name: p.name, text, t: now };
+  if (img) msg.img = img;
+  // a reply quotes the message it answers (found by who sent it and when); if that message has scrolled away, it is a plain message
+  const orig = extra.replyT ? (s.chat || []).find((m) => m.t === extra.replyT && m.from === extra.replyFrom) : null;
+  if (orig) msg.reply = { name: orig.name, text: String(orig.text || '').slice(0, 80), img: Boolean(orig.img), from: orig.from, t: orig.t };
+  s.chat = [...(s.chat || []), msg].slice(-50);
 }
 
 /* ---------------- voice chat (membership only; audio is browser-to-browser) ---------------- */
@@ -492,7 +499,7 @@ function dispatch(s, me, b, now) {
     case 'lobby': return toLobby(s, me);
     case 'private': return setPrivate(s, me, b.on === true, now);
     case 'config': return setConfig(s, me, b);
-    case 'chat': return chat(s, me, b.text, now);
+    case 'chat': return chat(s, me, b.text, now, { imgId: b.imgId, replyT: Number.isFinite(b.replyT) ? b.replyT : 0, replyFrom: String(b.replyFrom ?? '') });
     case 'learnShow': case 'learnQuiz': case 'learnReveal': case 'learnAnswer': case 'learnEnd':
     case 'learnAsk': case 'learnWrite': case 'learnMark': case 'learnRemoveAsk': case 'learnWordAdd': case 'learnWordRemove': return learn(s, me, b, now);
     case 'pause': return setPaused(s, me, true, now);

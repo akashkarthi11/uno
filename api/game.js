@@ -1,8 +1,9 @@
+import { randomBytes } from 'node:crypto';
 import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
 import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, isShutdown, setShutdown, isObserverOff, setObserverOff, videoRead, videoUpdate } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, videoRead, videoUpdate } from './_lib/store.js';
 import * as V from './_lib/video.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -465,6 +466,31 @@ export default async function handler(req, res) {
       const me = s && s.members.find((m) => m.id === b.playerId);
       if (!me) throw new G.GameError('You are not in this room — rejoin.');
       return res.json({ stats: G.statsView(s, me) });
+    }
+
+    // Pictures in the chat (admin and private players only): the bytes go to their own key, the message only carries an id.
+    if (b.op === 'chat') {
+      const img = b.img;
+      delete b.img;
+      b.imgId = undefined; // never trust an id from the client
+      if (img !== undefined && img !== null && img !== '') {
+        const s = await readRoom(code);
+        const me = s && s.members.find((m) => m.id === b.playerId);
+        if (!me || !G.canLearn(me)) throw new G.GameError('Unknown action.');
+        if (typeof img !== 'string' || img.length > 220000 || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(img)) throw new G.GameError('That picture is too big or is not a picture.');
+        b.imgId = randomBytes(9).toString('hex');
+        await putImage(b.imgId, img);
+      }
+    }
+    if (b.op === 'chatImage') {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      if (!me || !G.canLearn(me)) throw new G.GameError('Unknown action.');
+      const id = String(b.id ?? '').slice(0, 40);
+      if (!(s.chat || []).some((m) => m.img === id)) throw new G.GameError('That picture is gone.');
+      const data = await getImage(id);
+      if (!data) throw new G.GameError('That picture has expired.');
+      return res.json({ data });
     }
 
     // Voice-chat signalling: tiny messages passed between two people who are both in the voice list.

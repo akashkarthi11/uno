@@ -163,3 +163,25 @@ test('the starter dictionary is well formed: Korean, a reading and a meaning in 
   }
   assert.equal(new Set(rows.map((r) => r[0])).size, rows.length, 'a word appears twice');
 });
+
+test('chat replies quote the message they answer; a reply to a message that is gone is a plain message', () => {
+  const { s, admin, ann, bob } = room();
+  G.act(s, ann, { op: 'chat', text: 'How do I say water?' }, now);
+  const asked = s.chat[0];
+  G.act(s, admin, { op: 'chat', text: 'mul — 물', replyT: asked.t, replyFrom: ann.id }, now + 1000);
+  const msg = s.chat[1];
+  assert.deepEqual([msg.reply.name, msg.reply.text, msg.reply.img], ['Ann', 'How do I say water?', false]);
+  G.act(s, bob, { op: 'chat', text: 'ok', replyT: 12345, replyFrom: ann.id }, now + 2000);
+  assert.equal(s.chat[2].reply, undefined);
+  G.act(s, bob, { op: 'chat', text: 'x'.repeat(300), replyT: s.chat[1].t, replyFrom: admin.id }, now + 3000);
+  assert.ok(s.chat[3].reply.text.length <= 80);
+});
+
+test('a picture in the chat: only the admin and private players; the message carries an id, never the bytes', () => {
+  const { s, admin, ann } = room();
+  G.act(s, ann, { op: 'chat', text: '', imgId: 'abc123' }, now);
+  assert.deepEqual([s.chat[0].img, s.chat[0].text], ['abc123', '']);
+  assert.throws(() => G.act(s, admin, { op: 'chat', text: '' }, now + 1000), /Type a message first/);
+  const pub = G.join(s, { name: 'Pat', role: 'public' }, now);
+  assert.throws(() => G.act(s, pub, { op: 'chat', text: 'hi', imgId: 'zzz' }, now + 2000), /Unknown action/);
+});

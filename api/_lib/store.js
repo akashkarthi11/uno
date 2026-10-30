@@ -366,3 +366,18 @@ export function withRoom(code, fn) {
     return result;
   });
 }
+
+/** Pictures sent in the chat: kept apart from the room (they are big) for as long as a room lives. */
+const imgMem = new Map();
+export async function putImage(id, data) {
+  if (!usingRedis) {
+    imgMem.set(id, data);
+    if (imgMem.size > 200) imgMem.delete(imgMem.keys().next().value);
+    return;
+  }
+  await (await client()).set('growx:img:' + id, data, { ex: 6 * 3600 });
+}
+export async function getImage(id) {
+  if (!usingRedis) return imgMem.get(id) || null;
+  return (await (await client()).get('growx:img:' + id)) || null;
+}
