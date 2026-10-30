@@ -1277,6 +1277,10 @@ export function removeByAdmin(s, targetId, now) {
  * Called once when a game ends. Public and private games are kept completely apart: each has its own table of wins and
  * losses and its own last 10 games, filed under the mode the game was started in.
  */
+/** The server sets this to also keep every finished game in the database (see stats.js). Called once per game, inside the room update. */
+let gameRecorder = null;
+export const setGameRecorder = (fn) => { gameRecorder = fn; };
+
 function recordGame(s) {
   if (s.recordedNo === s.gameNo) return;
   if (s.botGame) return; // a practice match against the bot is not part of the table's stats
@@ -1301,6 +1305,7 @@ function recordGame(s) {
   }
   bucket.scores = Object.fromEntries(Object.entries(scores).slice(-30));
   s.stats[mode] = bucket;
+  if (gameRecorder) gameRecorder({ room: s.code, mode, gameNo: s.gameNo, at: Date.now(), players: names, ranking: [...s.ranking], loser: s.loser || null, notice: s.notice || null, points: s.roundPoints || 0 });
   // the match: points add up from game to game until somebody reaches 500
   if (s.roundWinner && s.roundPoints > 0) {
     s.match = { ...(s.match || {}) };

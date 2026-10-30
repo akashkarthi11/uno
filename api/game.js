@@ -7,6 +7,7 @@ import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, lis
 import { auth0Config, readTicket } from './_lib/auth0.js';
 import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, linkAccount, LinkError, isOgAdminName, adminNameOk, ogAdminName, checkPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
+import { saveGame, roomStats, playerTotals } from './_lib/stats.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -80,7 +81,19 @@ const cleanRoom = (raw) => (/^[A-Za-z0-9_-]{1,24}$/.test(String(raw ?? '').trim(
 // to reload instead of quietly running old code against the new server.
 const BUILD = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || 'local';
 
+// Every finished game is also written to the database. The writes run while the request is handled and are awaited before the call ends.
+const pendingWrites = [];
+G.setGameRecorder((g) => { if (usersEnabled()) pendingWrites.push(saveGame(g).catch(() => {})); });
+
 export default async function handler(req, res) {
+  try {
+    return await handle(req, res);
+  } finally {
+    if (pendingWrites.length) await Promise.allSettled(pendingWrites.splice(0));
+  }
+}
+
+async function handle(req, res) {
   // An API answer must never be kept by a browser, proxy or CDN (errors and the 405 included).
   if (res.setHeader) res.setHeader('Cache-Control', 'no-store, max-age=0');
   const sendJson = res.json.bind(res);
@@ -619,7 +632,18 @@ export default async function handler(req, res) {
       const s = await readRoom(code);
       const me = s && s.members.find((m) => m.id === b.playerId);
       if (!me) throw new G.GameError('You are not in this room — rejoin.');
-      return res.json({ stats: G.statsView(s, me) });
+      const view = G.statsView(s, me);
+      if (usersEnabled()) {
+        // the database holds every game ever played; the room only remembers the last few. A read that fails falls back to the room's own copy.
+        try {
+          for (const mode of Object.keys(view.modes)) {
+            const fromDb = await roomStats(code, mode);
+            if (fromDb.table.length || fromDb.history.length) Object.assign(view.modes[mode], fromDb);
+            view.modes[mode].mine = await playerTotals(me.name, mode); // this player's totals over every room
+          }
+        } catch { /* keep the room's own numbers */ }
+      }
+      return res.json({ stats: view });
     }
 
     // Pictures in the chat (admin and private players only): the bytes go to their own key, the message only carries an id.

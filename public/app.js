@@ -3220,12 +3220,14 @@ function renderStats() {
 }
 
 function renderDeviceStats(mode) {
-  const st = deviceStatsAll()[mode];
+  const mine = statsData && statsData.modes && statsData.modes[mode] && statsData.modes[mode].mine; // saved in the database: every room, every device
+  const st = mine || deviceStatsAll()[mode];
+  $("statsMineHead").textContent = mine ? "Your totals (all rooms)" : "On this device";
   const box = $("statsDevice");
   box.textContent = "";
-  if (!st.played) { box.className = "none"; box.textContent = "No " + mode + " games played on this device yet."; return; }
+  if (!st.played) { box.className = "none"; box.textContent = mine ? "No finished " + mode + " games for you yet." : "No " + mode + " games played on this device yet."; return; }
   box.className = "";
-  box.appendChild(statsTable([{ name: "You", played: st.played, wins: st.wins, losses: st.losses }]));
+  box.appendChild(statsTable([{ name: "You", played: st.played, wins: st.wins, losses: st.losses }].map((r) => (mine ? { ...r, points: st.points } : r))));
   const line = document.createElement("div");
   line.className = "none";
   line.textContent = "Win rate " + Math.round((100 * st.wins) / st.played) + "% · current streak " + (st.streak || 0) + " · best streak " + (st.best || 0);

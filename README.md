@@ -261,6 +261,9 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
 
 - **The admin password belongs to one username.** 110299 only works together with the admin's username, `karthi` (any letter case;
   `GAME_ADMIN_USERNAME` changes it). With any other name it is just a wrong password, and nobody else can register that name.
+- **Stats are kept in the database** (`growx_games` and `growx_game_players`): every finished game is saved with its players, so nothing expires with the
+  room any more. The Stats window shows the room's table and last 10 games from there, plus the viewer's own totals across every room (played,
+  wins, losses, points, streaks) instead of numbers kept in the browser. Games against the bot are still not counted.
 - **Sign-in is for the whole system, not for a room.** You sign in once (name and password, or Auth0), then choose **Create room** (a name of your
   own or a random code) or **Join room** (the code a friend gave you). Admins and public players can create rooms; private players and the
   observer join existing ones. Joining a code that does not exist says so instead of making a new room. Sign out is on that screen.
