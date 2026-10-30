@@ -1946,10 +1946,12 @@ function renderLearn(s) {
 
   // a question is open: the letter grid (it shows every letter's sound) and the highlighted letter would give the answer away
   const openQ = Boolean(L && L.mode === "quiz" && L.q && !L.q.revealed);
+  $("learnPage").classList.toggle("quizing", openQ); // a question is open: nothing else on the screen
+  document.body.classList.toggle("learn-quizing", openQ && learnOpen);
   ["koreanTabs", "koreanGrid", "groupProgress"].forEach((id) => $(id).classList.toggle("hidden", openQ));
   $("lettersHint").textContent = openQ
     ? "A quiz question is open — the letters come back when the answers are shown."
-    : "Tap a letter to hear and see how it sounds. A green edge means you have seen it, a peach tile means you got it right in a quiz (kept on this phone only).";
+    : "Swipe the big card left or right, or tap a letter, to hear how it sounds. A green edge means you have seen it, a peach tile means you got it right in a quiz (kept on this phone only).";
 
   // switch to the quiz when a new question starts, and back to the letters when the quiz ends
   const qn = L && L.q ? L.q.n : 0;
@@ -2529,8 +2531,37 @@ for (const [srcId, dstId] of MEDIA) {
   new MutationObserver(syncLearnMedia).observe($(srcId), { attributes: true, attributeFilter: ["class", "title", "data-count"], childList: true, characterData: true, subtree: true });
 }
 
+/* ---- focus: hide everything except the lesson (by choice, and automatically while a quiz question is open) ---- */
+function setFocus(on, keep) {
+  $("learnPage").classList.toggle("focus", on);
+  document.body.classList.toggle("learn-focus", on && learnOpen);
+  $("learnFocus").setAttribute("aria-pressed", on ? "true" : "false");
+  $("learnFocus").classList.toggle("on", on);
+  if (!keep) store("uno-learn-focus", on ? "1" : "0");
+}
+$("learnFocus").addEventListener("click", () => {
+  const on = !$("learnPage").classList.contains("focus");
+  setFocus(on);
+  toast(on ? "Focus on — only the lesson. Tap the eye to bring everything back." : "Focus off.");
+});
+
+/* swipe the big letter card to step through the letters */
+{
+  let sx = null, sy = null;
+  const card = $("koreanDetail");
+  card.addEventListener("touchstart", (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  card.addEventListener("touchend", (e) => {
+    if (sx === null) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    sx = null;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5 || $("kNext").classList.contains("hidden")) return;
+    stepLetter(dx < 0 ? 1 : -1);
+  }, { passive: true });
+}
+
 function closeLearn() {
   learnOpen = false;
+  document.body.classList.remove("learn-focus", "learn-quizing");
   placeChat(chatInGame); // the chat goes back to the lobby
   $("learnPage").classList.add("hidden");
   document.body.classList.remove("learning");
@@ -2543,6 +2574,7 @@ async function openLearn() {
   renderLearn.autoQ = 0;
   document.body.classList.add("learning");
   placeChat(chatInGame); // the chat moves onto the Learn page's Chat tab
+  setFocus(store("uno-learn-focus") === "1", true);
   syncLearnMedia();
   $("learnPage").classList.remove("hidden");
   setPane("letters");

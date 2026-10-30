@@ -1326,3 +1326,34 @@ body.learning #vToggle { top: auto; bottom: 84px; right: 8px; }
 .l-pill .ic { font-size: 20px; }
 .l-pill .lb { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .l-pill { position: relative; }
+
+/* ---------- Learn page: made for a phone, and for concentration ---------- */
+.learn-page button, .learn-page .l-pill, .learn-page summary { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.learn-page #koreanDetail { touch-action: pan-y; }
+/* Focus mode (a choice) and the open quiz question (automatic): only the lesson stays on screen */
+.learn-page:is(.focus, .quizing) :is(.learn-banner, .learn-media, .learn-scores, .tips-card, .microcopy, .flag) { display: none; }
+.learn-page.focus :is(#groupProgress, .lbadge) { display: none; }
+body:is(.learn-focus, .learn-quizing) #chatFloat { display: none; }
+body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quizing) #vToggle { visibility: hidden; }
+.learn-page.quizing .learn-body { padding-top: 6px; }
+.learn-page.quizing .quiz-card { border-width: 0; box-shadow: none; background: transparent; padding: 4px 0; }
+.learn-page.quizing .k-letter.big { font-size: min(40vw, 150px); margin: 0 0 10px; }
+.learn-page.quizing .q-opts button { min-height: 80px; font-size: 26px; }
+.learn-page .l-icon-btn.on { background: var(--l-purple); color: #fff; border-color: transparent; }
+/* the teacher's quiz buttons stay in thumb reach, just above the bottom bar */
+.learn-page .teacher-bar { position: sticky; bottom: 78px; z-index: 4; padding: 10px 0 4px; background: linear-gradient(to bottom, transparent, var(--l-bg) 28%); }
+@media (max-width: 600px) {
+  .learn-page .learn-body { padding: 10px 12px 18px; }
+  .learn-page .learn-head { padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); gap: 6px 8px; }
+  .learn-page .learn-head h2 { font-size: 18px; }
+  .learn-page .learn-banner { padding: 8px 12px; margin-bottom: 10px; }
+  .learn-page .letter-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .learn-page .letter-grid button { min-height: 76px; }
+  .learn-page .k-letter { font-size: 76px; }
+  .learn-page .detail-card { padding: 12px; }
+  .learn-page .group-tabs button { min-height: 44px; }
+  .learn-page .l-btn { min-height: 50px; }
+  .learn-page .q-opts button { min-height: 72px; font-size: 24px; }
+  .learn-page .section-title { margin-top: 14px; }
+  .learn-page .word-card .l-icon-btn { width: 44px; height: 44px; }
+}
