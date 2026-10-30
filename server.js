@@ -4,11 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import handler from './api/game.js';
+import auth0Handler from './api/auth0.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 http.createServer(async (req, res) => {
+  if (req.url === '/api/auth0' || req.url.startsWith('/api/auth0?')) {
+    return auth0Handler(req, res); // the Auth0 hand-off: plain GET redirects
+  }
   if (req.url.startsWith('/api/game')) {
     let body = '';
     for await (const chunk of req) body += chunk;
