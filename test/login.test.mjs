@@ -1,5 +1,6 @@
 // System sign-in (no room), then create a room or join one.
 import test from 'node:test';
+process.env.GAME_ADMIN_ANY_NAME = '1'; // these tests sign the admin in under made-up names; adminname.test.mjs checks the real rule
 import assert from 'node:assert/strict';
 
 process.env.GAME_USERS_MEMORY = '1';

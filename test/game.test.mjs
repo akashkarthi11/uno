@@ -1,5 +1,6 @@
 process.env.GAME_DEAL = 'off'; // no dealing pause in these tests (dealing has its own test)
 import test from 'node:test';
+process.env.GAME_ADMIN_ANY_NAME = '1'; // these tests sign the admin in under made-up names; adminname.test.mjs checks the real rule
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';
 const DECK_SIZE = 123; // 108 classic cards + 15 super cards

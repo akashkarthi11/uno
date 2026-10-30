@@ -4,6 +4,7 @@ process.env.GAME_VIDEO_DAILY = '5';
 process.env.GAME_VIDEO_MONTHLY = '8';
 process.env.GAME_DEAL = 'off';
 import test from 'node:test';
+process.env.GAME_ADMIN_ANY_NAME = '1'; // these tests sign the admin in under made-up names; adminname.test.mjs checks the real rule
 import assert from 'node:assert/strict';
 import handler from '../api/game.js';
 

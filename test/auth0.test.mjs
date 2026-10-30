@@ -1,5 +1,6 @@
 // The Auth0 switch: the admin chooses how public players sign in; the admin password works either way.
 import test from 'node:test';
+process.env.GAME_ADMIN_ANY_NAME = '1'; // these tests sign the admin in under made-up names; adminname.test.mjs checks the real rule
 import assert from 'node:assert/strict';
 
 process.env.AUTH0_DOMAIN = 'tenant.example.auth0.com';

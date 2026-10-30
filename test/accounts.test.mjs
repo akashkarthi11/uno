@@ -1,5 +1,6 @@
 // Own login for public players: 123456 only opens the door once; the person then chooses a password. Shared passwords are untouched.
 import test from 'node:test';
+process.env.GAME_ADMIN_ANY_NAME = '1'; // these tests sign the admin in under made-up names; adminname.test.mjs checks the real rule
 import assert from 'node:assert/strict';
 
 process.env.GAME_USERS_MEMORY = '1';

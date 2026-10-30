@@ -85,6 +85,8 @@ export async function touchLocal(id) {
 export const ogAdminName = () => String(process.env.GAME_ADMIN_USERNAME || 'karthickkeyan303');
 const isOgAdmin = (name) => key(name) === key(ogAdminName());
 export const isOgAdminName = isOgAdmin;
+/** The admin password only works together with the admin's username (GAME_ADMIN_ANY_NAME=1 lifts that: tests only). */
+export const adminNameOk = (name) => process.env.GAME_ADMIN_ANY_NAME === '1' || isOgAdmin(name);
 
 /** True when this username already belongs to somebody who is not a local account: the real admin, or an Auth0 user. */
 export async function nameTaken(name) {

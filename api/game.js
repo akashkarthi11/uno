@@ -5,7 +5,7 @@ import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, getAuthMode, setAuthMode, videoRead, videoUpdate } from './_lib/store.js';
 import { auth0Config, readTicket } from './_lib/auth0.js';
-import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, isOgAdminName, ogAdminName, checkPassword, MIN_PASSWORD } from './_lib/users.js';
+import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, isOgAdminName, adminNameOk, ogAdminName, checkPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
   try {
     // Admin-only speed check of each configured database, measured from this function (see README).
     if (b.op === 'bench') {
-      if (String(b.password ?? '') !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Admin only.', denied: true });
+      if (String(b.password ?? '') !== ADMIN_PASSWORD || !adminNameOk(String(b.name ?? ''))) return res.status(401).json({ error: 'Admin only.', denied: true });
       return res.json({ region: process.env.VERCEL_REGION || 'local', ...(await benchmark()) });
     }
 
@@ -131,11 +131,12 @@ export default async function handler(req, res) {
         if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
         return done('public', ticket.n, true);
       }
+      if (pw === ADMIN_PASSWORD && !adminNameOk(String(b.name ?? ''))) return res.status(401).json({ error: 'Wrong password.', denied: true }); // the admin password belongs to the admin's username only
       if (pw === ADMIN_PASSWORD) {
         let name = G.cleanName(b.name);
-        if (usersEnabled() && isOgAdminName(String(b.name ?? ''))) {
+        if (isOgAdminName(String(b.name ?? ''))) {
           name = ogAdminName();
-          await touchAdmin(name).catch(() => {}); // recording it must never stop the sign-in
+          if (usersEnabled()) await touchAdmin(name).catch(() => {}); // recording it must never stop the sign-in
         }
         return done('admin', name, false);
       }
@@ -207,7 +208,7 @@ export default async function handler(req, res) {
 
     if (b.op === 'join') {
       const pw = String(b.password ?? '');
-      const admin = pw === ADMIN_PASSWORD;
+      const admin = pw === ADMIN_PASSWORD && adminNameOk(String(b.name ?? '')); // the admin password belongs to the admin's username only
       // the observer account: any room, public or private (unless the admin switched it off: then 1102 is just a wrong password)
       const observer = !admin && pw === OBSERVER_PASSWORD && !(await isObserverOff());
       let publicLogin = false; // a public player who signed in with their own account
