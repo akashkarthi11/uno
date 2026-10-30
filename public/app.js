@@ -207,12 +207,18 @@ function apply(data) {
   }
 }
 
+/* ---------- system sign-in, then create a room or join one ---------- */
+
+const SYS_KEY = "uno-sys"; // the sign-in token from op "login": lives in this tab only, like the room token
+const SYSROLE_KEY = "uno-sysrole";
+let sysToken = session(SYS_KEY);
+let sysRole = session(SYSROLE_KEY) || "";
+
+/** The Sign in button: who you are for the whole system. No room yet. */
 async function join() {
   myName = $("nameInput").value.trim();
-  myPassword = $("pwInput").value;
-  if (!myPassword) { toast("Enter the password"); return; }
-  room = $("roomInput").value.trim() || "main";
-  if (!/^[A-Za-z0-9_-]{1,24}$/.test(room)) { toast("Room: letters, digits, - and _ only"); return; }
+  const pw = $("pwInput").value;
+  if (!pw) { toast("Enter the password"); return; }
   let newPassword;
   if (!$("newPwRow").classList.contains("hidden")) {
     // first sign-in with this name: the person chooses their own password
@@ -221,29 +227,89 @@ async function join() {
     if (newPassword !== $("newPw2Input").value) { toast("The two new passwords are different"); return; }
   }
   $("joinBtn").disabled = true;
-  removed = false;
-  resetScreenCaches();
   try {
-    playerId = store("uno-id-" + room) || null;
-    const r = await api({ op: "join", name: myName, password: myPassword, newPassword });
+    const r = await api({ op: "login", name: myName, password: pw, newPassword });
     if (r.needsPassword) {
-      $("joinBtn").disabled = false;
       showNewPassword(true);
       toast("First time here: choose your own password");
       return;
     }
-    if (newPassword !== undefined) myPassword = newPassword; // later automatic rejoins use the new one
-    apply(r);
+    finishLogin(r);
   } catch (e) {
+    toast(e.message);
+  } finally {
     $("joinBtn").disabled = false;
+  }
+}
+
+function finishLogin(r) {
+  sysToken = r.sys;
+  sysRole = r.role;
+  session(SYS_KEY, sysToken);
+  session(SYSROLE_KEY, sysRole);
+  myName = r.name;
+  store("uno-name", myName);
+  $("pwInput").value = "";
+  showNewPassword(false);
+  showRoomScreen();
+}
+
+/** Signed in, not in a room: the screen with Create room and Join room. */
+function showRoomScreen() {
+  $("joinScreen").classList.add("hidden");
+  $("roomScreen").classList.remove("hidden");
+  $("roomHello").textContent = "Hi, " + (myName || "there");
+  const canCreate = sysRole === "admin" || sysRole === "public"; // private players and observers join the admin's rooms
+  ["createName", "createBtn"].forEach((id) => { const el = $(id); (el.closest("label") || el).classList.toggle("hidden", !canCreate); });
+  const want = new URLSearchParams(location.search).get("room") || session("uno-want") || "";
+  if (want && !$("joinCode").value) $("joinCode").value = want;
+}
+
+/** The first screen: sign in when nobody is signed in, else the room screen. */
+function showStart() {
+  $("roomScreen").classList.add("hidden");
+  if (sysToken) showRoomScreen();
+  else $("joinScreen").classList.remove("hidden");
+}
+
+function signOut() {
+  sysToken = null;
+  sysRole = "";
+  session(SYS_KEY, null);
+  session(SYSROLE_KEY, null);
+  try { Object.keys(sessionStorage).filter((k) => k.startsWith("uno-token-")).forEach((k) => sessionStorage.removeItem(k)); } catch (e) { /* storage may be blocked */ }
+  $("roomScreen").classList.add("hidden");
+  $("joinScreen").classList.remove("hidden");
+}
+$("signOutBtn").addEventListener("click", signOut);
+
+/** Create a room (a name of your own or a random code) or join one by its code. */
+async function enterWithSign(create) {
+  const code = (create ? $("createName") : $("joinCode")).value.trim();
+  if (!create && !code) { toast("Enter the room code"); return; }
+  if (code && !/^[A-Za-z0-9_-]{1,24}$/.test(code)) { toast("Room: letters, digits, - and _ only"); return; }
+  ["createBtn", "joinRoomBtn"].forEach((id) => { $(id).disabled = true; });
+  removed = false;
+  resetScreenCaches();
+  try {
+    playerId = create ? null : store("uno-id-" + code) || null;
+    const r = await api({ op: "join", sys: sysToken, room: code, create });
+    room = r.room;
+    apply(r);
+    session("uno-want", null);
+  } catch (e) {
+    if (e.denied && /Session expired|Auth0/.test(e.message)) signOut();
     toast(e.message);
     return;
+  } finally {
+    ["createBtn", "joinRoomBtn"].forEach((id) => { $(id).disabled = false; });
   }
-  showNewPassword(false);
-  $("joinBtn").disabled = false;
-  store("uno-name", myName);
   enterRoom();
 }
+$("createBtn").addEventListener("click", () => enterWithSign(true));
+$("joinRoomBtn").addEventListener("click", () => enterWithSign(false));
+$("joinCode").addEventListener("keydown", (e) => { if (e.key === "Enter") enterWithSign(false); });
+$("createName").addEventListener("keydown", (e) => { if (e.key === "Enter") enterWithSign(true); });
 
 /** The "choose your own password" rows on the sign-in screen (shown the first time a name signs in). */
 function showNewPassword(on) {
@@ -259,13 +325,14 @@ function enterRoom() {
   $("roomName").textContent = room;
   $("roomInfo").classList.remove("hidden");
   $("joinScreen").classList.add("hidden");
+  $("roomScreen").classList.add("hidden");
   startPolling();
 }
 
 /** After a refresh: show the token from the earlier sign-in; the server checks it and puts this player back at the table. */
 async function resumeSession() {
   const token = session(tokenKey());
-  if (!token) return;
+  if (!token) { showStart(); return; }
   $("joinScreen").classList.add("hidden"); // no flash of the sign-in form while the check runs
   toast("Reconnecting…");
   removed = false;
@@ -279,7 +346,7 @@ async function resumeSession() {
   } catch (e) {
     // expired, signed out by a password change, or removed: show the normal sign-in form
     if (e.denied || /Session expired/.test(e.message)) session(tokenKey(), null);
-    $("joinScreen").classList.remove("hidden");
+    showStart();
     if (e.denied) toast(e.message);
   }
 }
@@ -312,7 +379,7 @@ function removedByAdmin(message = "You were removed by the admin.") {
   store("uno-id-" + room, "");
   session(tokenKey(), null);
   ["game", "lobby", "roomInfo", "endModal", "playSheet", "sheetPill", "cheatModal", "chatToggle", "chatDock", "settingsModal"].forEach((id) => $(id).classList.add("hidden"));
-  $("joinScreen").classList.remove("hidden");
+  showStart();
   toast(message);
 }
 
@@ -1646,8 +1713,9 @@ async function closeRoomNow(r) {
 /** The observer account moves to another room: it signs in there with its own password (1102) and just hears and sees. */
 async function observeRoom(target) {
   let pw = myPassword;
-  if (!pw) pw = prompt("Observer password:") || "";
-  if (!pw) return;
+  const viaSign = sysRole === "observer" && sysToken; // signed in as the observer: no password to type again
+  if (!pw && !viaSign) pw = prompt("Observer password:") || "";
+  if (!pw && !viaSign) return;
   $("roomsModal").classList.add("hidden");
   if (typeof voiceStopLocal === "function") voiceStopLocal();
   if (typeof autoJoinTried !== "undefined") autoJoinTried = false;
@@ -1658,7 +1726,8 @@ async function observeRoom(target) {
   playerId = null;
   state = null;
   try {
-    apply(await api({ op: "join", name: "Observer", password: pw }));
+    const r = viaSign ? await api({ op: "join", sys: sysToken, room: target }) : await api({ op: "join", name: "Observer", password: pw });
+    apply(r);
   } catch (e) {
     room = from;
     toast(e.message);
@@ -3148,46 +3217,38 @@ $("statsBtn").addEventListener("click", openStats);
 $("statsModal").addEventListener("click", (e) => { if (e.target === $("statsModal")) $("statsModal").classList.add("hidden"); });
 
 (function init() {
-  const r = new URLSearchParams(location.search).get("room");
-  if (r) $("roomInput").value = r;
+  const params = new URLSearchParams(location.search);
+  const r = (params.get("room") || "").trim();
   const n = store("uno-name");
   if (n) $("nameInput").value = n;
-  const wanted = (r || "main").trim();
-  const ticket = new URLSearchParams(location.search).get("a0");
-  const a0err = new URLSearchParams(location.search).get("a0err");
-  if (ticket || a0err) history.replaceState(null, "", "?room=" + encodeURIComponent(wanted)); // the ticket must not stay in the address bar
-  if (/^[A-Za-z0-9_-]{1,24}$/.test(wanted)) {
-    room = wanted;
-    if (ticket) joinWithTicket(ticket);
-    else resumeSession(); // a refresh goes straight back to the table when this tab already signed in
+  const ticket = params.get("a0");
+  const a0err = params.get("a0err");
+  if (ticket || a0err) history.replaceState(null, "", r ? "?room=" + encodeURIComponent(r) : location.pathname); // the ticket must not stay in the address bar
+  if (r) session("uno-want", r); // a shared room link: the room screen offers that code after sign-in
+  if (ticket) {
+    loginWithTicket(ticket);
+  } else if (/^[A-Za-z0-9_-]{1,24}$/.test(r) && session("uno-token-" + r)) {
+    room = r;
+    resumeSession(); // a refresh goes straight back to the table when this tab already signed in
+  } else {
+    showStart();
   }
   if (a0err) toast(a0err.slice(0, 80));
   // the Auth0 button shows only while the admin has Auth0 switched on
   api({ op: "authInfo" }).then((d) => { if (d.mode === "auth0") $("auth0Btn").classList.remove("hidden"); }).catch(() => {});
 })();
 
-/** Back from Auth0 with the short ticket /api/auth0 made: join as a public player. */
-async function joinWithTicket(ticket) {
+/** Back from Auth0 with the short ticket /api/auth0 made: signed in as a public player, then the room screen. */
+async function loginWithTicket(ticket) {
   $("joinScreen").classList.add("hidden");
-  removed = false;
-  resetScreenCaches();
   try {
-    playerId = store("uno-id-" + room) || null;
-    apply(await api({ op: "join", ticket }));
-    const me = state && state.players.find((p) => p.id === state.you);
-    myName = (me && me.name) || "";
-    myPassword = "";
-    enterRoom();
+    finishLogin(await api({ op: "login", ticket }));
   } catch (e) {
-    $("joinScreen").classList.remove("hidden");
+    showStart();
     toast(e.message);
   }
 }
-$("auth0Btn").addEventListener("click", () => {
-  const rm = $("roomInput").value.trim() || "main";
-  if (!/^[A-Za-z0-9_-]{1,24}$/.test(rm)) { toast("Room: letters, digits, - and _ only"); return; }
-  location.href = "/api/auth0?room=" + encodeURIComponent(rm);
-});
+$("auth0Btn").addEventListener("click", () => { location.href = "/api/auth0"; });
 
 /* ---------- phone helpers: "Desktop site" hint and ?debug=1 diagnostics ---------- */
 

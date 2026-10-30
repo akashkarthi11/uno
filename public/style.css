@@ -1450,3 +1450,16 @@ body:is(.learn-focus, .learn-quizing) #vTiles, body:is(.learn-focus, .learn-quiz
 .lobby-nav.icons-only .ic { font-size: 26px; }
 .lobby-pastel .lobby-nav :is(#lnHome).on { background: var(--l-lav, #eeeafe) !important; color: var(--l-purple-d, #5740cf) !important; }
 .lobby-nav.icons-only .nav-badge { left: calc(50% + 8px); }
+
+/* the room screen (after sign-in) looks like the sign-in screen */
+body:has(#roomScreen:not(.hidden)), body:has(#lobby:not(.hidden)) { background: radial-gradient(900px 300px at 50% -90px, #e9e3ff 0%, rgba(246,244,255,0) 70%), #f6f4ff; }
+body:has(#roomScreen:not(.hidden)) header, body:has(#lobby:not(.hidden)) header { background: rgba(255,255,255,.9); border-color: #e6e2fa; }
+#roomScreen.lobby-pastel label { color: var(--l-ink); font-weight: 800; }
+#roomScreen.lobby-pastel input { border: 1.5px solid var(--l-line); border-radius: 14px; background: var(--l-input, #fff); color: var(--l-ink); font-weight: 600; }
+#roomScreen.lobby-pastel input:focus { border-color: var(--l-purple); box-shadow: 0 0 0 3px rgba(108, 85, 230, .18); outline: 0; }
+#roomScreen.lobby-pastel #createBtn { min-height: 52px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 800; color: #fff; background: var(--l-purple); box-shadow: 0 8px 18px rgba(108, 85, 230, .34); }
+#roomScreen.lobby-pastel #createBtn:hover:not(:disabled) { background: var(--l-purple-d); }
+html[data-theme="midnight"] body:has(#roomScreen:not(.hidden)), html[data-theme="midnight"] body:has(#lobby:not(.hidden)) { background: radial-gradient(900px 300px at 50% -90px, #2a2457 0%, rgba(12,10,32,0) 70%), #0e0c24; }
+html[data-theme="midnight"] body:has(#roomScreen:not(.hidden)) header, html[data-theme="midnight"] body:has(#lobby:not(.hidden)) header { background: rgba(14,12,36,.9); border-color: #35315f; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScreen:not(.hidden)), html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#lobby:not(.hidden)) { background: radial-gradient(900px 300px at 50% -90px, #2a2457 0%, rgba(12,10,32,0) 70%), #0e0c24; }
+html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScreen:not(.hidden)) header, html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#lobby:not(.hidden)) header { background: rgba(14,12,36,.9); border-color: #35315f; }

@@ -13,6 +13,7 @@ const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
 const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
 const OBSERVER_PASSWORD = process.env.GAME_OBSERVER_PASSWORD || '1102'; // the observer account: hears and sees, is not an admin, never shown in the lobby
 const TOKEN_SALT = ADMIN_PASSWORD + '|' + PLAYER_PASSWORD + '|' + PRIVATE_PASSWORD + '|' + OBSERVER_PASSWORD; // new passwords sign everyone out
+const SYS_SALT = TOKEN_SALT + '|sys'; // the system login token (no room)
 
 // Voice chat connects browsers directly; STUN finds the route. Add a TURN relay for strict networks by setting
 // GAME_TURN_URLS (comma separated), GAME_TURN_USER and GAME_TURN_PASS.
@@ -112,22 +113,96 @@ export default async function handler(req, res) {
       return res.json({ mode: (await getAuthMode()) === 'auth0' && auth0Config() ? 'auth0' : 'current' });
     }
 
-    // Public player coming back from Auth0 with the ticket /api/auth0 gave the page: joins as a public player.
-    if (b.op === 'join' && b.ticket) {
+    // ---- System login: who you are, for the whole system. It names no room; the person then creates a room or joins one. ----
+    // The answer is a signed "sys" token that op "join" takes together with a room code. Rules by credential:
+    //   admin password -> admin (as the admin's own username when it matches), observer password -> observer,
+    //   private password -> private player, otherwise a public player: their own account (the shared 123456 only opens the door the
+    //   first time and they then choose a password), or the Auth0 ticket when the admin has switched sign-in to Auth0.
+    if (b.op === 'login') {
+      const pw = String(b.password ?? '');
+      const sign = (role, name, a0) => signToken({ r: '*', p: 'sys', role, n: name, a0: Boolean(a0) }, now, SYS_SALT);
+      const done = (role, name, a0) => res.json({ sys: sign(role, name, a0), name, role });
       const cfg = auth0Config();
-      const ticket = cfg && (await getAuthMode()) === 'auth0' ? readTicket(String(b.ticket), code, cfg, now) : null;
-      if (!ticket) return res.status(401).json({ error: 'Auth0 sign-in expired — try again.', denied: true });
-      const existing = await readRoom(code);
-      if ((existing && existing.private) || (await isShutdown())) return res.status(401).json({ error: 'System down', denied: true });
+      const auth0Mode = (await getAuthMode()) === 'auth0' && Boolean(cfg);
+
+      if (b.ticket) {
+        const ticket = auth0Mode ? readTicket(String(b.ticket), '*', cfg, now) : null;
+        if (!ticket) return res.status(401).json({ error: 'Auth0 sign-in expired — try again.', denied: true });
+        if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
+        return done('public', ticket.n, true);
+      }
+      if (pw === ADMIN_PASSWORD) {
+        let name = G.cleanName(b.name);
+        if (usersEnabled() && isOgAdminName(String(b.name ?? ''))) {
+          name = ogAdminName();
+          await touchAdmin(name).catch(() => {}); // recording it must never stop the sign-in
+        }
+        return done('admin', name, false);
+      }
+      if (pw === OBSERVER_PASSWORD && !(await isObserverOff())) return done('observer', 'Observer', false);
+      if (pw === PRIVATE_PASSWORD) return done('private', G.cleanName(b.name), false);
+
+      // everyone else is a public player
+      if (usersEnabled()) {
+        if (!String(b.name ?? '').replace(/[<>&"']/g, '').trim()) return res.status(400).json({ error: 'Enter your name.' });
+        const wanted = G.cleanName(b.name);
+        // a name that is the real admin's, or an Auth0 user's, is not for anyone else to register or sign in with
+        if (await nameTaken(wanted)) return res.status(401).json({ error: 'That name is taken.', denied: true });
+        let account = await findLocal(wanted);
+        if (!(account ? checkPassword(pw, account.pw_hash) : pw === PLAYER_PASSWORD)) return res.status(401).json({ error: 'Wrong password.', denied: true });
+        if (auth0Mode) return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
+        if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
+        if (!account) {
+          // first sign-in for this username: it must choose its own password now
+          if (b.newPassword === undefined) return res.json({ needsPassword: true });
+          const np = String(b.newPassword);
+          if (np.length < MIN_PASSWORD || np.length > 32) return res.status(400).json({ error: `Choose a password of ${MIN_PASSWORD} to 32 characters.` });
+          if ([PLAYER_PASSWORD, ADMIN_PASSWORD, PRIVATE_PASSWORD, OBSERVER_PASSWORD].includes(np)) return res.status(400).json({ error: 'Choose a password of your own, not one of the shared ones.' });
+          account = await createLocal(wanted, np);
+          if (!account) return res.status(401).json({ error: 'That name was just taken. Choose another.', denied: true });
+        } else {
+          await touchLocal(account.id).catch(() => {});
+        }
+        return done('public', account.username, false);
+      }
+      if (pw !== PLAYER_PASSWORD) return res.status(401).json({ error: 'Wrong password.', denied: true });
+      if (auth0Mode) return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
+      if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
+      return done('public', G.cleanName(b.name), false);
+    }
+
+    // Create a room or join one, signed in with the sys token from op "login". Create makes a new room (a name of your own, or a
+    // random one); join needs a room that exists. Public games admit public players, private games admit private players.
+    if (b.op === 'join' && b.sys) {
+      const sys = verifyToken(String(b.sys), '*', now, SYS_SALT);
+      if (!sys) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      const named = /^[A-Za-z0-9_-]{1,24}$/.test(String(b.room ?? '').trim()) ? String(b.room).trim() : '';
+      if (b.create && sys.role !== 'admin' && sys.role !== 'public') return res.status(400).json({ error: 'Join a room with its code.' });
+      const rc = b.create ? named || randomBytes(3).toString('hex') : named;
+      if (!rc) return res.status(400).json({ error: 'Enter the room code.' });
+      const existing = await readRoom(rc);
+      if (b.create && existing) return res.status(400).json({ error: 'That room name is taken. Choose another.' });
+      if (!b.create && !existing) return res.status(400).json({ error: 'No room with that code.' });
+      const isPrivate = Boolean(existing && existing.private);
+      if (sys.role === 'public') {
+        if (isPrivate) return res.status(401).json({ error: 'System down', denied: true }); // a public player is never told a game is private
+        if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
+        if (Boolean(sys.a0) !== ((await getAuthMode()) === 'auth0' && Boolean(auth0Config()))) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      } else if (sys.role === 'private' && !isPrivate) {
+        return res.status(401).json({ error: 'This game is public.', denied: true });
+      } else if (sys.role === 'observer' && (await isObserverOff())) {
+        return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      }
       let claim;
-      const state = await withRoom(code, (s) => {
+      const state = await withRoom(rc, (s) => {
         G.tick(s, now);
-        const me = G.join(s, { name: ticket.n, admin: false, role: 'public', playerId: b.playerId, coadmin: false, observer: false }, now);
-        claim = { r: code, p: me.id, role: 'public', n: me.name, co: false, obs: false, a0: true };
+        const me = G.join(s, { name: sys.n, admin: sys.role === 'admin', role: sys.role, playerId: b.playerId, observer: sys.role === 'observer' }, now);
+        claim = { r: rc, p: me.id, role: sys.role, n: me.name, co: false, obs: Boolean(me.observer), a0: Boolean(sys.a0) };
         return G.view(s, me, now);
       });
-      await pushJoin({ r: code, n: claim.n, role: 'public', t: now }).catch(() => {});
-      return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
+      if (sys.role !== 'admin') await pushJoin({ r: rc, n: claim.n, role: claim.role, t: now }).catch(() => {});
+      if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); state.authMode = await getAuthMode(); state.auth0Ready = Boolean(auth0Config()); }
+      return res.json({ room: rc, state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
     }
 
     if (b.op === 'join') {

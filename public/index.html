@@ -33,17 +33,29 @@
 <section id="joinScreen" class="center-box lobby-pastel">
   <div class="lobby-hero">
     <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
-    <div class="lobby-title"><h2>Join the Relax</h2></div>
+    <div class="lobby-title"><h2>Sign in</h2></div>
   </div>
   <label>Your name <input id="nameInput" maxlength="16" placeholder="e.g. Varshith" autofocus></label>
   <label>Password <input id="pwInput" type="password" maxlength="32" autocomplete="off"></label>
   <label id="newPwRow" class="hidden">Choose your own password <input id="newPwInput" type="password" minlength="6" maxlength="32" autocomplete="new-password" placeholder="6 to 32 characters"></label>
   <label id="newPw2Row" class="hidden">Repeat it <input id="newPw2Input" type="password" maxlength="32" autocomplete="new-password"></label>
-  <label>Room <input id="roomInput" maxlength="24" value="main"></label>
-  <button id="joinBtn">Join</button>
+  <button id="joinBtn">Sign in</button>
   <button id="auth0Btn" class="ghost hidden" type="button">🔑 Sign in with Auth0</button>
 </section>
 
+
+<!-- after sign-in: create a room or join one -->
+<section id="roomScreen" class="center-box lobby-pastel hidden">
+  <div class="lobby-hero">
+    <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
+    <div class="lobby-title"><h2 id="roomHello">Welcome</h2><p class="hint">Create a room or join a friend's.</p></div>
+  </div>
+  <label>Room name for a new room (optional) <input id="createName" maxlength="24" placeholder="leave empty for a random code" autocomplete="off"></label>
+  <button id="createBtn" type="button">➕ Create room</button>
+  <label>Room code to join <input id="joinCode" maxlength="24" placeholder="e.g. a3f9c1" autocomplete="off"></label>
+  <button id="joinRoomBtn" class="ghost" type="button">🚪 Join room</button>
+  <button id="signOutBtn" class="ghost" type="button">Sign out</button>
+</section>
 <!-- lobby -->
 <section id="lobby" class="center-box lobby-pastel hidden">
   <div class="lobby-hero">
@@ -71,7 +83,7 @@
     <button id="lnChat" type="button" title="Chat" aria-label="Chat" aria-pressed="false"><span class="ic">💬</span><em id="lnChatBadge" class="nav-badge hidden"></em></button>
     <button id="lnStats" type="button" title="Stats" aria-label="Stats"><span class="ic">📊</span></button>
     <button id="lnSettings" type="button" title="Settings" aria-label="Settings"><span class="ic">⚙</span></button>
-    <button id="lnExit" type="button" title="Exit to the login screen" aria-label="Exit to the login screen"><span class="ic">🚪</span></button>
+    <button id="lnExit" type="button" title="Leave the room" aria-label="Leave the room"><span class="ic">🚪</span></button>
   </nav>
 </section>
 
