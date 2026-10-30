@@ -89,3 +89,31 @@ test('video: failures show up, a refused prompt does not break the list, and the
   assert.match(refused, /Daily limit|Monthly limit/);
   assert.ok(before.dayMax === 5 && before.monthMax === 8);
 });
+
+test('video: with a Replicate token the generator is Replicate (requests and polling go to its API)', async () => {
+  const { startVideo, getStatus, modelFor } = await import('../api/_lib/video.js');
+  const old = { fake: process.env.GAME_VIDEO_FAKE, tok: process.env.REPLICATE_API_TOKEN, fetch: globalThis.fetch };
+  process.env.GAME_VIDEO_FAKE = '0';
+  process.env.REPLICATE_API_TOKEN = 'r8_test';
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push([url, init && init.method, init && init.body && JSON.parse(init.body)]);
+    const status = calls.length === 3 ? 'succeeded' : calls.length === 2 ? 'processing' : 'starting';
+    const body = String(url).includes('/predictions/') ? { status, output: status === 'succeeded' ? ['https://x/y.mp4'] : null } : { id: 'pred1', status };
+    return { ok: true, json: async () => body };
+  };
+  try {
+    const op = await startVideo({ imageUrl: 'https://pic/1.jpg', text: 'hello' });
+    assert.deepEqual(op, { replicate: 'pred1' });
+    assert.match(calls[0][0], /models\/wan-video\/wan-2\.2-i2v-fast\/predictions$/);
+    assert.equal(calls[0][2].input.image, 'https://pic/1.jpg');
+    assert.equal(calls[0][2].input.prompt, 'hello');
+    assert.deepEqual(await getStatus(op), { state: 'pending' });
+    assert.deepEqual(await getStatus(op), { state: 'completed', url: 'https://x/y.mp4' });
+    assert.match(modelFor(false), /t2v/);
+  } finally {
+    globalThis.fetch = old.fetch;
+    process.env.GAME_VIDEO_FAKE = old.fake;
+    if (old.tok === undefined) delete process.env.REPLICATE_API_TOKEN; else process.env.REPLICATE_API_TOKEN = old.tok;
+  }
+});
