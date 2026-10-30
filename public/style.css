@@ -1320,3 +1320,9 @@ body.learning #vToggle { top: auto; bottom: 84px; right: 8px; }
   html:not([data-theme="classic"]):not([data-theme="midnight"]) .learn-page .l-btn.primary:hover:not(:disabled) { background: var(--l-purple); filter: brightness(1.12); }
   html:not([data-theme="classic"]):not([data-theme="midnight"]) .learn-page .form-card input:focus, html:not([data-theme="classic"]):not([data-theme="midnight"]) .learn-page .ask-card input:focus { background: #110f2b; }
 }
+
+/* mic, mute and camera are icons only (the label stays for screen readers) */
+.l-pill { width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; border-radius: 50%; }
+.l-pill .ic { font-size: 20px; }
+.l-pill .lb { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.l-pill { position: relative; }

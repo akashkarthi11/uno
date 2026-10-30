@@ -2493,12 +2493,14 @@ function syncLearnMedia() {
     dst.querySelector(".ic").textContent = src.textContent;
     dst.querySelector(".lb").textContent = label(on, src);
     dst.title = src.title;
+    dst.setAttribute("aria-label", label(on, src));
     dst.setAttribute("aria-pressed", on ? "true" : "false");
     if (!hidden) any = true;
   }
   $("learnMedia").classList.toggle("hidden", !any);
   const n = Number($("voiceBtn").dataset.count || 0);
-  $("lCall").textContent = n ? n + " in the call" : "";
+  $("lCall").textContent = n ? "👥 " + n : "";
+  $("lCall").title = n ? n + " in the call" : "";
 }
 for (const [srcId, dstId] of MEDIA) {
   $(dstId).addEventListener("click", () => { $(srcId).click(); setTimeout(syncLearnMedia, 600); });
