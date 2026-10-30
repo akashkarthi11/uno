@@ -148,6 +148,19 @@ const JOINS_KEY = 'growx:joins';
 const JOINS_TTL = 3600;
 let joinsMem = [];
 
+/** The shutdown switch (the real admin's one button): while it is on, public players cannot sign in anywhere. */
+const shutKey = 'growx:shutdown';
+let shutMem = false;
+export async function isShutdown() {
+  if (!usingRedis) return shutMem;
+  return Boolean(await (await client()).get(shutKey));
+}
+export async function setShutdown(on) {
+  if (!usingRedis) { shutMem = Boolean(on); return; }
+  const r = await client();
+  if (on) await r.set(shutKey, '1'); else await r.del(shutKey);
+}
+
 export async function pushJoin(evt) {
   if (!usingRedis) {
     joinsMem = [...joinsMem, evt].slice(-100);

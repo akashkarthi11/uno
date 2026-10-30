@@ -333,6 +333,7 @@ async function pollOnce() {
     lastOk = Date.now();
     checkJoins();
   } catch (e) {
+    if (e.denied) { removedByAdmin(e.message); return; } // for example "System down": back to the sign-in screen, not an endless retry
     notePing(null);
     if (Date.now() - lastOk > 12000) toast("Connection problem — retrying…");
     retrySoon = true;
@@ -478,6 +479,21 @@ function toggleBotSwitch() {
 $("pubVideoBtn").addEventListener("click", togglePublicVideo);
 $("botSwitchBtn").addEventListener("click", toggleBotSwitch);
 
+/** The real admin's one button: shut down public play (nobody public can sign in, every public room is closed) or open it again. */
+let shutdownOn = false;
+async function toggleShutdown() {
+  if (!state || !state.admin) return;
+  const turnOn = !shutdownOn;
+  if (turnOn && !confirm("Shut down public play?\n\n• Public players (and co-admins) cannot sign in to any room.\n• Every public room is closed and its players are sent out (including this room if it is public).\nPrivate rooms and you are not affected.")) return;
+  try {
+    const r = await api({ op: "shutdown", on: turnOn });
+    shutdownOn = r.shutdown;
+    toast(turnOn ? "Public play is shut down (" + r.closed + " public room" + (r.closed === 1 ? "" : "s") + " closed)." : "Public play is open again.");
+  } catch (e) { toast(e.message); return; }
+  renderRelayBtn(state);
+}
+$("shutdownBtn").addEventListener("click", toggleShutdown);
+
 function renderRelayBtn(s) {
   const pv = $("pubVoiceBtn");
   pv.classList.toggle("hidden", !s.admin || s.private); // a private game has no public players, so the switch is not needed there
@@ -495,6 +511,12 @@ function renderRelayBtn(s) {
   pvid.title = pvidOn
     ? "Public players can use their camera. Click to hide public video (you and private players keep it)."
     : "Public players cannot use a camera. Click to allow it again.";
+  if (s.shutdown !== undefined) shutdownOn = s.shutdown;
+  const sd = $("shutdownBtn");
+  sd.classList.toggle("hidden", !s.admin); // the real admin only
+  sd.textContent = shutdownOn ? "✅ Open public play again" : "⛔ Shut down public";
+  sd.classList.toggle("on", shutdownOn);
+  sd.title = shutdownOn ? "Public sign-in is off everywhere. Click to open it again." : "Closes every public room and stops public players signing in, until you open it again.";
   const bsw = $("botSwitchBtn");
   bsw.classList.toggle("hidden", !s.admin); // the real admin only, in public and private games alike
   const botOn = !(s.settings && s.settings.botMatch === false);

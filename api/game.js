@@ -2,7 +2,7 @@ import * as G from './_lib/game.js';
 import { signToken, verifyToken } from './_lib/token.js';
 import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
-import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS } from './_lib/store.js';
+import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, isShutdown, setShutdown } from './_lib/store.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -130,6 +130,9 @@ export default async function handler(req, res) {
           return res.status(401).json({ error: 'System down', denied: true });
         }
       }
+      if ((pw === PLAYER_PASSWORD || coadmin) && !admin && !observer && (await isShutdown())) {
+        return res.status(401).json({ error: 'System down', denied: true }); // the admin's shutdown: public sign-in is off everywhere
+      }
       let claim;
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
@@ -140,6 +143,7 @@ export default async function handler(req, res) {
       });
       // tell the real admin (best effort: a failure here must never stop anyone joining)
       if (!admin) await pushJoin({ r: code, n: claim.n, role: coadmin ? 'co-admin' : claim.role, t: now }).catch(() => {});
+      if (state.admin) state.shutdown = await isShutdown();
       return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
     }
 
@@ -164,6 +168,9 @@ export default async function handler(req, res) {
           denied: true,
         });
       }
+      if (claim.role === 'public' && (await isShutdown())) {
+        return res.status(401).json({ error: 'System down', denied: true });
+      }
       let renewed;
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
@@ -172,6 +179,7 @@ export default async function handler(req, res) {
         renewed = { r: code, p: me.id, role, n: me.name, co: Boolean(claim.co), obs: Boolean(me.observer) };
         return G.view(s, me, now);
       });
+      if (state.admin) state.shutdown = await isShutdown();
       return res.json({ state: withIce(state), token: signToken(renewed, now, TOKEN_SALT) });
     }
 
@@ -205,7 +213,7 @@ export default async function handler(req, res) {
 
     // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.
     // The admin is whoever signed in with the admin password in the room they are in now.
-    if (['rooms', 'closeRoom', 'peek', 'peekKick', 'joins', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
+    if (['rooms', 'closeRoom', 'shutdown', 'peek', 'peekKick', 'joins', 'learnBackupSave', 'learnBackupList', 'learnBackupGet', 'learnBackupRestore', 'learnBackupDelete'].includes(b.op)) {
       const here = await readRoom(code);
       const who = here && here.members.find((m) => m.id === b.playerId);
       // the observer account may list and watch rooms and remove unwanted players; closing rooms, the join feed and the Learn backups are the real admin's
@@ -261,9 +269,21 @@ export default async function handler(req, res) {
         await deleteBackup(entry.id);
         return res.json({ ok: true });
       }
+      // One button: shut down (public players cannot sign in to any room and every public room is closed) or open again.
+      if (b.op === 'shutdown') {
+        const on = b.on === true;
+        await setShutdown(on);
+        let closed = 0;
+        if (on) {
+          for (const { code: c, room: r } of await listRooms()) {
+            if (!r.private) { await closeRoom(c); closed++; }
+          }
+        }
+        return res.json({ ok: true, shutdown: on, closed });
+      }
       if (b.op === 'rooms') {
         const rooms = (await listRooms()).map(({ code: c, room }) => G.roomSummary(room, c, now)).sort((x, y) => y.last - x.last);
-        return res.json({ rooms, total: rooms.length, active: rooms.filter((r) => r.online > 0).length });
+        return res.json({ rooms, total: rooms.length, active: rooms.filter((r) => r.online > 0).length, shutdown: await isShutdown() });
       }
       const target = String(b.target ?? '');
       if (!/^[A-Za-z0-9_-]{1,24}$/.test(target)) throw new G.GameError('Bad room name.');
