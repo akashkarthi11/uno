@@ -174,7 +174,7 @@ switch means the table starts empty and players rejoin; it keeps the game availa
 To pick the primary, ask the live function to time both (admin password required):
 
     curl -s -X POST https://<your-site>/api/game -H 'Content-Type: application/json' \
-      -d '{"op":"bench","room":"main","password":"<admin password>","name":"karthickkeyan303"}'
+      -d '{"op":"bench","room":"main","password":"<admin password>","name":"karthi"}'
 
 It answers with the function's region and each database's median read time in ms; make the lower one primary.
 
@@ -259,7 +259,7 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
 
 ## Co-admins, accounts and Auth0
 
-- **The admin password belongs to one username.** 110299 only works together with the admin's username, `karthickkeyan303` (any letter case;
+- **The admin password belongs to one username.** 110299 only works together with the admin's username, `karthi` (any letter case;
   `GAME_ADMIN_USERNAME` changes it). With any other name it is just a wrong password, and nobody else can register that name.
 - **Sign-in is for the whole system, not for a room.** You sign in once (name and password, or Auth0), then choose **Create room** (a name of your
   own or a random code) or **Join room** (the code a friend gave you). Admins and public players can create rooms; private players and the

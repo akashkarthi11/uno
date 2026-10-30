@@ -82,7 +82,7 @@ export async function touchLocal(id) {
 }
 
 /** The real admin's username: that name belongs to the admin only (the admin password signs in as it; nobody else can register it). */
-export const ogAdminName = () => String(process.env.GAME_ADMIN_USERNAME || 'karthickkeyan303');
+export const ogAdminName = () => String(process.env.GAME_ADMIN_USERNAME || 'karthi');
 const isOgAdmin = (name) => key(name) === key(ogAdminName());
 export const isOgAdminName = isOgAdmin;
 /** The admin password only works together with the admin's username (GAME_ADMIN_ANY_NAME=1 lifts that: tests only). */

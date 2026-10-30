@@ -23,7 +23,7 @@ const viaAuth0 = async (sub, name) => {
   return (await call({ op: 'login', ticket: makeTicket('*', saved, cfg, Date.now(), false, sub) })).body;
 };
 const admin = async () => {
-  const sys = (await call({ op: 'login', name: 'karthickkeyan303', password: '110299' })).body.sys;
+  const sys = (await call({ op: 'login', name: 'karthi', password: '110299' })).body.sys;
   const made = (await call({ op: 'join', sys, create: true })).body;
   return { room: made.room, id: made.state.you };
 };
@@ -87,9 +87,9 @@ test('only Auth0 public sign-ins can link; the admin account and password sign-i
   assert.equal((await call({ op: 'linkAccount', sys: pwUser.sys, username: 'Meena', password: 'meena-pw-1' })).code, 400, 'not signed in with Auth0');
   assert.equal((await call({ op: 'linkAccount', sys: 'forged.token', username: 'a', password: 'b' })).code, 401);
   // the admin's own Auth0 account cannot be linked to anything
-  rows().push({ id: 901, kind: 'auth0', username: 'karthickkeyan303', username_key: 'karthickkeyan303', auth0_sub: 'auth0|adm', auth0_name: 'karthickkeyan303', logins: 1, created_at: 1, last_login: 1, is_admin: true });
+  rows().push({ id: 901, kind: 'auth0', username: 'karthi', username_key: 'karthi', auth0_sub: 'auth0|adm', auth0_name: 'karthi', logins: 1, created_at: 1, last_login: 1, is_admin: true });
   await call({ op: 'authSwitch', room: a.room, playerId: a.id, mode: 'auth0' });
-  const adm = (await call({ op: 'login', ticket: makeTicket('*', 'karthickkeyan303', cfg, Date.now(), true, 'auth0|adm') })).body;
+  const adm = (await call({ op: 'login', ticket: makeTicket('*', 'karthi', cfg, Date.now(), true, 'auth0|adm') })).body;
   assert.equal(adm.role, 'admin');
   assert.equal((await call({ op: 'linkAccount', sys: adm.sys, username: 'Meena', password: 'meena-pw-1' })).code, 400, 'the admin is not a public sign-in');
   await call({ op: 'authSwitch', room: a.room, playerId: a.id, mode: 'current' });
