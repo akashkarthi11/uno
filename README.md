@@ -271,6 +271,11 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
   time. The person then chooses their own password (6 to 32 characters) and from then on signs in with their name and that
   password. Usernames are unique (any letter case). Passwords are stored only as salted scrypt hashes in the `growx_users` table.
   The admin, private and observer passwords never use accounts. Without `DATABASE_URL` everything works the old way.
+- **Linking an old account to Auth0:** a person signed in with Auth0 sees **Link my old account** on the room screen. They type their old
+  username and password (that proves the account is theirs); the two become one account: the password, sign-in count and first-seen date move
+  over and the old row is removed. The account takes the person's Auth0 name when no other account uses it, otherwise it keeps the old name.
+  After linking, the old password still works (under the account's current username) whenever sign-in is set to "current". The admin
+  account cannot be linked.
 - **Auth0:** the real admin's "Sign-in: current / Auth0" switch in Settings sends public players to Auth0 instead of a password
   (needs `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`; callback URL `https://<site>/api/auth0`). Their Auth0 id, email
   and name are saved in `growx_users`.

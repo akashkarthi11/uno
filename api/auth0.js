@@ -33,7 +33,7 @@ export default async function handler(req, res) {
       // the Auth0 account that owns the admin's username signs in as the admin; only that account can hold that name (see upsertAuth0),
       // so a name that was not checked against the saved users never counts
       const admin = saved && isOgAdminName(who.name);
-      return back({ a0: makeTicket(SYSTEM, who.name, cfg, now, admin) });
+      return back({ a0: makeTicket(SYSTEM, who.name, cfg, now, admin, who.sub) });
     } catch {
       return back({ a0err: 'Auth0 sign-in failed — try again.' });
     }

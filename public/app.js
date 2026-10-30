@@ -213,6 +213,7 @@ const SYS_KEY = "uno-sys"; // the sign-in token from op "login": lives in this t
 const SYSROLE_KEY = "uno-sysrole";
 let sysToken = session(SYS_KEY);
 let sysRole = session(SYSROLE_KEY) || "";
+let sysA0 = session("uno-sysa0") === "1"; // signed in with Auth0: may link an old own-login account
 
 /** The Sign in button: who you are for the whole system. No room yet. */
 async function join() {
@@ -247,6 +248,8 @@ function finishLogin(r) {
   sysRole = r.role;
   session(SYS_KEY, sysToken);
   session(SYSROLE_KEY, sysRole);
+  sysA0 = Boolean(r.a0) && r.role === "public";
+  session("uno-sysa0", sysA0 ? "1" : null);
   myName = r.name;
   store("uno-name", myName);
   $("pwInput").value = "";
@@ -259,6 +262,8 @@ function showRoomScreen() {
   $("joinScreen").classList.add("hidden");
   $("roomScreen").classList.remove("hidden");
   $("roomHello").textContent = "Hi, " + (myName || "there");
+  $("linkBtn").classList.toggle("hidden", !sysA0);
+  $("linkBox").classList.add("hidden");
   const canCreate = sysRole === "admin" || sysRole === "public"; // private players and observers join the admin's rooms
   ["createName", "createBtn"].forEach((id) => { const el = $(id); (el.closest("label") || el).classList.toggle("hidden", !canCreate); });
   const want = new URLSearchParams(location.search).get("room") || session("uno-want") || "";
@@ -277,11 +282,43 @@ function signOut() {
   sysRole = "";
   session(SYS_KEY, null);
   session(SYSROLE_KEY, null);
+  session("uno-sysa0", null);
+  sysA0 = false;
   try { Object.keys(sessionStorage).filter((k) => k.startsWith("uno-token-")).forEach((k) => sessionStorage.removeItem(k)); } catch (e) { /* storage may be blocked */ }
   $("roomScreen").classList.add("hidden");
   $("joinScreen").classList.remove("hidden");
 }
 $("signOutBtn").addEventListener("click", signOut);
+
+/** Link an old own-login account to this Auth0 account: the old username and password prove it is theirs. */
+$("linkBtn").addEventListener("click", () => {
+  $("linkBox").classList.toggle("hidden");
+  if (!$("linkBox").classList.contains("hidden")) $("linkUser").focus();
+});
+$("linkGo").addEventListener("click", async () => {
+  const username = $("linkUser").value.trim();
+  const password = $("linkPass").value;
+  if (!username || !password) { toast("Type the old username and password"); return; }
+  $("linkGo").disabled = true;
+  try {
+    const r = await api({ op: "linkAccount", sys: sysToken, username, password });
+    sysToken = r.sys;
+    session(SYS_KEY, sysToken);
+    myName = r.name;
+    store("uno-name", myName);
+    $("linkPass").value = "";
+    $("linkUser").value = "";
+    $("linkBox").classList.add("hidden");
+    $("linkBtn").classList.add("hidden");
+    $("roomHello").textContent = "Hi, " + myName;
+    toast(r.renamed ? "Linked. Your username is now " + myName + "." : "Linked. Your username stays " + myName + " (the Auth0 name is already used).");
+  } catch (e) {
+    if (e.denied) signOut();
+    toast(e.message);
+  } finally {
+    $("linkGo").disabled = false;
+  }
+});
 
 /** Create a room (a name of your own or a random code) or join one by its code. */
 async function enterWithSign(create) {

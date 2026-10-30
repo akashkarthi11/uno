@@ -54,6 +54,13 @@
   <button id="createBtn" type="button">➕ Create room</button>
   <label>Room code to join <input id="joinCode" maxlength="24" placeholder="e.g. a3f9c1" autocomplete="off"></label>
   <button id="joinRoomBtn" class="ghost" type="button">🚪 Join room</button>
+  <button id="linkBtn" class="ghost hidden" type="button">🔗 Link my old account</button>
+  <div id="linkBox" class="hidden">
+    <p class="hint">Type the username and password you used before. That account joins this one and keeps its history; your name becomes your Auth0 name when it is free.</p>
+    <label>Old username <input id="linkUser" maxlength="16" autocomplete="off"></label>
+    <label>Old password <input id="linkPass" type="password" maxlength="32" autocomplete="off"></label>
+    <button id="linkGo" type="button">Link account</button>
+  </div>
   <button id="signOutBtn" class="ghost" type="button">Sign out</button>
 </section>
 <!-- lobby -->

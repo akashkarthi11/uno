@@ -23,7 +23,7 @@ export function readState(state, room, cfg, now) {
 }
 
 /** The ticket the page presents to join: names the room and the person, good for two minutes. */
-export const makeTicket = (room, name, cfg, now, admin = false) => signToken({ r: room, p: 'a0', role: 'public', n: String(name).slice(0, 16), t: now, adm: Boolean(admin) }, now, salt('ticket', cfg));
+export const makeTicket = (room, name, cfg, now, admin = false, sub = '') => signToken({ r: room, p: 'a0', role: 'public', n: String(name).slice(0, 16), t: now, adm: Boolean(admin), sub: String(sub).slice(0, 120) }, now, salt('ticket', cfg));
 export function readTicket(ticket, room, cfg, now) {
   const c = verifyToken(ticket, room, now, salt('ticket', cfg));
   return c && now - c.t < TICKET_MS && typeof c.n === 'string' ? c : null;

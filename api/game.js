@@ -5,7 +5,7 @@ import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, getAuthMode, setAuthMode, videoRead, videoUpdate } from './_lib/store.js';
 import { auth0Config, readTicket } from './_lib/auth0.js';
-import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, isOgAdminName, adminNameOk, ogAdminName, checkPassword, MIN_PASSWORD } from './_lib/users.js';
+import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, linkAccount, LinkError, isOgAdminName, adminNameOk, ogAdminName, checkPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -120,8 +120,8 @@ export default async function handler(req, res) {
     //   first time and they then choose a password), or the Auth0 ticket when the admin has switched sign-in to Auth0.
     if (b.op === 'login') {
       const pw = String(b.password ?? '');
-      const sign = (role, name, a0) => signToken({ r: '*', p: 'sys', role, n: name, a0: Boolean(a0) }, now, SYS_SALT);
-      const done = (role, name, a0) => res.json({ sys: sign(role, name, a0), name, role });
+      const sign = (role, name, a0, sub) => signToken({ r: '*', p: 'sys', role, n: name, a0: Boolean(a0), sub: a0 ? String(sub || '') : '' }, now, SYS_SALT);
+      const done = (role, name, a0, sub) => res.json({ sys: sign(role, name, a0, sub), name, role, a0: Boolean(a0) });
       const cfg = auth0Config();
       const auth0Mode = (await getAuthMode()) === 'auth0' && Boolean(cfg);
 
@@ -129,8 +129,8 @@ export default async function handler(req, res) {
         const ticket = auth0Mode ? readTicket(String(b.ticket), '*', cfg, now) : null;
         if (!ticket) return res.status(401).json({ error: 'Auth0 sign-in expired — try again.', denied: true });
         if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
-        if (ticket.adm && usersEnabled() && isOgAdminName(ticket.n)) return done('admin', ogAdminName(), true); // the admin's own Auth0 account
-        return done('public', ticket.n, true);
+        if (ticket.adm && usersEnabled() && isOgAdminName(ticket.n)) return done('admin', ogAdminName(), true, ticket.sub); // the admin's own Auth0 account
+        return done('public', ticket.n, true, ticket.sub);
       }
       if (pw === ADMIN_PASSWORD && !adminNameOk(String(b.name ?? ''))) return res.status(401).json({ error: 'Wrong password.', denied: true }); // the admin password belongs to the admin's username only
       if (pw === ADMIN_PASSWORD) {
@@ -171,6 +171,22 @@ export default async function handler(req, res) {
       if (auth0Mode) return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
       if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
       return done('public', G.cleanName(b.name), false);
+    }
+
+    // A person signed in with Auth0 links their own-login account to it (proved with the old username and password): one account,
+    // saved data moved over, renamed to the Auth0 name when that name is free. The answer carries a fresh sys token with the new name.
+    if (b.op === 'linkAccount') {
+      const sys = verifyToken(String(b.sys ?? ''), '*', now, SYS_SALT);
+      if (!sys) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      if (!usersEnabled() || !sys.a0 || sys.role !== 'public' || !sys.sub) return res.status(400).json({ error: 'Sign in with Auth0 to link an account.' });
+      try {
+        const r = await linkAccount({ sub: sys.sub, username: String(b.username ?? ''), password: String(b.password ?? '') });
+        const next = signToken({ r: '*', p: 'sys', role: 'public', n: r.name, a0: true, sub: sys.sub }, now, SYS_SALT);
+        return res.json({ ok: true, name: r.name, renamed: r.renamed, sys: next });
+      } catch (e) {
+        if (e instanceof LinkError) return res.status(400).json({ error: e.message });
+        throw e;
+      }
     }
 
     // Create a room or join one, signed in with the sys token from op "login". Create makes a new room (a name of your own, or a
