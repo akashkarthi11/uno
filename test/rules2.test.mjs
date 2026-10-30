@@ -348,79 +348,38 @@ test('co-admin: can pause, resume and restart the game (back to the lobby), an o
   assert.throws(() => G.act(s, co, { op: 'pause' }, now), /Only the admin/, 'dropped co-admin loses it at once');
 });
 
-/* ---------- the co-admin password (12345678) ---------- */
+/* ---------- co-admins: appointed by the admin (the old 12345678 password is gone) ---------- */
 
-test('co-admin password: signing in with 12345678 makes a co-admin at once in a public game', async () => {
+test('an appointed co-admin has the start / pause / restart rights, but not the real admin\'s things', async () => {
   const room = 'ca' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
   const A = admin.body.state.you;
-  const co = await call({ op: 'join', room, name: 'Varshith', password: '12345678' });
-  assert.equal(co.code, 200);
-  assert.equal(co.body.state.canStart, true, 'a co-admin straight away');
-  assert.equal(co.body.state.admin, false, 'not the real admin');
+  const co = await call({ op: 'join', room, name: 'Varshith', password: '123456' });
   const C = co.body.state.you;
-  const seenByPlayer = await call({ op: 'join', room, name: 'Pat', password: '123456' });
-  assert.equal(seenByPlayer.body.state.players.find((p) => p.id === C).starter, true, 'others see them labelled as admin');
-  assert.equal(seenByPlayer.body.state.players.find((p) => p.id === C).isAdmin, undefined, 'and not as the real admin');
+  assert.equal(co.body.state.canStart, false, 'an ordinary player until appointed');
+  assert.equal((await call({ op: 'starter', room, playerId: A, targetId: C, on: true })).code, 200);
+  assert.equal((await call({ op: 'state', room, playerId: C })).body.state.canStart, true);
+  assert.equal((await call({ op: 'state', room, playerId: C })).body.state.admin, false, 'not the real admin');
 
-  // same rights as an appointed co-admin: settings, start, pause / resume, restart
   assert.equal((await call({ op: 'config', room, playerId: C, theme: 'classic' })).code, 200);
   assert.equal((await call({ op: 'start', room, playerId: C })).code, 200);
   assert.equal((await call({ op: 'pause', room, playerId: C })).body.state.paused, true);
   assert.equal((await call({ op: 'resume', room, playerId: C })).body.state.paused, false);
-  // ...and the same limits: the real admin's things stay with the real admin
   for (const body of [{ op: 'private', on: true }, { op: 'config', voiceRelay: true }, { op: 'config', publicVoice: true }, { op: 'kick', targetId: A }]) {
     assert.equal((await call({ room, playerId: C, ...body })).code, 400, JSON.stringify(body) + ' is refused');
   }
   assert.equal((await call({ op: 'lobby', room, playerId: C })).body.state.started, false, 'restart works');
+  assert.equal((await call({ op: 'starter', room, playerId: A, targetId: C, on: false })).code, 200, 'the real admin can take it away');
 });
 
-test('co-admin password: a private game admits only 110299 and 281101 — not 12345678', async () => {
+test('the old co-admin password 12345678 no longer signs anyone in, in public or private rooms', async () => {
   const room = 'ca' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
-  const A = admin.body.state.you;
-  const co = await call({ op: 'join', room, name: 'Co', password: '12345678' });
-  const C = co.body.state.you;
-
-  await call({ op: 'private', room, playerId: A, on: true }); // a password co-admin in the room is sent out, like any public player
-  const told = await call({ op: 'state', room, playerId: C });
-  assert.equal(told.body.kicked, true, 'removed when the game went private');
-  const resume = await call({ op: 'session', room, token: co.body.token });
-  assert.equal(resume.code, 401, 'and the refresh token does not get them back in');
-
-  const refused = await call({ op: 'join', room, name: 'Co', password: '12345678' });
-  assert.equal(refused.code, 401, 'the co-admin password is refused in a private game');
-  assert.equal(refused.body.error, 'System down', 'no hint about the private password or the room being private');
-  assert.doesNotMatch(refused.body.error, /private|password|admin/i);
-  const pub = await call({ op: 'join', room, name: 'Pat', password: '123456' });
-  assert.equal(pub.code, 401, 'as is the public password');
-  assert.equal(pub.body.error, 'System down', 'the public password gets the same answer as the co-admin password');
-  assert.equal((await call({ op: 'join', room, name: 'Priv', password: '281101' })).code, 200, 'the private password works');
-  assert.equal((await call({ op: 'join', room, name: 'Boss2', password: '110299' })).code, 200, 'and so does the admin password');
-
-  await call({ op: 'private', room, playerId: A, on: false }); // public again: the password works again
-  assert.equal((await call({ op: 'join', room, name: 'Co', password: '12345678' })).body.state.canStart, true);
-});
-
-test('co-admin password: a refresh keeps the co-admin in a public game, the admin can drop it, a normal sign-in loses it', async () => {
-  const room = 'ca' + Math.floor(Math.random() * 1e6);
-  const admin = await call({ op: 'join', room, name: 'Boss', password: '110299' });
-  const co = await call({ op: 'join', room, name: 'Co', password: '12345678' });
-  const C = co.body.state.you;
-
-  const resumed = await call({ op: 'session', room, token: co.body.token });
-  assert.equal(resumed.code, 200, 'a refresh keeps them in');
-  assert.equal(resumed.body.state.canStart, true);
-  assert.equal(resumed.body.state.you, C);
-
-  const dropped = await call({ op: 'starter', room, playerId: admin.body.state.you, targetId: C, on: false });
-  assert.equal(dropped.code, 200, 'the real admin can still take it away');
-  assert.equal((await call({ op: 'state', room, playerId: C })).body.state.canStart, false);
-
-  const again = await call({ op: 'join', room, name: 'Co', password: '12345678', playerId: C });
-  assert.equal(again.body.state.canStart, true, 'signing in with the password gives it back');
-  const normal = await call({ op: 'join', room, name: 'Co', password: '123456', playerId: C });
-  assert.equal(normal.body.state.canStart, false, 'an ordinary sign-in is an ordinary player again');
+  const refusedPublic = await call({ op: 'join', room, name: 'Co', password: '12345678' });
+  assert.equal(refusedPublic.code, 401);
+  assert.equal(refusedPublic.body.error, 'Wrong password.');
+  await call({ op: 'private', room, playerId: admin.body.state.you, on: true });
+  assert.equal((await call({ op: 'join', room, name: 'Co', password: '12345678' })).code, 401);
 });
 
 /* ---------- the real admin's Rooms window ---------- */
@@ -447,7 +406,8 @@ test('rooms: the real admin sees every room (total and active now) and can remov
 
   // an ordinary player, a co-admin by password, and a stranger are all refused
   assert.equal((await call({ op: 'rooms', room: A, playerId: aPub.body.state.you })).code, 400);
-  const co = await call({ op: 'join', room: A, name: 'Co', password: '12345678' });
+  const co = await call({ op: 'join', room: A, name: 'Co', password: '123456' });
+  await call({ op: 'starter', room: A, playerId: admin.body.state.you, targetId: co.body.state.you, on: true });
   assert.equal((await call({ op: 'rooms', room: A, playerId: co.body.state.you })).code, 400, 'a co-admin cannot');
   assert.equal((await call({ op: 'closeRoom', room: A, playerId: co.body.state.you, target: B })).code, 400);
   assert.equal((await call({ op: 'rooms', room: A, playerId: 'nobody' })).code, 400);
@@ -528,7 +488,7 @@ test('rooms: the real admin sees every room (total and active now) and can remov
   assert.equal(feed.code, 200);
   assert.ok(feed.body.joins.some((j) => j.r === A && j.n === 'Pat' && j.role === 'public'), 'Pat joining room A');
   assert.ok(feed.body.joins.some((j) => j.r === B && j.n === 'Priv' && j.role === 'private'), 'Priv joining room B');
-  assert.ok(feed.body.joins.some((j) => j.n === 'Co' && j.role === 'co-admin'), 'the co-admin too');
+  assert.ok(feed.body.joins.some((j) => j.n === 'Co' && j.role === 'public'), 'Co too');
   assert.equal(feed.body.joins.some((j) => j.n === 'Boss' || j.n === 'Other'), false, 'the admin\'s own sign-in is not news');
   assert.equal((await call({ op: 'joins', room: A, playerId: admin.body.state.you })).body.joins.length, 0, 'taken once');
   assert.equal((await call({ op: 'joins', room: A, playerId: aPub.body.state.you })).code, 400);

@@ -16,7 +16,8 @@ test('shutdown: public sign-in stops everywhere and public rooms close; private 
   const admin = await call({ op: 'join', room: P, name: 'Boss', password: '110299' });
   const aid = admin.body.state.you;
   const pat = await call({ op: 'join', room: P, name: 'Pat', password: '123456' });
-  const co = await call({ op: 'join', room: P, name: 'Co', password: '12345678' });
+  const co = await call({ op: 'join', room: P, name: 'Co', password: '123456' });
+  await call({ op: 'starter', room: P, playerId: aid, targetId: co.body.state.you, on: true });
   const vadmin = (await call({ op: 'join', room: V, name: 'Boss2', password: '110299' })).body.state.you;
   await call({ op: 'private', room: V, playerId: vadmin, on: true });
   const priv = await call({ op: 'join', room: V, name: 'Priv', password: '281101' });
@@ -31,7 +32,7 @@ test('shutdown: public sign-in stops everywhere and public rooms close; private 
   assert.ok(down.body.closed >= 1, 'a public room was closed');
 
   // public players are told the system is down, in any room, new or old
-  for (const [room, pw] of [[P, '123456'], ['brandnew' + P, '123456'], [P, '12345678']]) {
+  for (const [room, pw] of [[P, '123456'], ['brandnew' + P, '123456']]) {
     const r = await call({ op: 'join', room, name: 'Late', password: pw });
     assert.equal(r.code, 401, room + ' ' + pw);
     assert.equal(r.body.error, 'System down');

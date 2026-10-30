@@ -213,21 +213,46 @@ async function join() {
   if (!myPassword) { toast("Enter the password"); return; }
   room = $("roomInput").value.trim() || "main";
   if (!/^[A-Za-z0-9_-]{1,24}$/.test(room)) { toast("Room: letters, digits, - and _ only"); return; }
+  let newPassword;
+  if (!$("newPwRow").classList.contains("hidden")) {
+    // first sign-in with this name: the person chooses their own password
+    newPassword = $("newPwInput").value;
+    if (newPassword.length < 6) { toast("Choose a password of at least 6 characters"); return; }
+    if (newPassword !== $("newPw2Input").value) { toast("The two new passwords are different"); return; }
+  }
   $("joinBtn").disabled = true;
   removed = false;
   resetScreenCaches();
   try {
     playerId = store("uno-id-" + room) || null;
-    apply(await api({ op: "join", name: myName, password: myPassword }));
+    const r = await api({ op: "join", name: myName, password: myPassword, newPassword });
+    if (r.needsPassword) {
+      $("joinBtn").disabled = false;
+      showNewPassword(true);
+      toast("First time here: choose your own password");
+      return;
+    }
+    if (newPassword !== undefined) myPassword = newPassword; // later automatic rejoins use the new one
+    apply(r);
   } catch (e) {
     $("joinBtn").disabled = false;
     toast(e.message);
     return;
   }
+  showNewPassword(false);
   $("joinBtn").disabled = false;
   store("uno-name", myName);
   enterRoom();
 }
+
+/** The "choose your own password" rows on the sign-in screen (shown the first time a name signs in). */
+function showNewPassword(on) {
+  $("newPwRow").classList.toggle("hidden", !on);
+  $("newPw2Row").classList.toggle("hidden", !on);
+  if (on) $("newPwInput").focus();
+  else { $("newPwInput").value = ""; $("newPw2Input").value = ""; }
+}
+["nameInput", "pwInput"].forEach((id) => $(id).addEventListener("input", () => showNewPassword(false))); // another name or password: ask again from the start
 
 function enterRoom() {
   history.replaceState(null, "", "?room=" + encodeURIComponent(room));

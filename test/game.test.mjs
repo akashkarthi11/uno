@@ -855,8 +855,8 @@ test('API answers are never cacheable and always carry the deployed build id', a
 test('API: password gate and admin start', async () => {
   const bad = await call({ op: 'join', room: 'api1', name: 'X', password: 'nope' });
   assert.equal(bad.code, 401);
+  const a = await call({ op: 'join', room: 'api1', name: 'A', password: '110299' }); // the admin is in first: the first public player into an empty room would be its co-admin
   const p = await call({ op: 'join', room: 'api1', name: 'P', password: '123456' });
-  const a = await call({ op: 'join', room: 'api1', name: 'A', password: '110299' });
   assert.equal(p.code, 200);
   const deny = await call({ op: 'start', room: 'api1', playerId: p.body.state.you });
   assert.equal(deny.code, 400);

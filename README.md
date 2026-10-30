@@ -16,7 +16,7 @@ in Upstash Redis.
   `281101` = private player.
 - The admin decides whether a game is **public** or **private** (button in the lobby). A public game admits
   public players only; a private game admits private players only. Switching removes players already in the
-  room who joined with the other password. A public player (or the 12345678 co-admin password) who tries a private game
+  room who joined with the other password. A public player who tries a private game
   just gets "System down": nothing tells them the game is private.
   Override all three with `GAME_PLAYER_PASSWORD`, `GAME_ADMIN_PASSWORD` and `GAME_PRIVATE_PASSWORD`.
 - A player who goes quiet for 20 s is treated as offline and their turns are played automatically.
@@ -257,15 +257,18 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
 - **See-through icons** (semi-transparent circles over the table): Settings, Pause / Resume, Restart, Mic, Mute.
 - **Chat** opens as a side panel, so the table stays in view.
 
-## The co-admin password
+## Co-admins, accounts and Auth0
 
-Besides the admin password (110299), public (123456) and private (281101), the password **12345678** signs a player in as a
-**co-admin straight away** (`GAME_COADMIN_PASSWORD` to change it): shown to everyone as "admin", with the rights of an appointed
-co-admin (start games, game settings, pause / resume / restart) and the same limits (no relay / public voice / public-private
-switch, no removing players). It works in **public games only**: a private game admits just 110299 and 281101, so the co-admin
-password is refused there (the answer is just "System down", with no hint about private games), and a password co-admin who is in a room when the admin makes it private is sent out like any public
-player (they can sign in again when it is public). A refresh keeps it; the real admin can still drop it, and it returns the
-next time that player signs in with the password.
+- **Co-admin:** the first public player into an empty public room is its co-admin (shown as "admin", can start games, change game
+  settings, pause / resume / restart; no relay / public voice / public-private switch, no removing players). The real admin can
+  also appoint or remove co-admins. The old 12345678 password is gone.
+- **Own login (needs the Neon database, `DATABASE_URL`):** in a public room the shared password 123456 only opens the door the first
+  time. The person then chooses their own password (6 to 32 characters) and from then on signs in with their name and that
+  password. Usernames are unique (any letter case). Passwords are stored only as salted scrypt hashes in the `growx_users` table.
+  The admin, private and observer passwords never use accounts. Without `DATABASE_URL` everything works the old way.
+- **Auth0:** the real admin's "Sign-in: current / Auth0" switch in Settings sends public players to Auth0 instead of a password
+  (needs `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`; callback URL `https://<site>/api/auth0`). Their Auth0 id, email
+  and name are saved in `growx_users`.
 
 ## Rooms window (real admin)
 

@@ -29,7 +29,7 @@ export function readTicket(ticket, room, cfg, now) {
   return c && now - c.t < TICKET_MS && typeof c.n === 'string' ? c : null;
 }
 
-/** Swaps the code Auth0 sent back for the person's display name (never their email). */
+/** Swaps the code Auth0 sent back for who signed in: Auth0's id, email and display name. */
 export async function nameFromCode(code, redirectUri, cfg) {
   const t = await fetch(`https://${cfg.domain}/oauth/token`, {
     method: 'POST',
@@ -43,6 +43,6 @@ export async function nameFromCode(code, redirectUri, cfg) {
   const u = await fetch(`https://${cfg.domain}/userinfo`, { headers: { Authorization: `Bearer ${at}` }, signal: AbortSignal.timeout(8000) });
   if (!u.ok) throw new Error('userinfo ' + u.status);
   const j = await u.json();
-  const name = String(j.nickname || j.name || String(j.email || '').split('@')[0] || 'Player').trim();
-  return name || 'Player';
+  const name = String(j.nickname || j.name || String(j.email || '').split('@')[0] || 'Player').trim() || 'Player';
+  return { sub: String(j.sub || ''), email: typeof j.email === 'string' ? j.email : '', name };
 }

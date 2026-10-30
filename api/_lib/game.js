@@ -58,7 +58,7 @@ function addLog(s, msg) {
   while (s.log.length > MAX_LOG) s.log.shift();
 }
 
-function cleanName(raw) {
+export function cleanName(raw) {
   let n = String(raw ?? '').trim().replace(/[<>&"']/g, '');
   if (!n) n = 'Player' + (100 + rnd(900));
   return n.slice(0, 16);
@@ -174,8 +174,11 @@ export function join(s, { name, admin, role, playerId, coadmin, observer }, now)
   if (!p) {
     p = { id: randomUUID(), name: cleanName(name), admin: false, lastSeen: now, hand: [], saidUno: false, finished: false };
     if (observer) p.observer = true; // the observer account (password 1102): not a player, not listed, everyone is told
+    // The first public player into an empty public room becomes its co-admin (can start and run the game); the real admin can take it away.
+    const first = !s.private && !s.members.some((m) => !m.observer);
+    if (first && !admin && !observer && (role || 'public') === 'public') p.starter = true;
     s.members.push(p);
-    addLog(s, p.name + ' joined' + (s.started && !s.over ? ' (waiting for the next game).' : '.'));
+    addLog(s, p.name + ' joined' + (s.started && !s.over ? ' (waiting for the next game).' : '.') + (p.starter ? ' First in, so co-admin of this room.' : ''));
   } else if (!online(p, now)) {
     addLog(s, p.name + ' reconnected.');
   }

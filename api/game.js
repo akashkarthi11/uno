@@ -5,17 +5,14 @@ import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, getAuthMode, setAuthMode, videoRead, videoUpdate } from './_lib/store.js';
 import { auth0Config, readTicket } from './_lib/auth0.js';
+import { usersEnabled, findLocal, createLocal, touchLocal, checkPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
 const PRIVATE_PASSWORD = process.env.GAME_PRIVATE_PASSWORD || '281101';
-// Anyone who signs in with this password is a co-admin straight away (shown as "admin", can start / configure / pause / restart
-// the game) without the real admin appointing them. Public games only: a private game admits just the admin password and
-// the private password.
-const COADMIN_PASSWORD = process.env.GAME_COADMIN_PASSWORD || '12345678';
 const OBSERVER_PASSWORD = process.env.GAME_OBSERVER_PASSWORD || '1102'; // the observer account: hears and sees, is not an admin, never shown in the lobby
-const TOKEN_SALT = ADMIN_PASSWORD + '|' + PLAYER_PASSWORD + '|' + PRIVATE_PASSWORD + '|' + COADMIN_PASSWORD + '|' + OBSERVER_PASSWORD; // new passwords sign everyone out
+const TOKEN_SALT = ADMIN_PASSWORD + '|' + PLAYER_PASSWORD + '|' + PRIVATE_PASSWORD + '|' + OBSERVER_PASSWORD; // new passwords sign everyone out
 
 // Voice chat connects browsers directly; STUN finds the route. Add a TURN relay for strict networks by setting
 // GAME_TURN_URLS (comma separated), GAME_TURN_USER and GAME_TURN_PASS.
@@ -136,44 +133,62 @@ export default async function handler(req, res) {
     if (b.op === 'join') {
       const pw = String(b.password ?? '');
       const admin = pw === ADMIN_PASSWORD;
-      const coadmin = !admin && pw === COADMIN_PASSWORD; // admitted to public games only, as a co-admin
       // the observer account: any room, public or private (unless the admin switched it off: then 1102 is just a wrong password)
-      const observer = !admin && !coadmin && pw === OBSERVER_PASSWORD && !(await isObserverOff());
-      if (!admin && !coadmin && !observer) {
+      const observer = !admin && pw === OBSERVER_PASSWORD && !(await isObserverOff());
+      let publicLogin = false; // a public player who signed in with their own account
+      let joinName = b.name;
+      if (!admin && !observer) {
         // The admin decides whether a game is public or private. Public games admit public players (123456)
         // only; private games admit private players (281101) only.
         const existing = await readRoom(code);
         const isPrivate = Boolean(existing && existing.private);
-        if (pw !== (isPrivate ? PRIVATE_PASSWORD : PLAYER_PASSWORD)) {
+        const accounts = !isPrivate && usersEnabled(); // public games with the user database on: every public player has their own username and password
+        let account = null;
+        if (accounts && !String(b.name ?? '').replace(/[<>&"']/g, '').trim()) return res.status(400).json({ error: 'Enter your name.' });
+        if (accounts) {
+          // 123456 only opens the door the first time: the person then chooses their own password, and from then on signs in with it.
+          account = await findLocal(G.cleanName(b.name));
+          const ok = account ? checkPassword(pw, account.pw_hash) : pw === PLAYER_PASSWORD;
+          if (!ok) return res.status(401).json({ error: 'Wrong password.', denied: true });
+        } else if (pw !== (isPrivate ? PRIVATE_PASSWORD : PLAYER_PASSWORD)) {
           // A public player (123456) must never learn that a game is private: in a private game their password just gets
-          // "System down" (the co-admin password gets the same). Any other wrong password is "Wrong password."
+          // "System down". Any other wrong password is "Wrong password."
           const msg = isPrivate && pw === PLAYER_PASSWORD ? 'System down' : 'Wrong password.';
           return res.status(401).json({ error: msg, denied: true });
         }
-        // Auth0 mode: public players sign in through Auth0, not with the public password (admin, co-admin, private and observer passwords still work).
+        // Auth0 mode: public players sign in through Auth0, not with a password (admin, private and observer passwords still work).
         if (!isPrivate && (await getAuthMode()) === 'auth0' && auth0Config()) {
           return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
         }
-      } else if (coadmin) {
-        const existing = await readRoom(code);
-        if (existing && existing.private) {
-          // the co-admin password is not to be hinted at: in a private game it just looks like the system is down
-          return res.status(401).json({ error: 'System down', denied: true });
+        if (accounts) {
+          publicLogin = true;
+          if (!account) {
+            // first sign-in for this username: it must choose its own password now
+            if (b.newPassword === undefined) return res.json({ needsPassword: true });
+            const np = String(b.newPassword);
+            if (np.length < MIN_PASSWORD || np.length > 32) return res.status(400).json({ error: `Choose a password of ${MIN_PASSWORD} to 32 characters.` });
+            if ([PLAYER_PASSWORD, ADMIN_PASSWORD, PRIVATE_PASSWORD, OBSERVER_PASSWORD].includes(np)) return res.status(400).json({ error: 'Choose a password of your own, not one of the shared ones.' });
+            account = await createLocal(G.cleanName(b.name), np);
+            if (!account) return res.status(401).json({ error: 'That name was just taken. Choose another.', denied: true });
+          } else {
+            await touchLocal(account.id).catch(() => {});
+          }
+          joinName = account.username;
         }
       }
-      if ((pw === PLAYER_PASSWORD || coadmin) && !admin && !observer && (await isShutdown())) {
+      if ((pw === PLAYER_PASSWORD || publicLogin) && !admin && !observer && (await isShutdown())) {
         return res.status(401).json({ error: 'System down', denied: true }); // the admin's shutdown: public sign-in is off everywhere
       }
       let claim;
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
-        const role = admin ? 'admin' : observer ? 'observer' : coadmin ? 'public' : pw === PRIVATE_PASSWORD ? 'private' : 'public';
-        const me = G.join(s, { name: observer ? 'Observer' : b.name, admin, role, playerId: b.playerId, coadmin, observer }, now);
-        claim = { r: code, p: me.id, role, n: me.name, co: coadmin, obs: Boolean(me.observer) };
+        const role = admin ? 'admin' : observer ? 'observer' : pw === PRIVATE_PASSWORD ? 'private' : 'public';
+        const me = G.join(s, { name: observer ? 'Observer' : joinName, admin, role, playerId: b.playerId, observer }, now);
+        claim = { r: code, p: me.id, role, n: me.name, co: false, obs: Boolean(me.observer) };
         return G.view(s, me, now);
       });
       // tell the real admin (best effort: a failure here must never stop anyone joining)
-      if (!admin) await pushJoin({ r: code, n: claim.n, role: coadmin ? 'co-admin' : claim.role, t: now }).catch(() => {});
+      if (!admin) await pushJoin({ r: code, n: claim.n, role: claim.role, t: now }).catch(() => {});
       if (state.admin) { state.shutdown = await isShutdown(); state.observerOff = await isObserverOff(); state.authMode = await getAuthMode(); state.auth0Ready = Boolean(auth0Config()); }
       return res.json({ state: withIce(state), token: signToken(claim, now, TOKEN_SALT) });
     }
