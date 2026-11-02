@@ -38,7 +38,8 @@ async function sql() {
 async function q(text, params = []) {
   const run = await sql();
   if (!ready) {
-    ready = run.query(`CREATE TABLE IF NOT EXISTS growx_users (
+    // one transaction = one round trip to the database, instead of nine one after another on every cold start
+    ready = run.transaction([run.query(`CREATE TABLE IF NOT EXISTS growx_users (
       id BIGSERIAL PRIMARY KEY,
       kind TEXT NOT NULL,
       username TEXT NOT NULL,
@@ -49,7 +50,15 @@ async function q(text, params = []) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       last_login TIMESTAMPTZ NOT NULL DEFAULT now(),
       logins INTEGER NOT NULL DEFAULT 1
-    )`).then(() => run.query('ALTER TABLE growx_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false')).then(() => run.query('ALTER TABLE growx_users ADD COLUMN IF NOT EXISTS auth0_name TEXT')).then(() => run.query('CREATE UNIQUE INDEX IF NOT EXISTS growx_users_local_name ON growx_users (username_key) WHERE kind = \'local\'')).then(() => run.query('CREATE UNIQUE INDEX IF NOT EXISTS growx_users_pw_name ON growx_users (username_key) WHERE pw_hash IS NOT NULL')).then(() => run.query('CREATE TABLE IF NOT EXISTS growx_games (id BIGSERIAL PRIMARY KEY, room TEXT NOT NULL, mode TEXT NOT NULL, game_no INTEGER NOT NULL, played_at TIMESTAMPTZ NOT NULL DEFAULT now(), players JSONB NOT NULL, ranking JSONB NOT NULL, loser TEXT, notice TEXT, winner TEXT, round_points INTEGER NOT NULL DEFAULT 0)')).then(() => run.query('CREATE TABLE IF NOT EXISTS growx_game_players (game_id BIGINT NOT NULL REFERENCES growx_games(id) ON DELETE CASCADE, name TEXT NOT NULL, name_key TEXT NOT NULL, won BOOLEAN NOT NULL, lost BOOLEAN NOT NULL, points INTEGER NOT NULL DEFAULT 0)')).then(() => run.query('CREATE INDEX IF NOT EXISTS growx_games_room_mode ON growx_games (room, mode, played_at DESC)')).then(() => run.query('CREATE INDEX IF NOT EXISTS growx_game_players_name ON growx_game_players (name_key)')).catch((e) => { ready = null; throw e; });
+    )`),
+    run.query('ALTER TABLE growx_users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false'),
+    run.query('ALTER TABLE growx_users ADD COLUMN IF NOT EXISTS auth0_name TEXT'),
+    run.query('CREATE UNIQUE INDEX IF NOT EXISTS growx_users_local_name ON growx_users (username_key) WHERE kind = \'local\''),
+    run.query('CREATE UNIQUE INDEX IF NOT EXISTS growx_users_pw_name ON growx_users (username_key) WHERE pw_hash IS NOT NULL'),
+    run.query('CREATE TABLE IF NOT EXISTS growx_games (id BIGSERIAL PRIMARY KEY, room TEXT NOT NULL, mode TEXT NOT NULL, game_no INTEGER NOT NULL, played_at TIMESTAMPTZ NOT NULL DEFAULT now(), players JSONB NOT NULL, ranking JSONB NOT NULL, loser TEXT, notice TEXT, winner TEXT, round_points INTEGER NOT NULL DEFAULT 0)'),
+    run.query('CREATE TABLE IF NOT EXISTS growx_game_players (game_id BIGINT NOT NULL REFERENCES growx_games(id) ON DELETE CASCADE, name TEXT NOT NULL, name_key TEXT NOT NULL, won BOOLEAN NOT NULL, lost BOOLEAN NOT NULL, points INTEGER NOT NULL DEFAULT 0)'),
+    run.query('CREATE INDEX IF NOT EXISTS growx_games_room_mode ON growx_games (room, mode, played_at DESC)'),
+    run.query('CREATE INDEX IF NOT EXISTS growx_game_players_name ON growx_game_players (name_key)')]).catch((e) => { ready = null; throw e; });
   }
   await ready;
   return run.query(text, params);
