@@ -140,9 +140,12 @@ function duelBuildUi(d) {
     '<div id="duelCross"><i></i><i></i><i></i><i></i></div><div id="duelHit"></div>' +
     '<div id="duelMsg"></div>' +
     '<div class="duel-use hidden"><span id="duelUseTxt"></span><div class="duel-rel"><div id="duelUseBar"></div></div></div>' +
-    '<div class="duel-inv"><button id="duelBand" type="button">🩹 <b>0</b><i>B</i></button><button id="duelMed" type="button">➕ <b>0</b><i>N</i></button><span id="duelStance"></span></div>' +
-    '<div class="duel-hp"><div class="duel-hp-top"><b>HP</b><span id="duelHpTxt"></span></div><div class="duel-hp-bar"><div id="duelHpBar"></div></div></div>' +
-    '<div class="duel-ammo"><div id="duelSlots"></div><span id="duelAmmo"></span><small id="duelAmmoHint"></small><div class="duel-rel"><div id="duelRelBar"></div></div></div>' +
+    '<div class="duel-bar"><button id="duelPack" type="button" title="Inventory (Tab)">🎒<i>Tab</i></button>' +
+    '<div class="duel-mid"><div class="duel-inv"><button id="duelBand" type="button">🩹 <b>0</b><i>B</i></button><button id="duelMed" type="button">➕ <b>0</b><i>N</i></button><span id="duelStance"></span></div>' +
+    '<div class="duel-hp"><div class="duel-hp-top"><b id="duelHpLabel">HP</b><span id="duelHpTxt"></span></div><div class="duel-hp-bar"><div id="duelHpBar"></div></div></div></div>' +
+    '<div class="duel-ammo"><div id="duelSlots"></div><span id="duelAmmo"></span><small id="duelAmmoHint"></small><div class="duel-rel"><div id="duelRelBar"></div></div></div></div>' +
+    '<div id="duelPanel" class="hidden"><div class="duel-panel-in"><div class="duel-panel-head"><b>Inventory</b><button id="duelPanelX" type="button">✕</button></div><div id="duelPanelBody"></div><p class="duel-note">The match keeps running while this is open.</p></div></div>' +
+    '<div id="duelBigMap" class="hidden"><div class="duel-map-in"><div class="duel-panel-head"><b>Tactical map</b><button id="duelMapX" type="button">✕</button></div><canvas id="duelMapBig" width="560" height="560"></canvas><div id="duelLegend"></div></div></div>' +
     '<button id="duelFire" type="button" aria-label="Fire">🔫</button>' +
     '<button id="duelAim" type="button" aria-label="Aim">◎</button>' +
     '<button id="duelJump" type="button" aria-label="Jump">⤒</button>' +
@@ -175,6 +178,12 @@ function duelBuildUi(d) {
   q("#duelAdsSens").addEventListener("input", (e) => { d.adsSens = Number(e.target.value) || 0.7; duelSetPref("ads", d.adsSens); });
   q("#duelSnd").checked = d.sound;
   q("#duelSnd").addEventListener("change", (e) => { d.sound = e.target.checked; duelSetPref("snd", d.sound ? "1" : "0"); });
+  q("#duelPack").addEventListener("click", () => duelToggle(d, "panel"));
+  q("#duelPanelX").addEventListener("click", () => duelToggle(d, "panel", false));
+  q("#duelMap").addEventListener("click", () => duelToggle(d, "map"));
+  q("#duelMapX").addEventListener("click", () => duelToggle(d, "map", false));
+  q("#duelBigMap").addEventListener("click", (e) => { if (e.target.id === "duelBigMap") duelToggle(d, "map", false); });
+  q("#duelPanel").addEventListener("click", (e) => { if (e.target.id === "duelPanel") duelToggle(d, "panel", false); });
   q("#duelBand").addEventListener("click", () => duelUse(d, "band"));
   q("#duelMed").addEventListener("click", () => duelUse(d, "med"));
   q("#duelAgain").addEventListener("click", () => {
@@ -236,6 +245,9 @@ function duelAmmoHud(d, now) {
     const pw = r.querySelector("#duelPower");
     if (me.power) { pw.textContent = { speed: "⚡ SPEED", shield: "🛡 SHIELD", rage: "🔥 RAGE ×2" }[me.power.kind] + " " + Math.ceil((me.power.until - now) / 1000) + "s"; pw.dataset.k = me.power.kind; }
     pw.classList.toggle("hidden", !me.power);
+    const shielded = Boolean(me.power && me.power.kind === "shield");
+    r.querySelector(".duel-hp").classList.toggle("shielded", shielded);
+    r.querySelector("#duelHpLabel").textContent = shielded ? "HP 🛡" : "HP";
   }
   const use = r.querySelector(".duel-use");
   use.classList.toggle("hidden", !me.using);
@@ -243,6 +255,40 @@ function duelAmmoHud(d, now) {
     r.querySelector("#duelUseTxt").textContent = me.using.kind === "band" ? "Using bandage…" : "Using medkit…";
     r.querySelector("#duelUseBar").style.width = Math.min(100, ((now - me.using.start) / (me.using.end - me.using.start)) * 100) + "%";
   }
+}
+
+/** Opens or closes the inventory panel or the tactical map (`on` forces it). The match keeps running underneath. */
+function duelToggle(d, which, on) {
+  const el = d.root.querySelector(which === "panel" ? "#duelPanel" : "#duelBigMap");
+  const open = on === undefined ? el.classList.contains("hidden") : on;
+  if (open) { try { document.exitPointerLock(); } catch (e) { /* ignore */ } d.fireDown = false; }
+  el.classList.toggle("hidden", !open);
+  d[which + "Open"] = open;
+  if (open && which === "panel") duelPanelRender(d);
+  if (open && which === "map") duelLegend(d);
+}
+
+/** Weapons (tap to equip), healing (tap to use) and the active power. */
+function duelPanelRender(d) {
+  const me = d.me, now = performance.now(), body = d.root.querySelector("#duelPanelBody");
+  const rows = DUEL_WORDER.map((k) => {
+    const W = DUEL_WEAPONS[k], has = me.have[k];
+    return '<button type="button" class="duel-row' + (k === me.w ? " on" : "") + (has ? "" : " off") + '" data-w="' + k + '"' + (has ? "" : " disabled") + "><b>" + W.name + "</b><span>" +
+      (has ? me.mag[k] + " / " + me.res[k] : "find it on the map") + "</span><em>" + (k === me.w ? "equipped" : has ? "equip" : "") + "</em></button>";
+  }).join("");
+  const heal = [["band", "🩹 Bandage", "2.2 s · up to 75 HP"], ["med", "➕ Medkit", "4 s · full HP"]].map(([k, n, s]) =>
+    '<button type="button" class="duel-row' + (me.inv[k] ? "" : " off") + '" data-u="' + k + '"' + (me.inv[k] ? "" : " disabled") + "><b>" + n + " ×" + me.inv[k] + "</b><span>" + s + "</span><em>" + (me.inv[k] ? "use" : "") + "</em></button>").join("");
+  const pw = me.power ? { speed: "⚡ Speed", shield: "🛡 Shield", rage: "🔥 Rage ×2" }[me.power.kind] + " · " + Math.max(0, Math.ceil((me.power.until - now) / 1000)) + " s" : "none active";
+  body.innerHTML = "<h4>Weapons</h4>" + rows + "<h4>Healing</h4>" + heal + "<h4>Super power</h4><div class=\"duel-row static\"><b>" + pw + "</b></div>";
+  body.querySelectorAll("[data-w]").forEach((b) => b.addEventListener("click", () => { duelSwitch(d, b.dataset.w); duelPanelRender(d); }));
+  body.querySelectorAll("[data-u]").forEach((b) => b.addEventListener("click", () => { duelUse(d, b.dataset.u); duelToggle(d, "panel", false); }));
+}
+
+function duelLegend(d) {
+  const lg = d.root.querySelector("#duelLegend");
+  if (lg.childElementCount) return;
+  lg.innerHTML = [["#5cff7a", "Bandage / medkit"], ["#d9b84a", "Ammo box"], ["#f2f2f2", "Sniper rifle"], ["#4dd0ff", "Speed"], ["#6aa8ff", "Shield"], ["#ff5a3d", "Rage"], ["#ff4d4d", "Opponent"], ["#b34a3a", "Containers"], ["#9aa0a8", "Walls"], ["#b58a4f", "Crates"], ["#2f7a3a", "Trees"]]
+    .map(([c, n]) => '<span><i style="background:' + c + '"></i>' + n + "</span>").join("");
 }
 
 function duelFeed(d, html, cls) {
@@ -652,7 +698,10 @@ function duelBind(d) {
     if (d.over) return;
     d.keys[e.code] = true;
     if (e.repeat) { if (/^(Space|Arrow)/.test(e.code)) e.preventDefault(); return; }
-    if (e.code === "KeyR") duelReload(d);
+    if (e.code === "Tab" || e.code === "KeyI") { e.preventDefault(); duelToggle(d, "panel"); }
+    else if (e.code === "KeyM") duelToggle(d, "map");
+    else if (e.code === "Escape") { duelToggle(d, "panel", false); duelToggle(d, "map", false); }
+    else if (e.code === "KeyR") duelReload(d);
     else if (e.code === "Digit1") duelSwitch(d, "ar");
     else if (e.code === "Digit2") duelSwitch(d, "smg");
     else if (e.code === "Digit3") duelSwitch(d, "sn");
@@ -1033,28 +1082,46 @@ function duelDraw(d, now, dt) {
   d.renderer.render(d.scene, d.cam);
 }
 
-/** The corner map: cover, pickups, you (arrow) and the other player. */
-function duelMap(d) {
-  const c = d.map, S = 120, k = S / (DUEL_HALF * 2), me = d.me, o = d.opp;
+/** Paints the map into a canvas: cover, pickups, where you look (a cone), you (arrow) and the other player. `big` adds a grid, labels and a compass. */
+function duelPaintMap(d, c, S, big) {
+  const k = S / (DUEL_HALF * 2), me = d.me, o = d.opp;
   c.clearRect(0, 0, S, S);
-  c.fillStyle = "rgba(20,40,25,.72)"; c.fillRect(0, 0, S, S);
+  c.fillStyle = big ? "rgba(24,48,30,.94)" : "rgba(20,40,25,.72)"; c.fillRect(0, 0, S, S);
+  if (big) {
+    c.strokeStyle = "rgba(255,255,255,.1)"; c.lineWidth = 1;
+    for (let g = 10; g < DUEL_HALF * 2; g += 10) { c.beginPath(); c.moveTo(g * k, 0); c.lineTo(g * k, S); c.moveTo(0, g * k); c.lineTo(S, g * k); c.stroke(); }
+  }
   for (const [x, z, w, dp, , kind] of DUEL_BOXES) {
     c.fillStyle = kind === "t" ? "#2f7a3a" : kind === "c" ? "#b58a4f" : kind === "k" ? "#b34a3a" : "#9aa0a8";
-    if (kind === "t") { c.beginPath(); c.arc((x + DUEL_HALF) * k, (z + DUEL_HALF) * k, 2.2, 0, 6.3); c.fill(); } else c.fillRect((x - w / 2 + DUEL_HALF) * k, (z - dp / 2 + DUEL_HALF) * k, w * k, dp * k);
+    if (kind === "t") { c.beginPath(); c.arc((x + DUEL_HALF) * k, (z + DUEL_HALF) * k, big ? 6 : 2.2, 0, 6.3); c.fill(); } else c.fillRect((x - w / 2 + DUEL_HALF) * k, (z - dp / 2 + DUEL_HALF) * k, w * k, dp * k);
   }
+  const mark = big ? 9 : 4;
   DUEL_PICKS.forEach((p, i) => {
     if (!d.picks[i].on) return;
     c.fillStyle = p.k === "band" || p.k === "med" ? "#5cff7a" : "#" + DUEL_PCOL[p.k].toString(16).padStart(6, "0");
-    c.fillRect((p.x + DUEL_HALF) * k - 2, (p.z + DUEL_HALF) * k - 2, 4, 4);
+    c.fillRect((p.x + DUEL_HALF) * k - mark / 2, (p.z + DUEL_HALF) * k - mark / 2, mark, mark);
+    if (big) { c.fillStyle = "#000"; c.font = "bold 8px sans-serif"; c.textAlign = "center"; c.fillText({ band: "B", med: "M", ammo: "A", sn: "S", speed: "⚡", shield: "◆", rage: "R" }[p.k], (p.x + DUEL_HALF) * k, (p.z + DUEL_HALF) * k + 3); }
   });
-  if (!o.dead && (d.connected || d.solo)) { c.fillStyle = "#ff4d4d"; c.beginPath(); c.arc((o.x + DUEL_HALF) * k, (o.z + DUEL_HALF) * k, 4, 0, 6.3); c.fill(); }
+  if (!o.dead && (d.connected || d.solo)) {
+    c.fillStyle = "#ff4d4d"; c.beginPath(); c.arc((o.x + DUEL_HALF) * k, (o.z + DUEL_HALF) * k, big ? 8 : 4, 0, 6.3); c.fill();
+    if (big) { c.fillStyle = "#fff"; c.font = "bold 12px sans-serif"; c.textAlign = "center"; c.fillText(d.oppName.slice(0, 12), (o.x + DUEL_HALF) * k, (o.z + DUEL_HALF) * k - 12); }
+  }
   c.save();
   c.translate((me.x + DUEL_HALF) * k, (me.z + DUEL_HALF) * k);
-  c.rotate(-me.yaw); // forward is (-sin yaw, -cos yaw); an arrow drawn pointing up turns to it
+  c.rotate(-me.yaw); // forward is (-sin yaw, -cos yaw); a shape drawn pointing up turns to it
+  const sc = big ? 1.7 : 1;
+  c.fillStyle = "rgba(255,255,255,.18)"; c.beginPath(); c.moveTo(0, 0); c.lineTo(-22 * sc, -34 * sc); c.lineTo(22 * sc, -34 * sc); c.closePath(); c.fill(); // where you look
   c.fillStyle = "#fff"; c.strokeStyle = "#111"; c.lineWidth = 1;
-  c.beginPath(); c.moveTo(0, -7); c.lineTo(5, 5); c.lineTo(0, 2); c.lineTo(-5, 5); c.closePath(); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(0, -7 * sc); c.lineTo(5 * sc, 5 * sc); c.lineTo(0, 2 * sc); c.lineTo(-5 * sc, 5 * sc); c.closePath(); c.fill(); c.stroke();
   c.restore();
   c.strokeStyle = "rgba(255,255,255,.55)"; c.lineWidth = 2; c.strokeRect(0, 0, S, S);
+  c.fillStyle = "#fff"; c.font = "bold " + (big ? 16 : 10) + "px sans-serif"; c.textAlign = "center"; c.fillText("N", S / 2, big ? 20 : 11); // north is up the map
+}
+
+function duelMap(d) {
+  duelPaintMap(d, d.map, 120, false);
+  if (d.mapOpen) duelPaintMap(d, d.root.querySelector("#duelMapBig").getContext("2d"), 560, true);
+  if (d.panelOpen && (d.frames || 0) % 15 === 0) duelPanelRender(d);
 }
 
 /* ---------------- shooting and health ---------------- */

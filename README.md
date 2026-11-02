@@ -342,6 +342,10 @@ and has a real scope when you aim). Each weapon has its own magazine, reserve, d
 the other player sees a coloured aura around you while one is active. Being hit, shooting, aiming, reloading or switching interrupts healing. **C** crouches, **Z** goes prone (both smaller to hit and quieter on the spread),
 **right-click** (or the ◎ button) aims down the sights: tighter spread, slower walking, closer camera, and its own sensitivity (⚙). On a phone the buttons are on the right: fire, aim, jump, crouch, prone, reload, switch.
 
+**HUD:** the bottom bar holds the 🎒 inventory button, bandage / medkit counts, health (with a blue outline while the shield power is on) and the equipped weapon with its ammo and the three weapon slots.
+**🎒 / Tab / I** opens the inventory panel (tap a weapon to equip it, tap healing to use it, see the active power). Tapping the corner map, or **M**, opens the full-screen tactical map: grid, cover, every
+pickup that is currently on the ground, where you look (a cone), and the other player. Both panels leave the match running; Esc closes them. There is no armour item in the game yet, so the shield power is the only armour.
+
 How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown to the room as `duel` and `canDuel`) and passes the connection set-up messages
 (`duelSignal` / `duelSignals`, a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
 (`public/duel.js`): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries
