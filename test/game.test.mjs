@@ -1124,3 +1124,14 @@ test('public video: its own switch, independent of Public voice (off by default)
   assert.equal(G.view(s, admin, now).voice.includes(pub.id), false);
   assert.equal(G.view(s, pub, now).canVideo, false);
 });
+
+test('a super wild card as the very last card wins with nothing to choose and no power used', () => {
+  for (const value of ['blast', 'swap', 'gift', 'master']) {
+    const { s, p, others, now } = threePlayers([{ id: 9801, color: 'wild', value }]);
+    const before = others.map((o) => o.hand.length);
+    G.act(s, p, { op: 'play', cardId: 9801 }, now); // no colour, player or rule
+    assert.equal(p.hand.length, 0, value + ': the card went down');
+    assert.ok(p.finished || s.over, value + ': the player is out');
+    assert.deepEqual(others.map((o) => o.hand.length), before, value + ': no power was used');
+  }
+});

@@ -1571,8 +1571,8 @@ function onCard(card) {
     return;
   }
   if (sheet) closeSheet(); // tapping a card while peeking starts over with that card
-  if (card.color === "wild") {
-    openSheet(card);
+  if (card.color === "wild" && !(state.hand.length === 1 && ["blast", "swap", "gift", "master"].includes(card.value))) {
+    openSheet(card); // (a super card that is the last card just goes down and wins: nothing to choose)
   } else {
     playNow(card);
   }

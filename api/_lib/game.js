@@ -797,16 +797,21 @@ function play(s, p, cardId, chosen, now, targetId = '', ruleId = '') {
         ? 'Wild Draw Four is only legal when you hold no card of the current colour.'
         : "You can't play that card.");
   }
+  // a super card that is the very last card just goes down and wins: no colour, player or rule to choose, and no power to use
+  const lastSuper = p.hand.length === 1 && ['blast', 'swap', 'gift', 'master'].includes(c.value);
+  if (lastSuper && !COLORS.includes(chosen)) chosen = COLORS.includes(s.color) ? s.color : COLORS[0];
   if (c.color === 'wild' && !COLORS.includes(chosen)) fail('Choose a colour.');
   let swapWith = null;
-  if (c.value === 'swap') {
+  if (lastSuper) {
+    // nothing to choose
+  } else if (c.value === 'swap') {
     swapWith = byId(s, targetId);
     if (!swapWith || swapWith === p || !s.seats.includes(swapWith.id) || swapWith.finished) {
       fail('Choose a player to swap hands with.');
     }
   }
   let rule = '';
-  if (c.value === 'master') {
+  if (c.value === 'master' && !lastSuper) {
     // the Master card names a player (swapWith holds the chosen player) and one super rule to apply to them
     rule = ruleId;
     if (!MASTER_RULES.includes(rule)) fail('Choose a super rule for the Master card.');
@@ -1067,7 +1072,8 @@ function doPlay(s, p, c, chosen, now, swapWith = null, rule = '') {
   let skip = false;
   let again = false;
   let jumped = false;
-  switch (c.value) {
+  const powerless = p.hand.length === 0 && ['blast', 'swap', 'gift', 'master'].includes(c.value); // went out on a super card: it has no power to use
+  switch (powerless ? 'none' : c.value) {
     case 'master': {
       const result = masterEffect(s, p, swapWith, rule, now);
       if (result === 'over') return;

@@ -324,12 +324,18 @@ A room that is off is never in the list, for anyone: you join it by typing its n
 ## 3D duel (two players, third-person)
 
 When exactly two players are in a room's lobby, both see **🎯 3D duel**. One taps it; the other's button changes to **Join 3D duel from <name>**. It opens a full-screen
-third-person arena (Three.js, loaded from cdnjs when first opened): move with **WASD** and the mouse (click to capture it, **Esc** frees it), or on a phone the left stick,
-dragging the right side to look, and the 🔫 button. One gun, 25 damage to the body, 40 to the head, first to **5 kills**; a defeated player comes back after 2 seconds
-at the spawn farthest from the other, with 1.5 seconds of protection. After the end, **Rematch** needs both to accept.
+third-person arena (Three.js, loaded from cdnjs when first opened) with soldiers (helmet, goggles, vest, backpack, rifle; legs swing as they run, a defeated one falls),
+textured containers, crates and walls, trees and far hills. **Controls:** WASD move, **Shift** run, **Space** jump (it clears the low crates and can stand on them), **R** reload,
+mouse to look (click to capture, **Esc** frees it), click to fire; on a phone the left stick moves (push it to the edge to run), the right side turns the view, and the
+buttons fire, jump and reload. The ⚙ button sets mouse/touch sensitivity and sound (kept in the browser).
 
-How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown to the room as `duel` and `canDuel`) and passes the connection set-up messages
-(`duelSignal` / `duelSignals`, a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
-(`public/duel.js`): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries
+**Rifle:** 30 rounds, reload 1.7 s, 25 damage to the body and 40 to the head; the shot spreads more when moving, running or in the air, and the view kicks a little. First to
+**5 kills** wins; a defeated player returns after 2.2 seconds at the spawn farthest from the other, with 1.5 seconds of protection. **Rematch** needs both to accept.
+**Screen:** corner map (cover, you as an arrow, the other player), score, a kill feed, health and ammo, a crosshair that opens as you move, a hit marker (white, yellow for a
+headshot, red for a kill), floating damage numbers, a red wedge on the side a shot came from, and a pulsing edge when health is low. Sounds are made in the browser (no files).
+
+How it works: the server only keeps the invite ( / , shown to the room as  and ) and passes the connection set-up messages
+( / , a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
+(): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries
 (Settings → Relay), it retries through the relay. Each browser is the referee for its own player (position and health), so this suits friends, not ranked play.
 Needs WebGL; a browser without it gets a message and the lobby stays as it was. Observers and rooms with a bot or three or more players cannot start one.
