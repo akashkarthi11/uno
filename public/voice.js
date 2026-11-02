@@ -48,14 +48,18 @@ function voiceSync(s) {
   }
   if (s.iceServers) voice.ice = s.iceServers;
   if (s.relayServers) voice.relayIce = s.relayServers;
-  const relayNow = Boolean(s.settings && s.settings.voiceRelay);
-  if (voice.active && voice.relay !== undefined && voice.relay !== relayNow) {
-    // The admin switched the route. Turning the relay on only helps pairs that are not connected; turning it off starts
-    // every pair over so no call keeps going through the relay.
+  const mode = s.settings && s.settings.voiceRelay === "on" ? "on" : s.settings && s.settings.voiceRelay === "off" ? "off" : "auto";
+  const relayNow = mode === "on";
+  if (voice.active && voice.relayMode !== undefined && voice.relayMode !== mode) {
+    // The admin switched the route. "on" only helps pairs that are not connected. Leaving "on", or switching to "off", starts over the
+    // pairs that may be going through the relay so none keeps doing so ("off" also forgets which pairs had trouble).
+    const used = [...voice.needRelay];
+    if (mode === "off") voice.needRelay.clear();
     for (const [id, p] of [...voice.peers]) {
-      if (!relayNow || p.pc.connectionState !== "connected") rebuildPeer(id, true);
+      if (mode === "on" ? p.pc.connectionState !== "connected" : voice.relayMode === "on" || used.includes(id)) rebuildPeer(id, true);
     }
   }
+  voice.relayMode = mode;
   voice.relay = relayNow;
   if (voice.active) { // who may hear me changed (Public voice was switched): start those pairings over with the right tracks
     for (const [id, p] of [...voice.peers]) {

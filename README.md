@@ -192,9 +192,10 @@ Static credentials from another provider also work via `GAME_TURN_URLS`, `GAME_T
 Voice starts **direct** (STUN only, audio goes straight between phones) and the relay stays off. When one pairing has an audio problem (it does not
 connect within 8 seconds, fails, or drops for 4 seconds) the page starts **that pair** over with the relay added; every other pair stays direct,
 and the next call starts direct again. The server hands the relay entries out separately for this (`relayServers`). Only the real admin (not a
-co-admin) has a **📡 Relay** switch in Settings, in the lobby and during a game: **auto** (the default) is the behaviour above; **on** allows the
-relay from the start for every pair. Switching it on rebuilds the pairs that are not connected; switching it back restarts every pair so nothing
-keeps going through the relay. The choice is stored with the room's settings (`settings.voiceRelay`, default off) and resets with the room.
+co-admin) has a **📡 Relay** button in Settings, in the lobby and during a game that cycles three states: **auto** (the default) is the behaviour above;
+**on** allows the relay from the start for every pair; **off** never uses the relay (no relay credentials are handed out), even when a pair has
+trouble. Switching to on rebuilds the pairs that are not connected; leaving on, or switching to off, restarts the pairs that may be going through
+the relay. The choice is stored with the room's settings (`settings.voiceRelay`: `auto`, `on` or `off`, default `auto`) and resets with the room.
 
 ## Card drop animation
 

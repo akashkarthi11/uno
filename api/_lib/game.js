@@ -81,7 +81,11 @@ export const MATCH_TARGET = 500; // official: first to 500 points wins the match
 export const cardPoints = (c) => (/^[0-9]$/.test(c.value) ? Number(c.value) : ['skip', 'reverse', 'draw2', 'again', 'sweep'].includes(c.value) ? 20 : 50);
 const stackingOf = (s) => Boolean(s.settings && s.settings.stacking);
 const challengeOf = (s) => !(s.settings && s.settings.challenge === false); // on by default, like the official rules
-const voiceRelayOf = (s) => Boolean(s.settings && s.settings.voiceRelay); // off = automatic: direct first, a pair that has trouble adds the relay by itself; on = relay allowed from the start
+// the voice route: 'auto' (default: direct first, a pair that has trouble adds the relay by itself), 'on' (relay allowed from the start),
+// 'off' (never the relay). true and false from older rooms and callers mean 'on' and 'auto'.
+const RELAY_MODES = ['auto', 'on', 'off'];
+const relayMode = (v) => (v === true || v === 'on' ? 'on' : v === 'off' ? 'off' : 'auto');
+const voiceRelayOf = (s) => relayMode(s.settings && s.settings.voiceRelay);
 const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
 const superSettings = (s) => Object.fromEntries(SUPER_KINDS.map((k) => [k, superOn(s, k)]));
@@ -612,7 +616,7 @@ function setConfig(s, p, b) {
   if (turnSecs !== undefined && !(Number.isInteger(turnSecs) && turnSecs >= TURN_MIN_SECS && turnSecs <= TURN_MAX_SECS)) {
     fail(`Turn time must be a whole number of seconds from ${TURN_MIN_SECS} to ${TURN_MAX_SECS}.`);
   }
-  if (voiceRelay !== undefined && typeof voiceRelay !== 'boolean') fail('Bad settings.');
+  if (voiceRelay !== undefined && typeof voiceRelay !== 'boolean' && !RELAY_MODES.includes(voiceRelay)) fail('Bad settings.');
   if (theme !== undefined && !THEMES.includes(theme)) fail('Unknown theme.');
   if (handSize !== undefined && !(Number.isInteger(handSize) && handSize >= HAND_MIN && handSize <= HAND_MAX)) {
     fail(`Cards per player must be a whole number from ${HAND_MIN} to ${HAND_MAX}.`);
@@ -626,7 +630,7 @@ function setConfig(s, p, b) {
   }
   // the theme and the voice route can be changed at any time, even during a game
   s.settings = {
-    voiceRelay: voiceRelay !== undefined ? voiceRelay : voiceRelayOf(s),
+    voiceRelay: voiceRelay !== undefined ? relayMode(voiceRelay) : voiceRelayOf(s),
     publicVoice: publicVoice !== undefined ? publicVoice : publicVoiceOf(s),
     publicVideo: publicVideo !== undefined ? publicVideo : publicVideoOf(s),
     botMatch: botOpt !== undefined ? botOpt : botOf(s),

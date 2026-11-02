@@ -583,14 +583,16 @@ function ensureVoice() {
   return voiceLoading;
 }
 
-/** Admin: voice goes straight between phones ("off", the original way) or may fall back to a relay server ("on"). */
+/** Admin: the voice route cycles auto (direct first, relay only for a pair with trouble), on (relay from the start), off (never the relay). */
+const RELAY_NEXT = { auto: "on", on: "off", off: "auto" };
+const relayModeOf = (s) => (s.settings && s.settings.voiceRelay === "on" ? "on" : s.settings && s.settings.voiceRelay === "off" ? "off" : "auto");
 function toggleRelay() {
   if (busy || !state || !state.admin) return;
-  const on = !(state.settings && state.settings.voiceRelay);
+  const next = RELAY_NEXT[relayModeOf(state)];
   const before = state;
-  state = { ...state, settings: { ...state.settings, voiceRelay: on } };
+  state = { ...state, settings: { ...state.settings, voiceRelay: next } };
   render();
-  send({ op: "config", voiceRelay: on }, () => { state = before; render(); });
+  send({ op: "config", voiceRelay: next }, () => { state = before; render(); });
 }
 $("relayBtn").addEventListener("click", toggleRelay);
 
@@ -717,12 +719,14 @@ function renderRelayBtn(s) {
   bsw.title = botOn ? "Players can start a match against the bot. Click to switch it off." : "The bot is off for players (you can still start one). Click to switch it on.";
   const btn = $("relayBtn");
   btn.classList.toggle("hidden", !s.admin); // only the real admin, not a co-admin
-  const on = Boolean(s.settings && s.settings.voiceRelay);
-  btn.textContent = "📡 Relay: " + (on ? "on" : "auto");
-  btn.classList.toggle("on", on);
-  btn.title = on
-    ? "The relay is allowed from the start for every pair. Click to go back to automatic (direct first, a pair with audio trouble adds the relay itself)."
-    : "Automatic: voice goes straight between phones, and a pair with audio trouble switches to the relay by itself. Click to allow the relay from the start.";
+  const mode = relayModeOf(s);
+  btn.textContent = "📡 Relay: " + mode;
+  btn.classList.toggle("on", mode === "on");
+  btn.title = {
+    auto: "Automatic: voice goes straight between phones, and a pair with audio trouble switches to the relay by itself. Click to allow the relay from the start.",
+    on: "The relay is allowed from the start for every pair. Click to never use the relay (off).",
+    off: "Off: the relay is never used, even when a pair has audio trouble. Click to go back to automatic.",
+  }[mode];
 }
 
 function toggleStarter(p) {

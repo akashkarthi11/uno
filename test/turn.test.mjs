@@ -35,7 +35,7 @@ const call = (b) => new Promise((resolve) => {
 test('relay credentials are minted by the server, handed to voice users only, and cached', async () => {
   const room = 'turn' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'A', password: '110299' });
-  assert.equal(admin.body.state.settings.voiceRelay, false, 'relay is off by default: calls start direct');
+  assert.equal(admin.body.state.settings.voiceRelay, 'auto', 'the default is automatic: calls start direct');
   assert.ok(!admin.body.state.iceServers.some((s) => s.username), 'off: no relay entry in the starting list');
   assert.ok(admin.body.state.relayServers.some((s) => s.username), 'but the relay entries are kept aside, for a pair that has trouble');
   const switched = await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: true });
@@ -48,8 +48,12 @@ test('relay credentials are minted by the server, handed to voice users only, an
   assert.equal(pub.body.state.iceServers, undefined, 'public players get no voice details');
   const refused = await call({ op: 'config', room, playerId: pub.body.state.you, voiceRelay: false });
   assert.equal(refused.code, 400, 'an ordinary player cannot switch the route');
-  const back = await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: false });
-  assert.ok(!back.body.state.iceServers.some((s) => s.username), 'switched off again: relay entries disappear');
+  const back = await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: 'auto' });
+  assert.ok(!back.body.state.iceServers.some((s) => s.username), 'back to automatic: relay entries leave the starting list');
+  const off = await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: 'off' });
+  assert.equal(off.body.state.settings.voiceRelay, 'off');
+  assert.deepEqual([off.body.state.iceServers.some((s) => s.username), off.body.state.relayServers.length], [false, 0], 'off: no relay credentials are handed out at all');
+  assert.equal((await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: 'sometimes' })).code, 400, 'only auto, on or off');
   await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: true });
   await call({ op: 'state', room, playerId: admin.body.state.you });
   assert.equal(hits, 1, 'minted once, then served from the cache');

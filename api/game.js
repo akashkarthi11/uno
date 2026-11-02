@@ -75,8 +75,9 @@ function iceServers(relay) {
 // these for one pair only when that pair does not connect or drops.
 const withIce = (state) => {
   if (state && (state.canVoice || state.canVideo)) {
-    state.iceServers = iceServers(Boolean(state.settings && state.settings.voiceRelay));
-    state.relayServers = relayServers();
+    const mode = state.settings && state.settings.voiceRelay; // 'auto' | 'on' | 'off'
+    state.iceServers = iceServers(mode === 'on');
+    state.relayServers = mode === 'off' ? [] : relayServers(); // off: no relay credentials are handed out at all
   }
   return state;
 };
