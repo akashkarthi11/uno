@@ -275,7 +275,9 @@ function showRoomScreen() {
 
 /** The room screen's list of active rooms (somebody is online): join one with a tap; the admin of a room can turn it off. */
 let activeBusy = false;
-async function loadActiveRooms() {
+async function loadActiveRooms(force) {
+  // the timer must not redraw the list while somebody is typing a PIN into one of its rows; a button press (force) always may
+  if (force !== true && $("roomListBox").querySelector(".room-pin:not(.hidden)")) return;
   if (activeBusy || !sysToken || $("roomScreen").classList.contains("hidden") || document.hidden) return;
   activeBusy = true;
   try {
@@ -290,7 +292,13 @@ async function loadActiveRooms() {
 function renderActiveRooms(list) {
   const box = $("roomListBox");
   box.textContent = "";
-  $("activeRooms").classList.toggle("hidden", !list.length);
+  $("activeRooms").classList.remove("hidden");
+  if (!list.length) {
+    const none = document.createElement("li");
+    none.className = "hint room-none";
+    none.textContent = "No active rooms right now.";
+    box.append(none);
+  }
   for (const r of list) {
     const li = document.createElement("li");
     const info = document.createElement("div");
@@ -315,7 +323,7 @@ function renderActiveRooms(list) {
         onB.disabled = true;
         try { await api({ op: "roomOn", sys: sysToken, target: r.code }); toast("Room " + r.code + " is on again, open to everyone."); }
         catch (e) { if (e.denied && /Session expired/.test(e.message)) { signOut(); return; } toast(e.message); }
-        loadActiveRooms();
+        loadActiveRooms(true);
       });
       li.append(onB);
     } else if (r.canOff) {
@@ -337,14 +345,14 @@ function renderActiveRooms(list) {
         offB.disabled = true;
         try { await api({ op: "roomOff", sys: sysToken, target: r.code, pin }); toast("Room " + r.code + " is off. New players need the PIN to join."); }
         catch (e) { if (e.denied && /Session expired/.test(e.message)) { signOut(); return; } toast(e.message); }
-        loadActiveRooms();
+        loadActiveRooms(true);
       });
       li.append(pinBox, offB);
     }
     box.append(li);
   }
 }
-$("activeRefresh").addEventListener("click", loadActiveRooms);
+$("activeRefresh").addEventListener("click", () => loadActiveRooms(true));
 setInterval(loadActiveRooms, 6000);
 
 /** The first screen: sign in when nobody is signed in, else the room screen. */

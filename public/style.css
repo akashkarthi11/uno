@@ -1468,7 +1468,7 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 #activeRooms { display: grid; gap: 8px; }
 #activeRooms .rooms-head { display: flex; align-items: center; justify-content: space-between; color: var(--l-ink); }
 #activeRooms .rooms-head button { min-height: 34px; padding: 0 12px; }
-.room-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 260px; overflow-y: auto; }
+.room-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 340px; overflow-y: auto; }
 .room-list li { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1.5px solid var(--l-line); border-radius: 14px; background: var(--l-input, #fff); }
 .room-list .room-info { flex: 1; min-width: 0; display: grid; gap: 2px; color: var(--l-ink); }
 .room-list .room-info strong { overflow-wrap: anywhere; }
@@ -1477,3 +1477,6 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 .room-list button.danger { color: #c0392b; border-color: #e6a9a1; }
 .room-list li { flex-wrap: wrap; }
 .room-list .room-pin { flex: 1 1 130px; min-width: 0; min-height: 38px; border: 1.5px solid var(--l-line); border-radius: 12px; padding: 0 10px; background: var(--l-input, #fff); color: var(--l-ink); }
+.room-list li.room-none { justify-content: center; border-style: dashed; color: var(--l-ink); }
+.room-list .room-info { flex: 1 1 100%; }
+.room-list li > button, .room-list li > .room-pin { flex: 1 1 110px; }

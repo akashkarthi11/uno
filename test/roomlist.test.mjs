@@ -76,3 +76,16 @@ test('turning a room off locks it: it leaves other lists and a new person needs 
   assert.equal((await call({ op: 'roomOff', sys: admin, target: 'rl-eve', pin: '1111' })).code, 200, 'the admin can lock any room');
   assert.equal((await call({ op: 'roomOff', sys: admin, target: 'rl-nope', pin: '1111' })).code, 400, 'no such room');
 });
+
+test('a room whose admin is out of it stays in their list (with Turn off), but not in other people\'s', async () => {
+  const gil = await pub('Gil');
+  const hal = await pub('Hal');
+  const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
+  await call({ op: 'join', sys: gil, room: 'rl-idle', create: true });
+  const { withRoom } = await import('../api/_lib/store.js');
+  await withRoom('rl-idle', (s) => { for (const m of s.members) m.lastSeen = 0; }); // everybody has left
+  const idle = (await call({ op: 'roomList', sys: gil })).body.rooms.find((r) => r.code === 'rl-idle');
+  assert.deepEqual([idle.online, idle.canOff], [0, true], 'its own co-admin still sees it, with the button');
+  assert.equal((await codes(admin)).includes('rl-idle'), true, 'and so does the real admin');
+  assert.equal((await codes(hal)).includes('rl-idle'), false, 'an empty room is not offered to anybody else');
+});
