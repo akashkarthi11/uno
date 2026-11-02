@@ -1716,8 +1716,10 @@ function renderSettings(s) {
   $("joinAlertBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").classList.toggle("hidden", !s.admin);
   $("privateBtn").textContent = s.private ? "🔓 Make public" : "🔒 Make private";
-  $("lockBtn").classList.toggle("hidden", !s.owns);
-  $("lockBtn").textContent = s.locked ? "⏻ Turn on room" : "⏻ Turn off room";
+  for (const id of ["lockBtn", "lobbyLockBtn"]) { // in Settings, and in the lobby under Play vs Bot
+    $(id).classList.toggle("hidden", !s.owns);
+    $(id).textContent = s.locked ? "⏻ Turn on room" : "⏻ Turn off room";
+  }
   $("settings").classList.toggle("hidden", !s.canStart);
   if (!s.canStart) return;
   const locked = s.started && !s.over; // cards, turn time, house rules and super cards: lobby only
@@ -2182,7 +2184,7 @@ $("privateBtn").addEventListener("click", () => {
       " who joined with the " + (toPrivate ? "public" : "private") + " password. Continue?")) return;
   send({ op: "private", on: toPrivate });
 });
-$("lockBtn").addEventListener("click", () => {
+for (const id of ["lockBtn", "lobbyLockBtn"]) $(id).addEventListener("click", () => {
   if (!state) return;
   if (state.locked) { send({ op: "unlockRoom" }); return; }
   const pin = prompt("Turn this room off: new people will need a PIN to join (players already inside stay).\nChoose a PIN of 4 to 8 digits:");
