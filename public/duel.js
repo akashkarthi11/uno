@@ -687,7 +687,29 @@ function duelBind(d) {
     duelOn(d, el, "touchend", (e) => { off(); e.preventDefault(); e.stopPropagation(); }, { passive: false });
     duelOn(d, el, "touchcancel", off);
   };
-  hold(q("#duelFire"), () => { d.fireDown = true; }, () => { d.fireDown = false; });
+  // the fire button also turns the view: hold it and drag the same thumb to aim while shooting
+  const fireBtn = q("#duelFire");
+  let fireTouch = null;
+  duelOn(d, fireBtn, "touchstart", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const t = e.changedTouches[0];
+    fireTouch = { id: t.identifier, x: t.clientX, y: t.clientY };
+    d.fireDown = true;
+    fireBtn.classList.add("down");
+  }, { passive: false });
+  duelOn(d, fireBtn, "touchmove", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    for (const t of e.changedTouches) {
+      if (!fireTouch || t.identifier !== fireTouch.id) continue;
+      const s = duelSensNow(d);
+      d.me.yaw -= (t.clientX - fireTouch.x) * 0.006 * s;
+      d.me.el = Math.max(-0.9, Math.min(0.6, d.me.el - (t.clientY - fireTouch.y) * 0.006 * s));
+      fireTouch.x = t.clientX; fireTouch.y = t.clientY;
+    }
+  }, { passive: false });
+  const fireEnd = (e) => { e.preventDefault(); e.stopPropagation(); fireTouch = null; d.fireDown = false; fireBtn.classList.remove("down"); };
+  duelOn(d, fireBtn, "touchend", fireEnd, { passive: false });
+  duelOn(d, fireBtn, "touchcancel", fireEnd, { passive: false });
   hold(q("#duelJump"), () => { d.jumpTouch = true; }, () => { d.jumpTouch = false; });
   hold(q("#duelReload"), () => duelReload(d), () => {});
   hold(q("#duelAim"), () => { d.me.ads = !d.me.ads; if (d.me.ads) duelCancelUse(d); q("#duelAim").classList.toggle("on", d.me.ads); }, () => {});

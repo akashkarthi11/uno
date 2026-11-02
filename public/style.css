@@ -1587,3 +1587,4 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 #duel button#duelProne { right: 200px; bottom: max(46px, calc(env(safe-area-inset-bottom) + 36px)); width: 46px; height: 46px; font-size: 20px; }
 #duel.touch .duel-ammo { left: 50%; right: auto; transform: translateX(-50%); text-align: center; }
 #duel.touch #duelSlots { justify-content: center; }
+#duel button#duelFire.down { background: rgba(239,68,68,.95); transform: scale(.94); }
