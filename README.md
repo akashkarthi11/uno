@@ -336,8 +336,8 @@ buttons fire, jump and reload. The ⚙ button sets mouse/touch sensitivity and s
 **Screen:** corner map (cover, you as an arrow, the other player), score, a kill feed, health and ammo, a crosshair that opens as you move, a hit marker (white, yellow for a
 headshot, red for a kill), floating damage numbers, a red wedge on the side a shot came from, and a pulsing edge when health is low. Sounds are made in the browser (no files).
 
-How it works: the server only keeps the invite ( / , shown to the room as  and ) and passes the connection set-up messages
-( / , a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
-(): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries
+How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown to the room as `duel` and `canDuel`) and passes the connection set-up messages
+(`duelSignal` / `duelSignals`, a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
+(`public/duel.js`): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries
 (Settings → Relay), it retries through the relay. Each browser is the referee for its own player (position and health), so this suits friends, not ranked play.
 Needs WebGL; a browser without it gets a message and the lobby stays as it was. Observers and rooms with a bot or three or more players cannot start one.
