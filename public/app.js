@@ -1584,7 +1584,7 @@ const SUPER_INFO = [
   { k: "again", icon: "🔁", name: "Play Again", n: 4, text: "go again" },
   { k: "sweep", icon: "🧹", name: "Sweep", n: 4, text: "put down all of its colour" },
   { k: "blast", icon: "💥", name: "Blast", n: 2, text: "everyone else draws 1" },
-  { k: "swap", icon: "🔄", name: "Swap Hands", n: 2, text: "trade hands" },
+  { k: "swap", icon: "🔄", name: "Swap Hands", n: 1, text: "trade hands" },
   { k: "gift", icon: "🎁", name: "Gift", n: 2, text: "give 1 card to everyone" },
   { k: "master", icon: "✨", name: "Master card", n: 1, text: "pick a player + a rule" },
 ];

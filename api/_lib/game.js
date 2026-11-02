@@ -114,9 +114,9 @@ function buildDeck(on = () => true) {
   for (let i = 0; i < 2; i++) {
     // super cards played like a Wild (you also choose the next colour)
     if (on('blast')) add('wild', 'blast');
-    if (on('swap')) add('wild', 'swap');
     if (on('gift')) add('wild', 'gift');
   }
+  if (on('swap')) add('wild', 'swap'); // Swap Hands: only one in the deck
   if (on('master')) add('wild', 'master'); // the one plain Master card: pick a player, then pick a super rule for them
   return d;
 }

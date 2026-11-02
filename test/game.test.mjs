@@ -3,7 +3,7 @@ import test from 'node:test';
 process.env.GAME_ADMIN_ANY_NAME = '1'; // these tests sign the admin in under made-up names; adminname.test.mjs checks the real rule
 import assert from 'node:assert/strict';
 import * as G from '../api/_lib/game.js';
-const DECK_SIZE = 123; // 108 classic cards + 15 super cards
+const DECK_SIZE = 122; // 108 classic cards + 14 super cards
 /** A room with 5 cards each and no challenge question: the setup most of these older tests were written for. */
 /** The official first-card actions (a Skip, Reverse or Draw Two turned over at the start) change who moves, which way, and one
  *  hand size. Tests that count cards or turns call this right after the start to get the plain situation. */
@@ -289,7 +289,7 @@ function threePlayers(handFor) {
   return { s, p, others, now };
 }
 
-test('super cards: the deck has 123 cards including the 15 super cards', () => {
+test('super cards: the deck has 122 cards including the 14 super cards', () => {
   const s = oldRules('t');
   const a = G.join(s, { name: 'A', admin: true }, 1000);
   G.join(s, { name: 'B', admin: false }, 1000);
@@ -297,7 +297,7 @@ test('super cards: the deck has 123 cards including the 15 super cards', () => {
   const all = [...s.deck, ...s.discard, ...s.members.flatMap((m) => m.hand)];
   assert.equal(all.length, DECK_SIZE);
   const count = (v) => all.filter((c) => c.value === v).length;
-  assert.deepEqual([count('again'), count('sweep'), count('blast'), count('swap'), count('gift'), count('master')], [4, 4, 2, 2, 2, 1]);
+  assert.deepEqual([count('again'), count('sweep'), count('blast'), count('swap'), count('gift'), count('master')], [4, 4, 2, 1, 2, 1]);
   assert.ok(!['again', 'sweep', 'blast', 'swap', 'gift', 'master'].includes(s.discard[0].value), 'the first card is never a super card');
 });
 
