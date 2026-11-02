@@ -189,10 +189,11 @@ Static credentials from another provider also work via `GAME_TURN_URLS`, `GAME_T
 
 ### Direct or relay: the admin's switch
 
-Voice starts in the original **direct** mode (STUN only, audio goes straight between phones). Only the real admin (not a co-admin) has a **📡 Relay** switch in Settings, in the lobby and during a game. **On** adds the
-relay servers above as a backup: a call uses them only when a direct route fails, so it uses little relay data. Switching
-it on rebuilds the pairs that are not connected; switching it off restarts every pair so nothing keeps going through the
-relay. The choice is stored with the room's settings (`settings.voiceRelay`, default off) and resets with the room.
+Voice goes straight between phones and **switches to the relay by itself** when a direct route fails: the relay servers above are handed out
+as a backup in every room, and a call uses them only when it has to, so it uses little relay data. Only the real admin (not a co-admin) has a
+**📡 Relay** switch in Settings, in the lobby and during a game, to turn that backup off (direct only). Switching it on rebuilds the pairs
+that are not connected; switching it off restarts every pair so nothing keeps going through the relay. The choice is stored with the room's
+settings (`settings.voiceRelay`, default **on**) and resets with the room.
 
 ## Card drop animation
 

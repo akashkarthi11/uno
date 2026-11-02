@@ -721,8 +721,8 @@ function renderRelayBtn(s) {
   btn.textContent = "📡 Relay: " + (on ? "on" : "off");
   btn.classList.toggle("on", on);
   btn.title = on
-    ? "Voice may use a relay server when two phones cannot connect directly. Click to go back to direct only."
-    : "Voice goes straight between phones. Click to also allow a relay server if some players cannot connect.";
+    ? "Voice goes straight between phones and switches to a relay server by itself when a direct route fails. Click to turn the relay backup off."
+    : "Direct only: no relay backup, so players on strict networks may not be heard. Click to turn the relay backup on.";
 }
 
 function toggleStarter(p) {

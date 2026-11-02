@@ -35,8 +35,8 @@ const call = (b) => new Promise((resolve) => {
 test('relay credentials are minted by the server, handed to voice users only, and cached', async () => {
   const room = 'turn' + Math.floor(Math.random() * 1e6);
   const admin = await call({ op: 'join', room, name: 'A', password: '110299' });
-  assert.equal(admin.body.state.settings.voiceRelay, false, 'relay is off by default (the original direct way)');
-  assert.ok(!admin.body.state.iceServers.some((s) => s.username), 'off: no relay entry is handed out');
+  assert.equal(admin.body.state.settings.voiceRelay, true, 'the relay backup is on by default: used only when a direct route fails');
+  assert.ok(admin.body.state.iceServers.some((s) => s.username), 'on: the relay entry is handed out');
   const switched = await call({ op: 'config', room, playerId: admin.body.state.you, voiceRelay: true });
   const ice = switched.body.state.iceServers;
   const relay = ice.find((s) => s.username);
