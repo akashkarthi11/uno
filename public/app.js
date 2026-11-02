@@ -911,6 +911,7 @@ function renderLobby(s) {
   const canVid = Boolean(s.canAiVideo);
   $("videoBtn").classList.toggle("hidden", !canVid);
   $("videoBtn2").classList.toggle("hidden", !canVid);
+  if (typeof duelSync === "function") duelSync(s); // the 3D duel button (duel.js)
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
   $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over) || s.canBot === false); // anyone may start a practice match against the bot
   $("lobbyCount").textContent = s.players.length + (s.players.length === 1 ? " player" : " players");

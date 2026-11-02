@@ -320,3 +320,16 @@ creator is recorded when the room is opened; a room from before that (like `main
 the admin account, so if the admin account changes, the new admin sees those rooms; a player's room stays with that player. It asks for a **PIN of 4 to 8 digits**. Off means *locked*: the room keeps its game and players, but it leaves everyone else's list and a new person must
 type the PIN to join (players already inside, the real admin and the observer are not asked). Five wrong PINs stop all guessing for five minutes.
 A room that is off is never in the list, for anyone: you join it by typing its name and the PIN. The list has no Turn on / Turn off buttons; the creator turns the room off or on from **inside** it (lobby or Settings). The PIN is kept only as a salted hash in the room (`pinHash`).
+
+## 3D duel (two players, third-person)
+
+When exactly two players are in a room's lobby, both see **🎯 3D duel**. One taps it; the other's button changes to **Join 3D duel from <name>**. It opens a full-screen
+third-person arena (Three.js, loaded from cdnjs when first opened): move with **WASD** and the mouse (click to capture it, **Esc** frees it), or on a phone the left stick,
+dragging the right side to look, and the 🔫 button. One gun, 25 damage to the body, 40 to the head, first to **5 kills**; a defeated player comes back after 2 seconds
+at the spawn farthest from the other, with 1.5 seconds of protection. After the end, **Rematch** needs both to accept.
+
+How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown to the room as `duel` and `canDuel`) and passes the connection set-up messages
+(`duelSignal` / `duelSignals`, a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
+(`public/duel.js`): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries
+(Settings → Relay), it retries through the relay. Each browser is the referee for its own player (position and health), so this suits friends, not ranked play.
+Needs WebGL; a browser without it gets a message and the lobby stays as it was. Observers and rooms with a bot or three or more players cannot start one.

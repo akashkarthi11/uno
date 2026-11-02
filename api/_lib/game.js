@@ -499,6 +499,8 @@ function dispatch(s, me, b, now) {
   switch (b.op) {
     case 'start': return start(s, me, now);
     case 'botMatch': return botMatch(s, me, now);
+    case 'duelStart': return duelStart(s, me, now);
+    case 'duelEnd': return duelEnd(s, me);
     case 'play': return play(s, me, Number.isInteger(b.cardId) ? b.cardId : -1, String(b.color ?? ''), now, String(b.target ?? ''), String(b.rule ?? ''));
     case 'draw': return draw(s, me, now, b);
     case 'pass': return pass(s, me, now);
@@ -1175,6 +1177,17 @@ const isBotHost = (s, p) => Boolean(s.botGame && s.botHost === p.id);
  * Anyone in the room can play a single-player match against the bot: no admin or co-admin needed. Only the player and the
  * bot are dealt in; anybody else in the room watches. The match is not counted in the table's stats.
  */
+/** The 3D duel: exactly two players in the room, one invites the other. The server only keeps the invite; the match itself runs between the two browsers. */
+export const duelPair = (s, now) => s.members.filter((m) => !m.bot && !m.observer && online(m, now));
+function duelStart(s, p, now) {
+  if (p.observer) fail('An observer only watches.');
+  if (duelPair(s, now).length !== 2 || s.members.some((m) => m.bot)) fail('A 3D duel needs exactly two players in the room.');
+  s.duel = { by: p.id, at: now };
+}
+function duelEnd(s, p) {
+  if (s.duel && !p.observer) delete s.duel;
+}
+
 function botMatch(s, p, now) {
   if (!canBot(s, p)) fail('The bot is switched off.');
   if (s.started && !s.over) fail('A game is already running.');
@@ -1374,6 +1387,8 @@ export function view(s, me, now) {
     canVoice: canVoice(s, me),
     canVideo: canVideo(s, me),
     canBot: canBot(s, me),
+    duel: s.duel && !me.observer ? { by: s.duel.by, byName: (byId(s, s.duel.by) || {}).name || '' } : null, // a waiting 3D-duel invite
+    canDuel: !me.observer && !s.members.some((m) => m.bot) && duelPair(s, now).length === 2,
     canAiVideo: Boolean(s.private && canLearn(me)), // the AI video window: private rooms, the real admin and private players
     voice: canCall(s, me) ? (s.voice || []).filter((id) => byId(s, id)) : [],
     // who in the call may hear and be heard (only told to people who may themselves, so a camera-only player learns nothing about roles)

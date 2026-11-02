@@ -755,6 +755,19 @@ async function handle(req, res) {
       await pushSignal(code, to.id, { from: me.id, kind: b.kind, data: b.data });
       return res.json({ ok: true });
     }
+    // The 3D duel's connection set-up: the same kind of mailbox, for the two players of a duel (no voice list needed).
+    if (b.op === 'duelSignal') {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      const to = s && s.members.find((m) => m.id === b.to);
+      if (!me || !to || me.observer || to.observer || me.id === to.id) throw new G.GameError('Not in this room.');
+      if (!['hello', 'offer', 'answer', 'ice'].includes(b.kind) || JSON.stringify(b.data ?? null).length > 8000) throw new G.GameError('Bad signal.');
+      await pushSignal(code + ':duel', to.id, { from: me.id, kind: b.kind, data: b.data });
+      return res.json({ ok: true });
+    }
+    if (b.op === 'duelSignals') {
+      return res.json({ signals: await takeSignals(code + ':duel', String(b.playerId ?? '').slice(0, 64)) });
+    }
     if (b.op === 'signals') {
       return res.json({ signals: await takeSignals(code, String(b.playerId ?? '').slice(0, 64)) });
     }

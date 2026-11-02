@@ -1480,3 +1480,31 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 .room-list li.room-none { justify-content: center; border-style: dashed; color: var(--l-ink); }
 .room-list .room-info { flex: 1 1 100%; }
 .room-list li > button, .room-list li > .room-pin { flex: 1 1 110px; }
+
+/* the 3D duel (duel.js) */
+#duelBtn.on { background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand-ink); }
+#duel { position: fixed; inset: 0; z-index: 200; background: #0b1020; color: #fff; touch-action: none; user-select: none; -webkit-user-select: none; }
+#duel canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#duel .hidden { display: none; }
+.duel-top { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; pointer-events: none; }
+#duelScore { background: rgba(15,23,42,.65); padding: 6px 14px; border-radius: 999px; font-weight: 800; font-size: 14px; }
+#duelLeave { pointer-events: auto; background: rgba(15,23,42,.65); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 6px 14px; font-weight: 700; width: auto; }
+#duelCross { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; pointer-events: none; }
+#duelCross::before, #duelCross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+#duelCross::before { left: 10px; top: 0; width: 2px; height: 22px; }
+#duelCross::after { top: 10px; left: 0; height: 2px; width: 22px; }
+#duelHit { position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px; border: 3px solid #ff4d4d; border-radius: 50%; opacity: 0; pointer-events: none; }
+#duelFlash { position: absolute; inset: 0; background: radial-gradient(circle, transparent 40%, rgba(255,0,0,.55)); opacity: 0; pointer-events: none; }
+#duelMsg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); background: rgba(15,23,42,.75); padding: 10px 18px; border-radius: 14px; font-weight: 700; text-align: center; max-width: 86vw; pointer-events: none; }
+.duel-hp { position: absolute; left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); width: 180px; height: 22px; background: rgba(0,0,0,.5); border-radius: 12px; overflow: hidden; pointer-events: none; }
+#duelHpBar { height: 100%; background: linear-gradient(90deg, #ef4444, #22c55e); width: 100%; transition: width .15s; }
+#duelHpTxt { position: absolute; inset: 0; text-align: center; font-size: 13px; font-weight: 800; line-height: 22px; }
+#duelFire { position: absolute; right: 22px; bottom: max(30px, env(safe-area-inset-bottom)); width: 84px; height: 84px; border-radius: 50%; font-size: 34px; padding: 0; background: rgba(239,68,68,.75); border: 3px solid rgba(255,255,255,.7); display: none; }
+#duel.touch #duelFire { display: block; }
+#duelStick { position: absolute; width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.35); display: none; pointer-events: none; }
+#duelStick i { position: absolute; left: 30px; top: 30px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.5); }
+#duelHelp { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); font-size: 12px; opacity: .6; pointer-events: none; white-space: nowrap; }
+#duel.touch #duelHelp { display: none; }
+#duelOver { position: absolute; inset: 0; background: rgba(5,8,20,.8); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 20px; }
+#duelOver.hidden { display: none; }
+#duelOver button { min-width: 200px; }
