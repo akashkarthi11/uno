@@ -88,4 +88,7 @@ test('a room whose admin is out of it stays in their list (with Turn off), but n
   assert.deepEqual([idle.online, idle.canOff], [0, true], 'its own co-admin still sees it, with the button');
   assert.equal((await codes(admin)).includes('rl-idle'), true, 'and so does the real admin');
   assert.equal((await codes(hal)).includes('rl-idle'), false, 'an empty room is not offered to anybody else');
+  // everybody leaves for good: the room is empty, so it is no longer offered to anyone
+  await call({ op: 'leave', room: 'rl-idle', playerId: (await call({ op: 'join', sys: gil, room: 'rl-idle' })).body.state.you });
+  assert.equal((await codes(admin)).includes('rl-idle'), false, 'an empty room is not listed, not even for the admin');
 });

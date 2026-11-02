@@ -252,7 +252,7 @@ async function handle(req, res) {
       if (sys.role === 'public' && (await isShutdown())) return res.json({ rooms: [] });
       const rooms = (await listRooms()).filter(({ room }) => seesAll || Boolean(room.private) === (sys.role === 'private'))
         .map(({ code: c, room }) => ({ ...G.roomSummary(room, c, now), canOff: canOff(room), locked: Boolean(room.pinHash) }))
-        .filter((r) => (r.locked ? r.canOff : r.online > 0 || r.canOff)) // a room is listed while somebody is in it, and always for whoever can turn it off (their own room stays even when they are out of it)
+        .filter((r) => (r.locked ? r.canOff : r.online > 0 || (r.canOff && r.players > 0))) // listed while somebody is online in it, and for whoever can turn it off while it still has players (even if they are all away); an empty room is not worth listing
         .sort((x, y) => y.last - x.last)
         .slice(0, 30)
         .map(({ code: c, mode, phase, online, players, names, canOff: off, locked }) => ({ code: c, mode, phase, online, players, names: names.slice(0, 4), canOff: off, locked }));
