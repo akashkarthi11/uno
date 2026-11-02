@@ -111,6 +111,12 @@ export async function nameTaken(name) {
  */
 export async function upsertAuth0({ sub, email, name }) {
   if (!sub) return name;
+  if (!useMem()) {
+    // a returning person: one query finds them and records the sign-in (the common case, one trip to the database)
+    const back = await q(`UPDATE growx_users SET email = $2, auth0_name = $3, last_login = now(), logins = logins + 1, is_admin = is_admin OR username_key = $4
+      WHERE auth0_sub = $1 RETURNING username`, [sub, email || null, name, key(ogAdminName())]);
+    if (back.length) return back[0].username;
+  }
   const taken = async (n) => (useMem()
     ? mem.rows.some((r) => r.username_key === key(n) && r.auth0_sub !== sub)
     : (await q('SELECT 1 FROM growx_users WHERE username_key = $1 AND (auth0_sub IS NULL OR auth0_sub <> $2) LIMIT 1', [key(n), sub])).length > 0);

@@ -38,11 +38,17 @@ export async function nameFromCode(code, redirectUri, cfg) {
     signal: AbortSignal.timeout(8000),
   });
   if (!t.ok) throw new Error('token ' + t.status);
-  const { access_token: at } = await t.json();
+  const { access_token: at, id_token: idt } = await t.json();
   if (!at) throw new Error('no token');
-  const u = await fetch(`https://${cfg.domain}/userinfo`, { headers: { Authorization: `Bearer ${at}` }, signal: AbortSignal.timeout(8000) });
-  if (!u.ok) throw new Error('userinfo ' + u.status);
-  const j = await u.json();
+  // The id token came straight from Auth0's token endpoint over TLS, so its claims can be read as they are (OIDC Core 3.1.3.7):
+  // that saves a second trip to the Auth0 tenant (in the US) on every sign-in. /userinfo stays as the fallback.
+  let j = null;
+  try { j = JSON.parse(Buffer.from(String(idt).split('.')[1], 'base64url').toString('utf8')); } catch { /* no usable id token */ }
+  if (!j || !j.sub) {
+    const u = await fetch(`https://${cfg.domain}/userinfo`, { headers: { Authorization: `Bearer ${at}` }, signal: AbortSignal.timeout(8000) });
+    if (!u.ok) throw new Error('userinfo ' + u.status);
+    j = await u.json();
+  }
   const name = String(j.nickname || j.name || String(j.email || '').split('@')[0] || 'Player').trim() || 'Player';
   return { sub: String(j.sub || ''), email: typeof j.email === 'string' ? j.email : '', name };
 }
