@@ -81,7 +81,7 @@ export const MATCH_TARGET = 500; // official: first to 500 points wins the match
 export const cardPoints = (c) => (/^[0-9]$/.test(c.value) ? Number(c.value) : ['skip', 'reverse', 'draw2', 'again', 'sweep'].includes(c.value) ? 20 : 50);
 const stackingOf = (s) => Boolean(s.settings && s.settings.stacking);
 const challengeOf = (s) => !(s.settings && s.settings.challenge === false); // on by default, like the official rules
-const voiceRelayOf = (s) => !(s.settings && s.settings.voiceRelay === false); // on unless the admin switched it off: the relay is only used when a direct route fails
+const voiceRelayOf = (s) => Boolean(s.settings && s.settings.voiceRelay); // off = automatic: direct first, a pair that has trouble adds the relay by itself; on = relay allowed from the start
 const themeOf = (s) => (s.settings && THEMES.includes(s.settings.theme) ? s.settings.theme : THEMES[0]);
 const superOn = (s, kind) => !(s.settings && s.settings.supers && s.settings.supers[kind] === false);
 const superSettings = (s) => Object.fromEntries(SUPER_KINDS.map((k) => [k, superOn(s, k)]));

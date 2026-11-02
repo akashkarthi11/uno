@@ -189,11 +189,12 @@ Static credentials from another provider also work via `GAME_TURN_URLS`, `GAME_T
 
 ### Direct or relay: the admin's switch
 
-Voice goes straight between phones and **switches to the relay by itself** when a direct route fails: the relay servers above are handed out
-as a backup in every room, and a call uses them only when it has to, so it uses little relay data. Only the real admin (not a co-admin) has a
-**📡 Relay** switch in Settings, in the lobby and during a game, to turn that backup off (direct only). Switching it on rebuilds the pairs
-that are not connected; switching it off restarts every pair so nothing keeps going through the relay. The choice is stored with the room's
-settings (`settings.voiceRelay`, default **on**) and resets with the room.
+Voice starts **direct** (STUN only, audio goes straight between phones) and the relay stays off. When one pairing has an audio problem (it does not
+connect within 8 seconds, fails, or drops for 4 seconds) the page starts **that pair** over with the relay added; every other pair stays direct,
+and the next call starts direct again. The server hands the relay entries out separately for this (`relayServers`). Only the real admin (not a
+co-admin) has a **📡 Relay** switch in Settings, in the lobby and during a game: **auto** (the default) is the behaviour above; **on** allows the
+relay from the start for every pair. Switching it on rebuilds the pairs that are not connected; switching it back restarts every pair so nothing
+keeps going through the relay. The choice is stored with the room's settings (`settings.voiceRelay`, default off) and resets with the room.
 
 ## Card drop animation
 

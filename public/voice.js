@@ -15,6 +15,8 @@ const voice = {
   peers: new Map(), // playerId -> { pc, queue, audio }
   members: [],
   ice: [{ urls: "stun:stun.cloudflare.com:3478" }, { urls: "stun:stun.l.google.com:19302" }],
+  relayIce: [], // relay servers, kept aside: a pair that has trouble adds them (see createPeer)
+  needRelay: new Set(), // playerIds whose pairing did not connect or dropped: only these go through the relay, for the rest of the call
   timer: null,
   ctx: null,
   meters: new Map(), // playerId -> { analyser, buf }
@@ -45,6 +47,7 @@ function voiceSync(s) {
     voiceJoin();
   }
   if (s.iceServers) voice.ice = s.iceServers;
+  if (s.relayServers) voice.relayIce = s.relayServers;
   const relayNow = Boolean(s.settings && s.settings.voiceRelay);
   if (voice.active && voice.relay !== undefined && voice.relay !== relayNow) {
     // The admin switched the route. Turning the relay on only helps pairs that are not connected; turning it off starts
@@ -121,7 +124,7 @@ let camTierVotes = 0;
 function wantedTier() {
   if (typeof pingMid !== "number") return 2; // unknown: the middle, safe step
   let i = CAM_TIERS.findIndex((t) => pingMid <= t.maxMs);
-  if (voice.relay) i = Math.max(i, 1);
+  if (voice.relay || voice.needRelay.size) i = Math.max(i, 1);
   return i;
 }
 async function adaptCamera() {
@@ -240,6 +243,7 @@ function voiceStopLocal() {
   clearTimeout(voice.timer);
   clearInterval(voice.meterTimer);
   for (const id of [...voice.peers.keys()]) closePeer(id);
+  voice.needRelay.clear(); // the next call starts direct again
   stopStream();
   if (voice.ctx) voice.ctx.close().catch(() => {});
   voice.ctx = null;
@@ -258,8 +262,13 @@ function voiceStopLocal() {
 
 function createPeer(id, initiator) {
   closePeer(id);
-  const pc = new RTCPeerConnection({ iceServers: voice.ice });
+  // direct first; the relay is added for this pair only after it failed to connect or dropped (and never when the admin already allows it)
+  const viaRelay = !voice.relay && voice.needRelay.has(id);
+  const pc = new RTCPeerConnection({ iceServers: viaRelay ? [...voice.ice, ...voice.relayIce] : voice.ice });
   const peer = { pc, queue: [], audio: null };
+  if (!voice.relay && !viaRelay && voice.relayIce.length) {
+    peer.relayTimer = setTimeout(() => needRelayFor(id, pc), RELAY_AFTER_MS); // still not connected: audio problem
+  }
   voice.peers.set(id, peer);
   camTier = -1; // a new connection has no bitrate limit yet: the next check sets it
   const hear = Boolean(state && state.canVoice) && (!state.voiceAudio || state.voiceAudio.includes(id)); // sound goes only to people allowed to hear it
@@ -274,9 +283,10 @@ function createPeer(id, initiator) {
   };
   pc.onconnectionstatechange = () => {
     clearTimeout(peer.fix);
-    if (pc.connectionState === "failed") rebuildPeer(id);
-    // "disconnected" often heals by itself; give it a few seconds, then start over
-    else if (pc.connectionState === "disconnected") peer.fix = setTimeout(() => rebuildPeer(id), 4000);
+    if (pc.connectionState === "connected") clearTimeout(peer.relayTimer);
+    else if (pc.connectionState === "failed") needRelayFor(id, pc);
+    // "disconnected" often heals by itself; give it a few seconds, then start over (with the relay if it has one to add)
+    else if (pc.connectionState === "disconnected") peer.fix = setTimeout(() => needRelayFor(id, pc), 4000);
   };
   if (initiator) {
     (async () => {
@@ -286,6 +296,16 @@ function createPeer(id, initiator) {
     })().catch(() => {});
   }
   return peer;
+}
+
+const RELAY_AFTER_MS = 8000; // a pairing that has not connected by then counts as an audio problem
+
+/** This pairing has trouble: start it over with the relay added (only this pair; everyone else stays direct). */
+function needRelayFor(id, pc) {
+  const peer = voice.peers.get(id);
+  if (!peer || peer.pc !== pc || pc.connectionState === "connected" || pc.connectionState === "closed") return; // already replaced or healed
+  if (!voice.relay && voice.relayIce.length) voice.needRelay.add(id);
+  rebuildPeer(id, true);
 }
 
 /**
@@ -304,6 +324,7 @@ function closePeer(id) {
   const peer = voice.peers.get(id);
   if (!peer) return;
   clearTimeout(peer.fix);
+  clearTimeout(peer.relayTimer);
   try { peer.pc.close(); } catch (e) { /* ignore */ }
   if (peer.audio) peer.audio.remove();
   removeTile(id);

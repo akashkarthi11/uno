@@ -718,11 +718,11 @@ function renderRelayBtn(s) {
   const btn = $("relayBtn");
   btn.classList.toggle("hidden", !s.admin); // only the real admin, not a co-admin
   const on = Boolean(s.settings && s.settings.voiceRelay);
-  btn.textContent = "📡 Relay: " + (on ? "on" : "off");
+  btn.textContent = "📡 Relay: " + (on ? "on" : "auto");
   btn.classList.toggle("on", on);
   btn.title = on
-    ? "Voice goes straight between phones and switches to a relay server by itself when a direct route fails. Click to turn the relay backup off."
-    : "Direct only: no relay backup, so players on strict networks may not be heard. Click to turn the relay backup on.";
+    ? "The relay is allowed from the start for every pair. Click to go back to automatic (direct first, a pair with audio trouble adds the relay itself)."
+    : "Automatic: voice goes straight between phones, and a pair with audio trouble switches to the relay by itself. Click to allow the relay from the start.";
 }
 
 function toggleStarter(p) {
