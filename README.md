@@ -65,6 +65,8 @@ frozen (and nothing times out), and a banner tells everyone. Resuming gives the 
 | 🔄 Swap Hands | 1 | any time (choose colour + a player) | you and that player swap hands |
 | 🎁 Gift | 2 | any time (choose the next colour) | give 1 random card to every other player; you always keep at least 1 |
 
+If Blast, Swap Hands, Gift or the Master card is your **last card**, just tap it: there is no colour, player or rule to choose, its power is not used, and you win.
+
 ### ✨ Master card (1 in the deck, plain blank face)
 
 Playable any time. You pick a colour, then a player, then one super rule that is applied to that player:
