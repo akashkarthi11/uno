@@ -165,7 +165,6 @@ async function handle(req, res) {
         if (await nameTaken(wanted)) return res.status(401).json({ error: 'That name is taken.', denied: true });
         let account = await findLocal(wanted);
         if (!(account ? checkPassword(pw, account.pw_hash) : pw === PLAYER_PASSWORD)) return res.status(401).json({ error: 'Wrong password.', denied: true });
-        if (auth0Mode) return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
         if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
         if (!account) {
           // first sign-in for this username: it must choose its own password now
@@ -181,7 +180,6 @@ async function handle(req, res) {
         return done('public', account.username, false);
       }
       if (pw !== PLAYER_PASSWORD) return res.status(401).json({ error: 'Wrong password.', denied: true });
-      if (auth0Mode) return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
       if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
       return done('public', G.cleanName(b.name), false);
     }
@@ -218,7 +216,6 @@ async function handle(req, res) {
       if (sys.role === 'public') {
         if (isPrivate) return res.status(401).json({ error: 'System down', denied: true }); // a public player is never told a game is private
         if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
-        if (Boolean(sys.a0) !== ((await getAuthMode()) === 'auth0' && Boolean(auth0Config()))) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
       } else if (sys.role === 'private' && !isPrivate) {
         return res.status(401).json({ error: 'This game is public.', denied: true });
       } else if (sys.role === 'observer' && (await isObserverOff())) {
@@ -268,10 +265,6 @@ async function handle(req, res) {
           // "System down". Any other wrong password is "Wrong password."
           const msg = isPrivate && pw === PLAYER_PASSWORD ? 'System down' : 'Wrong password.';
           return res.status(401).json({ error: msg, denied: true });
-        }
-        // Auth0 mode: public players sign in through Auth0, not with a password (admin, private and observer passwords still work).
-        if (!isPrivate && (await getAuthMode()) === 'auth0' && auth0Config()) {
-          return res.status(401).json({ error: 'Sign in with Auth0.', denied: true });
         }
         if (accounts) {
           publicLogin = true;
@@ -332,10 +325,6 @@ async function handle(req, res) {
       }
       if (claim.role === 'public' && (await isShutdown())) {
         return res.status(401).json({ error: 'System down', denied: true });
-      }
-      // The admin switched the sign-in method: a public sign-in made the other way is over (admin, co-admin, private, observer are not affected).
-      if (claim.role === 'public' && !claim.co && Boolean(claim.a0) !== ((await getAuthMode()) === 'auth0' && Boolean(auth0Config()))) {
-        return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
       }
       let renewed;
       const state = await withRoom(code, (s) => {
@@ -460,7 +449,7 @@ async function handle(req, res) {
         }
         return res.json({ ok: true, observerOff: off, removed });
       }
-      // Sign-in method for public players: "current" (name + password) or "auth0". The admin password works in both.
+      // The own login (name + password) always works. This switch only shows or hides the "Sign in with Auth0" button: mode "auth0" = on.
       if (b.op === 'authSwitch') {
         const mode = b.mode === 'auth0' ? 'auth0' : 'current';
         if (mode === 'auth0' && !auth0Config()) throw new G.GameError('Auth0 is not set up yet: add AUTH0_DOMAIN, AUTH0_CLIENT_ID and AUTH0_CLIENT_SECRET to the Vercel project first.');

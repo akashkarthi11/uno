@@ -279,8 +279,8 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
   over and the old row is removed. The account takes the person's Auth0 name when no other account uses it, otherwise it keeps the old name.
   After linking, the old password still works (under the account's current username) whenever sign-in is set to "current". The admin
   account cannot be linked.
-- **Auth0:** the real admin's "Sign-in: current / Auth0" switch in Settings sends public players to Auth0 instead of a password
-  (needs `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`; callback URL `https://<site>/api/auth0`). Their Auth0 id, email
+- **Auth0:** the name + password sign-in always works. The real admin's "Auth0 sign-in: on / off" switch in Settings only shows or hides
+  the "Sign in with Auth0" button next to it; flipping it ends nobody's session (needs `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`; callback URL `https://<site>/api/auth0`). Their Auth0 id, email
   and name are saved in `growx_users`.
 
 ## Rooms window (real admin)

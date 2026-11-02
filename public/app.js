@@ -650,7 +650,7 @@ async function toggleAuthSwitch() {
   try {
     const r = await api({ op: "authSwitch", mode: to });
     authModeNow = r.authMode;
-    toast(authModeNow === "auth0" ? "Sign-in is now Auth0 for public players." : "Sign-in is back to the current name + password.");
+    toast(authModeNow === "auth0" ? "Auth0 sign-in is on, next to the name + password." : "Auth0 sign-in is off. The name + password always works.");
   } catch (e) { toast(e.message); return; }
   renderRelayBtn(state);
 }
@@ -704,11 +704,11 @@ function renderRelayBtn(s) {
   if (s.auth0Ready !== undefined) auth0Ready = s.auth0Ready;
   const au = $("authSwitchBtn");
   au.classList.toggle("hidden", !s.admin); // the real admin only
-  au.textContent = "🔑 Sign-in: " + (authModeNow === "auth0" ? "Auth0" : "current");
+  au.textContent = "🔑 Auth0 sign-in: " + (authModeNow === "auth0" ? "on" : "off");
   au.classList.toggle("on", authModeNow === "auth0");
   au.title = authModeNow === "auth0"
-    ? "Public players sign in with Auth0. Click to go back to the current name + password."
-    : auth0Ready ? "Public players use the name + password. Click to make them sign in with Auth0 instead." : "Auth0 is not set up yet (the keys are not on the Vercel project), so this cannot be switched on.";
+    ? "The Auth0 button shows on the sign-in screen, next to the name + password. Click to turn it off."
+    : auth0Ready ? "Only the name + password shows. Click to add the Auth0 button." : "Auth0 is not set up yet (the keys are not on the Vercel project), so this cannot be switched on.";
   const bsw = $("botSwitchBtn");
   bsw.classList.toggle("hidden", !s.admin); // the real admin only, in public and private games alike
   const botOn = !(s.settings && s.settings.botMatch === false);

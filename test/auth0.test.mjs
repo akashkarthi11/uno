@@ -20,7 +20,7 @@ const get = (url) => new Promise((resolve) => {
 });
 const adminIn = async (room) => (await call({ op: 'join', room, name: 'Boss', password: '110299' })).body.state.you;
 
-test('auth switch: only the real admin; the public password is refused in Auth0 mode; the admin password always works', async () => {
+test('auth switch: only the real admin; it only shows or hides the Auth0 button, the own login always works', async () => {
   const R = 'a0room';
   const admin = await adminIn(R);
   assert.equal((await call({ op: 'authInfo' })).body.mode, 'current');
@@ -31,9 +31,7 @@ test('auth switch: only the real admin; the public password is refused in Auth0 
   assert.equal((await call({ op: 'authSwitch', room: R, playerId: admin, mode: 'auth0' })).body.authMode, 'auth0');
   assert.equal((await call({ op: 'authInfo' })).body.mode, 'auth0');
 
-  const refused = await call({ op: 'login', name: 'Pub3', password: '123456' });
-  assert.equal(refused.code, 401);
-  assert.equal(refused.body.error, 'Sign in with Auth0.');
+  assert.equal((await call({ op: 'login', name: 'Pub3', password: '123456' })).code, 200, 'the own login still works with Auth0 on');
   assert.equal((await call({ op: 'login', name: 'Boss', password: '110299' })).code, 200, 'admin password still works');
   assert.equal((await call({ op: 'login', name: 'Priv', password: '281101' })).code, 200, 'and the private password');
 
@@ -57,15 +55,16 @@ test('auth switch: only the real admin; the public password is refused in Auth0 
   assert.equal(joined.body.state.players.find((p) => p.id === joined.body.state.you).name, 'Asha');
   assert.equal(joined.body.state.admin, false);
 
-  // a password session ends when the switch flips; the Auth0 one continues
+  // flipping the switch ends nobody's session, whichever way they signed in
   await call({ op: 'authSwitch', room: R, playerId: admin, mode: 'current' });
   const pwLogin = await call({ op: 'login', name: 'Pub4', password: '123456' });
   const pwJoin = await call({ op: 'join', sys: pwLogin.body.sys, room: R });
   await call({ op: 'authSwitch', room: R, playerId: admin, mode: 'auth0' });
-  assert.equal((await call({ op: 'session', room: R, token: pwJoin.body.token })).code, 401, 'password session ends in Auth0 mode');
-  assert.equal((await call({ op: 'join', sys: pwLogin.body.sys, room: R })).code, 401, 'and so does the password sign-in token');
+  assert.equal((await call({ op: 'session', room: R, token: pwJoin.body.token })).code, 200, 'password session continues');
+  assert.equal((await call({ op: 'join', sys: pwLogin.body.sys, room: R })).code, 200, 'and so does the password sign-in token');
   assert.equal((await call({ op: 'session', room: R, token: joined.body.token })).code, 200, 'Auth0 session continues');
   await call({ op: 'authSwitch', room: R, playerId: admin, mode: 'current' });
+  assert.equal((await call({ op: 'login', ticket: makeTicket('*', 'Asha', cfg, Date.now()) })).code, 401, 'with Auth0 off a ticket is refused');
 });
 
 test('the login redirect and the callback', async () => {
