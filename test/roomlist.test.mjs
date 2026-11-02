@@ -46,8 +46,7 @@ test('turning a room off locks it: it leaves other lists and a new person needs 
   assert.equal((await call({ op: 'roomOff', sys: cat, target: 'rl-cat', pin: '4321' })).code, 200);
 
   assert.equal((await codes(fay)).includes('rl-cat'), false, 'a locked room leaves everyone else\'s list');
-  const own = (await call({ op: 'roomList', sys: cat })).body.rooms.find((r) => r.code === 'rl-cat');
-  assert.deepEqual([own.locked, own.canOff], [true, true], 'but the one who can turn it on still sees it');
+  assert.equal((await codes(cat)).includes('rl-cat'), false, 'not even its own admin: a room that is off is joined by name and PIN');
   const noPin = await call({ op: 'join', sys: fay, room: 'rl-cat' });
   assert.deepEqual([noPin.code, noPin.body.needsPin], [401, true], 'a new person needs the PIN');
   assert.equal((await call({ op: 'join', sys: fay, room: 'rl-cat', pin: '9999' })).body.error, 'Wrong PIN.');
@@ -90,8 +89,7 @@ test('a room whose admin is out of it stays in their list (with Turn off), but n
   await call({ op: 'join', sys: gil, room: 'rl-idle', create: true });
   const { withRoom } = await import('../api/_lib/store.js');
   await withRoom('rl-idle', (s) => { for (const m of s.members) m.lastSeen = 0; }); // everybody has left
-  const idle = (await call({ op: 'roomList', sys: gil })).body.rooms.find((r) => r.code === 'rl-idle');
-  assert.deepEqual([idle.online, idle.canOff], [0, true], 'its own co-admin still sees it, with the button');
+  assert.equal((await codes(gil)).includes('rl-idle'), false, 'nobody is online in it, so it is not listed');
   assert.equal((await codes(admin)).includes('rl-idle'), false, 'the admin account did not create it, so it is not in their list');
   assert.equal((await codes(hal)).includes('rl-idle'), false, 'an empty room is not offered to anybody else');
   // everybody leaves for good: the room is empty, so it is no longer offered to anyone

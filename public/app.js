@@ -314,41 +314,6 @@ function renderActiveRooms(list) {
     joinB.textContent = "Join";
     joinB.addEventListener("click", () => { $("joinCode").value = r.code; enterWithSign(false); });
     li.append(info, joinB);
-    if (r.canOff && r.locked) {
-      const onB = document.createElement("button");
-      onB.type = "button";
-      onB.className = "ghost";
-      onB.textContent = "Turn on";
-      onB.addEventListener("click", async () => {
-        onB.disabled = true;
-        try { await api({ op: "roomOn", sys: sysToken, target: r.code }); toast("Room " + r.code + " is on again, open to everyone."); }
-        catch (e) { if (e.denied && /Session expired/.test(e.message)) { signOut(); return; } toast(e.message); }
-        loadActiveRooms(true);
-      });
-      li.append(onB);
-    } else if (r.canOff) {
-      const offB = document.createElement("button");
-      offB.type = "button";
-      offB.className = "ghost danger";
-      offB.textContent = "Turn off";
-      const pinBox = document.createElement("input");
-      pinBox.type = "password";
-      pinBox.inputMode = "numeric";
-      pinBox.maxLength = 8;
-      pinBox.placeholder = "PIN, 4-8 digits";
-      pinBox.autocomplete = "off";
-      pinBox.className = "room-pin hidden";
-      offB.addEventListener("click", async () => {
-        if (pinBox.classList.contains("hidden")) { pinBox.classList.remove("hidden"); offB.textContent = "Turn off with this PIN"; pinBox.focus(); return; }
-        const pin = pinBox.value.trim();
-        if (!/^\d{4,8}$/.test(pin)) { toast("Choose a PIN of 4 to 8 digits"); pinBox.focus(); return; }
-        offB.disabled = true;
-        try { await api({ op: "roomOff", sys: sysToken, target: r.code, pin }); toast("Room " + r.code + " is off. New players need the PIN to join."); }
-        catch (e) { if (e.denied && /Session expired/.test(e.message)) { signOut(); return; } toast(e.message); }
-        loadActiveRooms(true);
-      });
-      li.append(pinBox, offB);
-    }
     box.append(li);
   }
 }
