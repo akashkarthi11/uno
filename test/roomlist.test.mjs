@@ -110,3 +110,19 @@ test('a room made before owners were recorded (like main) belongs to whoever joi
   await call({ op: 'join', sys: ivy, room: 'rl-main' });
   assert.equal((await call({ op: 'roomOff', sys: ivy, target: 'rl-main', pin: '1234' })).code, 401, 'a later player does not');
 });
+
+test('from inside the room: only its creator is told they own it, and can lock and unlock it', async () => {
+  const jo = await pub('Jo');
+  const kim = await pub('Kim');
+  const a = await call({ op: 'join', sys: jo, room: 'rl-in', create: true });
+  const b = await call({ op: 'join', sys: kim, room: 'rl-in' });
+  assert.deepEqual([a.body.state.owns, b.body.state.owns, a.body.state.locked], [true, false, false]);
+  const tok = (r) => ({ room: 'rl-in', token: r.body.token, playerId: r.body.state.you });
+  assert.equal((await call({ op: 'lockRoom', ...tok(b), pin: '1234' })).code, 400, 'not for another player');
+  assert.equal((await call({ op: 'lockRoom', ...tok(a), pin: '12' })).code, 400, 'PIN of 4 to 8 digits');
+  const off = await call({ op: 'lockRoom', ...tok(a), pin: '1234' });
+  assert.deepEqual([off.code, off.body.state.locked], [200, true]);
+  const lee = await pub('Lee');
+  assert.equal((await call({ op: 'join', sys: lee, room: 'rl-in' })).body.needsPin, true, 'a new person needs the PIN');
+  assert.equal((await call({ op: 'unlockRoom', ...tok(a) })).body.state.locked, false);
+});

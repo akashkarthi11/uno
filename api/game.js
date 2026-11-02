@@ -235,13 +235,7 @@ async function handle(req, res) {
       const seesAll = sys.role === 'admin' || sys.role === 'observer';
       // The room's own admin is whoever created it. A room made before that was recorded (like "main") belongs to whoever joined it first.
       // A room the admin account made belongs to the admin account, so a new admin takes it over; a public player's room stays with that player.
-      const canOff = (room) => {
-        const first = (room.members || []).find((m) => !m.bot && !m.observer);
-        const owner = room.owner ? { n: room.owner, role: room.ownerRole } : first ? { n: first.name, role: first.role } : null;
-        if (!owner) return sys.role === 'admin';
-        if (owner.role === 'admin') return sys.role === 'admin';
-        return sys.role === owner.role && String(owner.n).toLowerCase() === String(sys.n).toLowerCase();
-      };
+      const canOff = (room) => G.ownsRoom(room, sys.n, sys.role);
       // "Off" locks the room: it keeps its game and players but leaves everyone else's list, and a new person needs the PIN the admin chose
       // to join it ("On" removes the PIN). Players already in the room are not affected.
       if (b.op === 'roomOff' || b.op === 'roomOn') {
@@ -435,6 +429,21 @@ async function handle(req, res) {
       if (result.gone && (await wasClosed(code))) return res.json({ closed: true });
       if (result.state) withIce(result.state);
       return res.json(result);
+    }
+
+    // Turn the room you are in off (locked behind a PIN) or on again, from inside it: only its own admin (see ownsRoom).
+    if (b.op === 'lockRoom' || b.op === 'unlockRoom') {
+      const here = await readRoom(code);
+      const who = here && here.members.find((m) => m.id === b.playerId);
+      if (!who || !G.ownsRoom(here, who.name, who.role)) throw new G.GameError('Only the admin of that room can do that.');
+      if (b.op === 'lockRoom' && !/^\d{4,8}$/.test(String(b.pin ?? ''))) throw new G.GameError('Choose a PIN of 4 to 8 digits.');
+      const pinHash = b.op === 'lockRoom' ? hashPassword(String(b.pin)) : null;
+      const state = await withRoom(code, (s) => {
+        if (pinHash) s.pinHash = pinHash; else delete s.pinHash;
+        delete s.pinFail;
+        return G.view(s, s.members.find((m) => m.id === b.playerId), now);
+      });
+      return res.json({ state: withIce(state) });
     }
 
     // The real admin's Rooms window: how many rooms exist, how many have someone online, and removing a room.

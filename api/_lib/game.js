@@ -1222,6 +1222,18 @@ function botPlay(s, p, c, other, now) {
   return play(s, p, c.id, c.color === 'wild' ? colour : '', now, other ? other.id : '', c.value === 'master' ? 'draw2' : '');
 }
 
+/**
+ * The room's own admin is whoever created it. A room made before that was recorded (like "main") belongs to whoever joined it first.
+ * A room the admin account made belongs to the admin account (so a new admin takes it over); a public player's room stays with that player.
+ */
+export function ownsRoom(s, name, role) {
+  const first = (s.members || []).find((m) => !m.bot && !m.observer);
+  const owner = s.owner ? { n: s.owner, role: s.ownerRole } : first ? { n: first.name, role: first.role } : null;
+  if (!owner) return role === 'admin';
+  if (owner.role === 'admin') return role === 'admin';
+  return role === owner.role && String(owner.n).toLowerCase() === String(name).toLowerCase();
+}
+
 /** One line about a room for the admin's Rooms window. */
 export function roomSummary(s, code, now) {
   const members = (s.members || []).filter((m) => !m.bot && !m.observer);
@@ -1343,6 +1355,7 @@ export function statsView(s, me) {
 export function view(s, me, now) {
   const out = {
     room: s.code, version: s.version, ps: presenceSig(s, now), you: me.id, admin: me.admin, private: !!s.private,
+    owns: ownsRoom(s, me.name, me.role), locked: Boolean(s.pinHash), // the room's own admin (its creator) may turn it off: lock it behind a PIN
     canStart: Boolean(me.admin || me.starter),
     host: me.admin ? me.id : (s.members.find((m) => m.admin && online(m, now)) || {}).id || null,
     started: s.started, over: s.over, winner: s.winner, loser: s.loser, ranking: s.ranking, notice: s.notice,
