@@ -50,9 +50,14 @@
     <svg class="mascot" aria-hidden="true"><use href="#mascot"/></svg>
     <div class="lobby-title"><h2 id="roomHello">Welcome</h2><p class="hint">Create a room or join a friend's.</p></div>
   </div>
+  <div id="activeRooms" class="hidden">
+    <div class="rooms-head"><strong>Active rooms</strong><button id="activeRefresh" class="ghost" type="button" title="Refresh the list" aria-label="Refresh the list">↻</button></div>
+    <ul id="roomListBox" class="room-list"></ul>
+  </div>
   <label>Room name for a new room (optional) <input id="createName" maxlength="24" placeholder="leave empty for a random code" autocomplete="off"></label>
   <button id="createBtn" type="button">➕ Create room</button>
   <label>Room code to join <input id="joinCode" maxlength="24" placeholder="e.g. a3f9c1" autocomplete="off"></label>
+  <label id="joinPinRow" class="hidden">PIN for this room <input id="joinPin" type="password" inputmode="numeric" maxlength="8" placeholder="the PIN its admin chose" autocomplete="off"></label>
   <button id="joinRoomBtn" class="ghost" type="button">🚪 Join room</button>
   <button id="linkBtn" class="ghost hidden" type="button">🔗 Link my old account</button>
   <div id="linkBox" class="hidden">

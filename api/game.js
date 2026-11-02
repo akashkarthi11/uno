@@ -5,7 +5,7 @@ import { HANGUL } from './_lib/korean.js';
 import { WORDS } from './_lib/words.js';
 import { readRoom, withRoom, usingRedis, pushSignal, takeSignals, benchmark, listRooms, closeRoom, wasClosed, pushJoin, takeJoins, saveBackup, listBackups, getBackup, deleteBackup, MAX_BACKUPS, putImage, getImage, isShutdown, setShutdown, isObserverOff, setObserverOff, getAuthMode, setAuthMode, videoRead, videoUpdate } from './_lib/store.js';
 import { auth0Config, readTicket } from './_lib/auth0.js';
-import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, linkAccount, LinkError, isOgAdminName, adminNameOk, ogAdminName, checkPassword, MIN_PASSWORD } from './_lib/users.js';
+import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, linkAccount, LinkError, isOgAdminName, adminNameOk, ogAdminName, checkPassword, hashPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
 import { saveGame, roomStats, playerTotals } from './_lib/stats.js';
 
@@ -81,6 +81,25 @@ const withIce = (state) => {
   }
   return state;
 };
+
+// A locked room (turned off from the room list) lets a new person in only with its PIN. Someone already in the room (their player id is
+// one of its members), the real admin and the observer need none. Five wrong tries stop all guessing for five minutes. Returns the
+// answer to send, or null when the person may come in.
+const PIN_TRIES = 5;
+const PIN_WINDOW_MS = 5 * 60 * 1000;
+async function pinGate(rc, room, b, now, skip) {
+  if (!room || !room.pinHash || skip) return null;
+  if (b.playerId && (room.members || []).some((m) => m.id === b.playerId)) return null;
+  const f = room.pinFail && now - room.pinFail.t < PIN_WINDOW_MS ? room.pinFail : { n: 0, t: now };
+  if (f.n >= PIN_TRIES) return { code: 429, body: { error: 'Too many wrong PINs. Try again in a few minutes.', needsPin: true } };
+  const pin = String(b.pin ?? '').trim();
+  if (pin && checkPassword(pin, room.pinHash)) {
+    if (room.pinFail) await withRoom(rc, (s) => { delete s.pinFail; });
+    return null;
+  }
+  if (pin) await withRoom(rc, (s) => { s.pinFail = { n: f.n + 1, t: f.t }; });
+  return { code: 401, body: { error: pin ? 'Wrong PIN.' : 'This room needs a PIN to join.', needsPin: true } };
+}
 
 const cleanRoom = (raw) => (/^[A-Za-z0-9_-]{1,24}$/.test(String(raw ?? '').trim()) ? String(raw).trim() : 'main');
 
@@ -207,6 +226,39 @@ async function handle(req, res) {
       }
     }
 
+    // The room screen's list of active rooms (somebody is online in them), and turning a room off from there. Each role sees only the rooms it
+    // could join: public players public rooms, private players private rooms; the admin and the observer see both. A public player is never
+    // told a private room exists. A room can be turned off by the real admin, or, for a public room, by its appointed co-admin (the first
+    // public player in, or whoever the admin allowed to start games).
+    if (b.op === 'roomList' || b.op === 'roomOff' || b.op === 'roomOn') {
+      const sys = verifyToken(String(b.sys ?? ''), '*', now, SYS_SALT);
+      if (!sys) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
+      const seesAll = sys.role === 'admin' || sys.role === 'observer';
+      const canOff = (room) => sys.role === 'admin' || (sys.role === 'public' && !room.private
+        && (room.members || []).some((m) => !m.bot && !m.observer && m.starter && String(m.name).toLowerCase() === String(sys.n).toLowerCase()));
+      // "Off" locks the room: it keeps its game and players but leaves everyone else's list, and a new person needs the PIN the admin chose
+      // to join it ("On" removes the PIN). Players already in the room are not affected.
+      if (b.op === 'roomOff' || b.op === 'roomOn') {
+        const target = String(b.target ?? '');
+        if (!/^[A-Za-z0-9_-]{1,24}$/.test(target)) return res.status(400).json({ error: 'Bad room name.' });
+        const room = await readRoom(target);
+        if (!room) return res.status(400).json({ error: 'That room no longer exists.' });
+        if (!canOff(room)) return res.status(401).json({ error: 'Only the admin of that room can do that.', denied: true });
+        if (b.op === 'roomOff' && !/^\d{4,8}$/.test(String(b.pin ?? ''))) return res.status(400).json({ error: 'Choose a PIN of 4 to 8 digits.' });
+        const pinHash = b.op === 'roomOff' ? hashPassword(String(b.pin)) : null;
+        await withRoom(target, (s) => { if (pinHash) s.pinHash = pinHash; else delete s.pinHash; delete s.pinFail; });
+        return res.json({ ok: true });
+      }
+      if (sys.role === 'public' && (await isShutdown())) return res.json({ rooms: [] });
+      const rooms = (await listRooms()).filter(({ room }) => seesAll || Boolean(room.private) === (sys.role === 'private'))
+        .map(({ code: c, room }) => ({ ...G.roomSummary(room, c, now), canOff: canOff(room), locked: Boolean(room.pinHash) }))
+        .filter((r) => (r.locked ? r.canOff : r.online > 0)) // a locked room is listed only for whoever can turn it on again
+        .sort((x, y) => y.last - x.last)
+        .slice(0, 30)
+        .map(({ code: c, mode, phase, online, players, names, canOff: off, locked }) => ({ code: c, mode, phase, online, players, names: names.slice(0, 4), canOff: off, locked }));
+      return res.json({ rooms });
+    }
+
     // Create a room or join one, signed in with the sys token from op "login". Create makes a new room (a name of your own, or a
     // random one); join needs a room that exists. Public games admit public players, private games admit private players.
     if (b.op === 'join' && b.sys) {
@@ -228,6 +280,8 @@ async function handle(req, res) {
       } else if (sys.role === 'observer' && (await isObserverOff())) {
         return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
       }
+      const gate = await pinGate(rc, existing, b, now, sys.role === 'admin' || sys.role === 'observer');
+      if (gate) return res.status(gate.code).json(gate.body);
       let claim;
       const state = await withRoom(rc, (s) => {
         G.tick(s, now);
@@ -256,6 +310,8 @@ async function handle(req, res) {
         // The admin decides whether a game is public or private. Public games admit public players (123456)
         // only; private games admit private players (281101) only.
         const existing = await readRoom(code);
+        const gate = await pinGate(code, existing, b, now, false);
+        if (gate) return res.status(gate.code).json(gate.body);
         const isPrivate = Boolean(existing && existing.private);
         const accounts = !isPrivate && usersEnabled(); // public games with the user database on: every public player has their own username and password
         let account = null;

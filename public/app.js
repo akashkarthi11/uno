@@ -99,6 +99,7 @@ async function api(body, timeoutMs = REQUEST_TIMEOUT_MS) {
   if (!r.ok) {
     const err = new Error(data.error || "Server error (" + r.status + ")");
     err.denied = !!data.denied;
+    err.needsPin = !!data.needsPin;
     throw err;
   }
   return data;
@@ -268,7 +269,83 @@ function showRoomScreen() {
   ["createName", "createBtn"].forEach((id) => { const el = $(id); (el.closest("label") || el).classList.toggle("hidden", !canCreate); });
   const want = new URLSearchParams(location.search).get("room") || session("uno-want") || "";
   if (want && !$("joinCode").value) $("joinCode").value = want;
+  $("activeRooms").classList.add("hidden");
+  loadActiveRooms();
 }
+
+/** The room screen's list of active rooms (somebody is online): join one with a tap; the admin of a room can turn it off. */
+let activeBusy = false;
+async function loadActiveRooms() {
+  if (activeBusy || !sysToken || $("roomScreen").classList.contains("hidden") || document.hidden) return;
+  activeBusy = true;
+  try {
+    const r = await api({ op: "roomList", sys: sysToken });
+    renderActiveRooms(r.rooms || []);
+  } catch (e) {
+    if (e.denied) signOut();
+  } finally {
+    activeBusy = false;
+  }
+}
+function renderActiveRooms(list) {
+  const box = $("roomListBox");
+  box.textContent = "";
+  $("activeRooms").classList.toggle("hidden", !list.length);
+  for (const r of list) {
+    const li = document.createElement("li");
+    const info = document.createElement("div");
+    info.className = "room-info";
+    const title = document.createElement("strong");
+    title.textContent = r.code + (r.locked ? " 🔒 PIN" : sysRole === "admin" || sysRole === "observer" ? (r.mode === "private" ? " 🔐" : " 🌐") : "");
+    const meta = document.createElement("span");
+    meta.className = "hint";
+    meta.textContent = (r.locked ? "off · " : "") + r.online + " online · " + r.phase + (r.names.length ? " · " + r.names.join(", ") : "");
+    info.append(title, meta);
+    const joinB = document.createElement("button");
+    joinB.type = "button";
+    joinB.textContent = "Join";
+    joinB.addEventListener("click", () => { $("joinCode").value = r.code; enterWithSign(false); });
+    li.append(info, joinB);
+    if (r.canOff && r.locked) {
+      const onB = document.createElement("button");
+      onB.type = "button";
+      onB.className = "ghost";
+      onB.textContent = "Turn on";
+      onB.addEventListener("click", async () => {
+        onB.disabled = true;
+        try { await api({ op: "roomOn", sys: sysToken, target: r.code }); toast("Room " + r.code + " is on again, open to everyone."); }
+        catch (e) { if (e.denied && /Session expired/.test(e.message)) { signOut(); return; } toast(e.message); }
+        loadActiveRooms();
+      });
+      li.append(onB);
+    } else if (r.canOff) {
+      const offB = document.createElement("button");
+      offB.type = "button";
+      offB.className = "ghost danger";
+      offB.textContent = "Turn off";
+      const pinBox = document.createElement("input");
+      pinBox.type = "password";
+      pinBox.inputMode = "numeric";
+      pinBox.maxLength = 8;
+      pinBox.placeholder = "PIN, 4-8 digits";
+      pinBox.autocomplete = "off";
+      pinBox.className = "room-pin hidden";
+      offB.addEventListener("click", async () => {
+        if (pinBox.classList.contains("hidden")) { pinBox.classList.remove("hidden"); offB.textContent = "Turn off with this PIN"; pinBox.focus(); return; }
+        const pin = pinBox.value.trim();
+        if (!/^\d{4,8}$/.test(pin)) { toast("Choose a PIN of 4 to 8 digits"); pinBox.focus(); return; }
+        offB.disabled = true;
+        try { await api({ op: "roomOff", sys: sysToken, target: r.code, pin }); toast("Room " + r.code + " is off. New players need the PIN to join."); }
+        catch (e) { if (e.denied && /Session expired/.test(e.message)) { signOut(); return; } toast(e.message); }
+        loadActiveRooms();
+      });
+      li.append(pinBox, offB);
+    }
+    box.append(li);
+  }
+}
+$("activeRefresh").addEventListener("click", loadActiveRooms);
+setInterval(loadActiveRooms, 6000);
 
 /** The first screen: sign in when nobody is signed in, else the room screen. */
 function showStart() {
@@ -330,11 +407,14 @@ async function enterWithSign(create) {
   resetScreenCaches();
   try {
     playerId = create ? null : store("uno-id-" + code) || null;
-    const r = await api({ op: "join", sys: sysToken, room: code, create });
+    const r = await api({ op: "join", sys: sysToken, room: code, create, pin: create ? "" : $("joinPin").value.trim() });
     room = r.room;
     apply(r);
     session("uno-want", null);
+    $("joinPinRow").classList.add("hidden");
+    $("joinPin").value = "";
   } catch (e) {
+    if (e.needsPin) { $("joinPinRow").classList.remove("hidden"); $("joinPin").focus(); toast(e.message); return; } // a locked room: ask for its PIN
     if (e.denied && /Session expired|Auth0/.test(e.message)) signOut();
     toast(e.message);
     return;
