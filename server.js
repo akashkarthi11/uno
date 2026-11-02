@@ -37,5 +37,6 @@ http.createServer(async (req, res) => {
   }
   res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream');
   res.setHeader('Cache-Control', 'no-cache'); // local runs: always check for a fresh copy
+  if (process.env.VERCEL) res.setHeader('Vercel-CDN-Cache-Control', 'public, max-age=31536000'); // the CDN keeps the page until the next deploy, so it skips the function
   return fs.createReadStream(file).pipe(res);
 }).listen(process.env.PORT || 8080, () => console.log('GrowX cards on http://localhost:' + (process.env.PORT || 8080)));
