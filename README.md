@@ -336,6 +336,12 @@ buttons fire, jump and reload. The ⚙ button sets mouse/touch sensitivity and s
 **Screen:** corner map (cover, you as an arrow, the other player), score, a kill feed, health and ammo, a crosshair that opens as you move, a hit marker (white, yellow for a
 headshot, red for a kill), floating damage numbers, a red wedge on the side a shot came from, and a pulsing edge when health is low. Sounds are made in the browser (no files).
 
+**Items, weapons and stances** (all rebuilt on every respawn): you start with the **AR** and the **SMG** (keys 1 and 2, **Q** or the mouse wheel cycles; the **sniper rifle**, key 3, lies at one spot on the map
+and has a real scope when you aim). Each weapon has its own magazine, reserve, damage, fire rate, reload and spread. Pickups sit at fixed spots and come back after 20-45 seconds, marked by a light column and on the map:
+**bandages** (use with **B**: 2.2 s, heals up to 75), **medkits** (**N**: 4 s, heals to full), **ammo boxes**, and three **super powers** for 10 seconds, **speed**, **shield** (damage taken x0.4) and **rage** (damage dealt x2);
+the other player sees a coloured aura around you while one is active. Being hit, shooting, aiming, reloading or switching interrupts healing. **C** crouches, **Z** goes prone (both smaller to hit and quieter on the spread),
+**right-click** (or the ◎ button) aims down the sights: tighter spread, slower walking, closer camera, and its own sensitivity (⚙). On a phone the buttons are on the right: fire, aim, jump, crouch, prone, reload, switch.
+
 How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown to the room as `duel` and `canDuel`) and passes the connection set-up messages
 (`duelSignal` / `duelSignals`, a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
 (`public/duel.js`): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries

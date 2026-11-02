@@ -1552,3 +1552,38 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 #duelOver button { min-width: 220px; }
 #duelMic.off { background: rgba(170,30,30,.85); }
 #duelScore .op.talk { text-shadow: 0 0 8px #ffb070, 0 0 14px #ffb070; }
+#duelScope { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, transparent 0, transparent 30vmin, #000 31vmin); }
+#duelScope::before, #duelScope::after { content: ""; position: absolute; background: #000; }
+#duelScope::before { left: 50%; top: calc(50% - 30vmin); width: 2px; height: 60vmin; margin-left: -1px; }
+#duelScope::after { top: 50%; left: calc(50% - 30vmin); height: 2px; width: 60vmin; margin-top: -1px; }
+#duelScope.hidden { display: none; }
+.duel-inv { position: absolute; left: max(14px, env(safe-area-inset-left)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 58px); display: flex; gap: 8px; align-items: center; }
+.duel-inv button { width: auto; min-width: 64px; height: 38px; padding: 0 10px; border-radius: 10px; background: rgba(10,16,30,.72); color: #fff; border: 1px solid rgba(255,255,255,.28); font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.duel-inv button i { font-style: normal; font-size: 10px; opacity: .55; border: 1px solid rgba(255,255,255,.4); border-radius: 4px; padding: 0 4px; }
+.duel-inv button.off { opacity: .4; }
+#duelStance { font-size: 12px; font-weight: 700; color: #ffd23f; text-shadow: 0 1px 3px #000; }
+.duel-use { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); width: 200px; text-align: center; font-size: 13px; font-weight: 700; text-shadow: 0 1px 3px #000; pointer-events: none; }
+.duel-use.hidden { display: none; }
+#duelUseBar { height: 100%; width: 0; background: #5cff7a; }
+#duelPower { position: absolute; left: max(10px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 128px); padding: 4px 12px; border-radius: 999px; font-weight: 900; font-size: 13px; background: rgba(10,16,30,.78); border: 2px solid #fff; pointer-events: none; }
+#duelPower[data-k=speed] { border-color: #4dd0ff; color: #4dd0ff; }
+#duelPower[data-k=shield] { border-color: #6aa8ff; color: #9cc4ff; }
+#duelPower[data-k=rage] { border-color: #ff5a3d; color: #ff8a70; }
+#duelPower.hidden { display: none; }
+#duelSlots { display: flex; gap: 4px; justify-content: flex-end; margin-bottom: 2px; }
+#duelSlots span { font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 6px; background: rgba(10,16,30,.6); border: 1px solid rgba(255,255,255,.2); opacity: .6; }
+#duelSlots span i { font-style: normal; opacity: .6; margin-right: 4px; }
+#duelSlots span.on { opacity: 1; border-color: #ffd23f; color: #ffd23f; }
+#duelSlots span.off { opacity: .25; }
+#duelAmmo small { font-size: 12px; font-weight: 800; letter-spacing: .08em; opacity: .8; margin-right: 4px; }
+#duel button#duelAim, #duel button#duelCrouch, #duel button#duelProne, #duel button#duelSwitch { position: absolute; border-radius: 50%; padding: 0; color: #fff; border: 3px solid rgba(255,255,255,.7); display: none; background: rgba(40,60,90,.7); }
+#duel.touch button#duelAim, #duel.touch button#duelCrouch, #duel.touch button#duelProne, #duel.touch button#duelSwitch { display: block; }
+#duel button#duelAim { right: 124px; bottom: max(130px, calc(env(safe-area-inset-bottom) + 118px)); width: 58px; height: 58px; font-size: 26px; }
+#duel button#duelAim.on { background: rgba(255,210,63,.8); color: #000; }
+#duel button#duelJump { right: 134px; bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px)); width: 52px; height: 52px; }
+#duel button#duelReload { right: 26px; bottom: max(200px, calc(env(safe-area-inset-bottom) + 190px)); width: 50px; height: 50px; }
+#duel button#duelSwitch { right: 200px; bottom: max(150px, calc(env(safe-area-inset-bottom) + 140px)); width: 46px; height: 46px; font-size: 20px; }
+#duel button#duelCrouch { right: 200px; bottom: max(98px, calc(env(safe-area-inset-bottom) + 88px)); width: 46px; height: 46px; font-size: 20px; }
+#duel button#duelProne { right: 200px; bottom: max(46px, calc(env(safe-area-inset-bottom) + 36px)); width: 46px; height: 46px; font-size: 20px; }
+#duel.touch .duel-ammo { left: 50%; right: auto; transform: translateX(-50%); text-align: center; }
+#duel.touch #duelSlots { justify-content: center; }

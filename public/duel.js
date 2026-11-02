@@ -1,12 +1,12 @@
-/* 3D duel: two players, third-person, one arena, one rifle, first to 5 kills.
+/* 3D duel: two players, third-person, one arena, first to 5 kills.
    The server only carries the invite and the connection set-up (ops duelStart / duelEnd / duelSignal / duelSignals).
    The match itself runs between the two browsers over a WebRTC data channel; each browser is the referee for its own player
    (position, health), so it suits friends, not ranked play. Needs app.js first (api, state, room, playerId, toast, $). */
 "use strict";
 
 const DUEL_THREE = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
-const DUEL_WIN = 5, DUEL_HP = 100, DUEL_BODY = 25, DUEL_HEAD = 40, DUEL_FIRE_MS = 110, DUEL_RESPAWN_MS = 2200, DUEL_SAFE_MS = 1500;
-const DUEL_MAG = 30, DUEL_RELOAD_MS = 1700, DUEL_JUMP = 8.5, DUEL_GRAV = 22, DUEL_WALK = 6, DUEL_RUN = 9.5;
+const DUEL_WIN = 5, DUEL_HP = 100, DUEL_RESPAWN_MS = 2200, DUEL_SAFE_MS = 1500, DUEL_SWITCH_MS = 400;
+const DUEL_JUMP = 8.5, DUEL_GRAV = 22, DUEL_WALK = 6, DUEL_RUN = 9.5;
 const DUEL_HALF = 30; // the arena is 60 x 60
 // cover: x, z, width, depth, height, kind (k container, c crate, w wall, t tree)
 const DUEL_BOXES = [[0, 0, 6, 6, 3, "k"], [-15, -12, 8, 2, 2.5, "w"], [15, 12, 8, 2, 2.5, "w"], [-14, 14, 2, 8, 2.5, "k"], [14, -14, 2, 8, 2.5, "k"],
@@ -20,6 +20,29 @@ const DUEL_TEAMS = [ // the host is the navy team, the guest the desert team
   { shirt: 0x2f3f5f, vest: 0x25324a, pants: 0x2a3550, helmet: 0x34476b, pack: 0x1f2b42, band: 0x4da3ff },
   { shirt: 0xb69c68, vest: 0x8f7b4e, pants: 0x9d8758, helmet: 0xa38d5b, pack: 0x7b6a43, band: 0xff8a3d },
 ];
+// weapons: damage to the body / head, ms between shots, magazine, reload ms, spread, view kick, barrel length, rounds carried at the start, ammo-box refill, carry cap
+const DUEL_WEAPONS = {
+  ar: { name: "AR", dmg: 25, head: 40, rate: 110, mag: 30, reload: 1700, spread: 0.004, kick: 0.35, len: 1.0, start: 90, pack: 30, cap: 180 },
+  smg: { name: "SMG", dmg: 18, head: 28, rate: 70, mag: 35, reload: 1500, spread: 0.010, kick: 0.22, len: 0.85, start: 105, pack: 35, cap: 210 },
+  sn: { name: "SNIPER", dmg: 70, head: 150, rate: 1300, mag: 5, reload: 2400, spread: 0.0004, kick: 1.1, len: 1.25, start: 10, pack: 5, cap: 20 },
+};
+const DUEL_WORDER = ["ar", "smg", "sn"];
+const DUEL_EYE = [1.6, 1.15, 0.55]; // eye height standing, crouched, prone
+const DUEL_STSPEED = [1, 0.55, 0.25];
+const DUEL_HEADY = [1.58, 1.12, 0.35], DUEL_BODYY = [0.85, 0.62, 0.3], DUEL_MUZZY = [1.2, 0.85, 0.35];
+// pickups: bandage, medkit, ammo box, the sniper rifle, and three super powers (10 s each). Fixed spots in open ground.
+const DUEL_PICKS = [
+  { k: "band", x: -12, z: -4 }, { k: "band", x: 12, z: 4 }, { k: "band", x: 0, z: -12 }, { k: "band", x: 0, z: 12 },
+  { k: "med", x: -18, z: 18 }, { k: "med", x: 18, z: -18 },
+  { k: "ammo", x: -8, z: 0 }, { k: "ammo", x: 8, z: 0 },
+  { k: "speed", x: 0, z: -26 }, { k: "shield", x: 0, z: 26 }, { k: "rage", x: 7, z: -4 },
+  { k: "sn", x: -26, z: -2 },
+];
+const DUEL_PCOL = { band: 0xffffff, med: 0xffffff, ammo: 0xd9b84a, speed: 0x4dd0ff, shield: 0x6aa8ff, rage: 0xff5a3d, sn: 0xf2f2f2 };
+const DUEL_PNAME = { band: "Bandage", med: "Medkit", ammo: "Ammo box", speed: "SPEED", shield: "SHIELD", rage: "RAGE (double damage)", sn: "Sniper rifle" };
+const DUEL_PBACK = { band: 20000, med: 20000, ammo: 20000, speed: 30000, shield: 30000, rage: 30000, sn: 45000 }; // ms until it is back
+const DUEL_POWER_MS = 10000;
+const DUEL_PWCODE = { speed: 1, shield: 2, rage: 3 };
 
 let duel = null; // the running match, or null
 let duelInviteSeen = 0;
@@ -73,12 +96,16 @@ async function duelOpen({ host, oppId, oppName, solo }) {
   if (duel) return;
   const d = duel = {
     host, oppId, oppName: oppName || "Opponent", solo: Boolean(solo), closed: false,
-    me: { x: 0, y: 0, z: 0, vy: 0, yaw: 0, el: -0.2, hp: DUEL_HP, dead: false, safeUntil: 0, moving: false, speed: 0, ammo: DUEL_MAG, reloadUntil: 0, grounded: true, phase: 0 },
-    opp: { x: 0, y: 0, z: 0, yaw: 0, tx: 0, ty: 0, tz: 0, tyaw: 0, hp: DUEL_HP, dead: false, seen: false, speed: 0, phase: 0 },
+    me: {
+      x: 0, y: 0, z: 0, vy: 0, yaw: 0, el: -0.2, hp: DUEL_HP, dead: false, safeUntil: 0, moving: false, speed: 0, grounded: true, phase: 0,
+      st: 0, eyeH: DUEL_EYE[0], w: "ar", mag: {}, res: {}, have: {}, inv: { band: 0, med: 0 }, switchUntil: 0, reload: null, ads: false, using: null, power: null,
+    },
+    opp: { x: 0, y: 0, z: 0, yaw: 0, tx: 0, ty: 0, tz: 0, tyaw: 0, hp: DUEL_HP, dead: false, seen: false, speed: 0, phase: 0, st: 0, w: "ar", pw: 0, sp: 0 },
     kills: 0, deaths: 0, over: false, rematch: [false, false], keys: {}, fireDown: false, lastShot: 0, lastSend: 0, lastHeadHit: false,
     joy: null, look: null, tracers: [], status: "Loading the arena…", pc: null, sid: "", chFast: null, chSafe: null,
-    connected: false, relayTried: false, startedAt: 0, queue: [], timers: [], listeners: [], flash: 0, marker: 0, kick: 0, fov: 65,
-    sens: Number(duelPref("sens", 1)) || 1, sound: duelPref("snd", "1") === "1", sprintTouch: false, jumpTouch: false, ammoShown: -1, lastMsg: "",
+    connected: false, relayTried: false, startedAt: 0, queue: [], timers: [], listeners: [], flash: 0, marker: 0, kick: 0, adsT: 0,
+    sens: Number(duelPref("sens", 1)) || 1, adsSens: Number(duelPref("ads", 0.7)) || 0.7, sound: duelPref("snd", "1") === "1",
+    sprintTouch: false, jumpTouch: false, invShown: "", ammoShown: "", lastMsg: "", picks: DUEL_PICKS.map(() => ({ on: true, until: 0 })), pickMeshes: [],
   };
   duelBuildUi(d);
   try { await duelLoadThree(); } catch (e) { toast(e.message); duelClose(); return; }
@@ -101,24 +128,32 @@ function duelBuildUi(d) {
   const root = document.createElement("div");
   root.id = "duel";
   root.innerHTML =
-    '<canvas id="duelCanvas"></canvas>' +
+    '<canvas id="duelCanvas"></canvas><div id="duelScope" class="hidden"></div>' +
     '<div id="duelDmg"></div><div id="duelFlash"></div><div id="duelLow"></div>' +
     '<div class="duel-top"><canvas id="duelMap" width="120" height="120"></canvas><div id="duelScore"></div>' +
     '<div class="duel-btns"><button id="duelMic" type="button" aria-label="Microphone">🎤</button><button id="duelGear" type="button" aria-label="Settings">⚙</button><button id="duelLeave" type="button">✕</button></div></div>' +
+    '<div id="duelPower" class="hidden"></div>' +
     '<div id="duelSet" class="hidden"><label>Sensitivity <input id="duelSens" type="range" min="0.4" max="2.2" step="0.1"></label>' +
+    '<label>Aiming (ADS) sensitivity <input id="duelAdsSens" type="range" min="0.2" max="1.6" step="0.1"></label>' +
     '<label class="duel-chk"><input id="duelSnd" type="checkbox"> Sound</label></div>' +
     '<ul id="duelFeed"></ul>' +
     '<div id="duelCross"><i></i><i></i><i></i><i></i></div><div id="duelHit"></div>' +
     '<div id="duelMsg"></div>' +
+    '<div class="duel-use hidden"><span id="duelUseTxt"></span><div class="duel-rel"><div id="duelUseBar"></div></div></div>' +
+    '<div class="duel-inv"><button id="duelBand" type="button">🩹 <b>0</b><i>B</i></button><button id="duelMed" type="button">➕ <b>0</b><i>N</i></button><span id="duelStance"></span></div>' +
     '<div class="duel-hp"><div class="duel-hp-top"><b>HP</b><span id="duelHpTxt"></span></div><div class="duel-hp-bar"><div id="duelHpBar"></div></div></div>' +
-    '<div class="duel-ammo"><span id="duelAmmo"></span><small id="duelAmmoHint"></small><div class="duel-rel"><div id="duelRelBar"></div></div></div>' +
+    '<div class="duel-ammo"><div id="duelSlots"></div><span id="duelAmmo"></span><small id="duelAmmoHint"></small><div class="duel-rel"><div id="duelRelBar"></div></div></div>' +
     '<button id="duelFire" type="button" aria-label="Fire">🔫</button>' +
+    '<button id="duelAim" type="button" aria-label="Aim">◎</button>' +
     '<button id="duelJump" type="button" aria-label="Jump">⤒</button>' +
+    '<button id="duelCrouch" type="button" aria-label="Crouch">⤓</button>' +
+    '<button id="duelProne" type="button" aria-label="Prone">▁</button>' +
     '<button id="duelReload" type="button" aria-label="Reload">⟳</button>' +
+    '<button id="duelSwitch" type="button" aria-label="Switch weapon">⇄</button>' +
     '<div id="duelStick"><i></i></div>' +
     '<div id="duelOver" class="hidden"><h2 id="duelOverTitle"></h2><p id="duelOverSub"></p>' +
     '<button id="duelAgain" type="button">Rematch</button><button id="duelOut" type="button" class="ghost">Back to lobby</button></div>' +
-    '<div id="duelHelp">WASD move · Shift run · Space jump · R reload · click to shoot · Esc frees the mouse</div>';
+    '<div id="duelHelp">WASD move · Shift run · Space jump · C crouch · Z prone · right-click aim · R reload · 1 2 3 weapons · B bandage · N medkit · Esc frees the mouse</div>';
   document.body.appendChild(root);
   d.root = root;
   d.touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
@@ -136,8 +171,12 @@ function duelBuildUi(d) {
   q("#duelGear").addEventListener("click", () => q("#duelSet").classList.toggle("hidden"));
   q("#duelSens").value = d.sens;
   q("#duelSens").addEventListener("input", (e) => { d.sens = Number(e.target.value) || 1; duelSetPref("sens", d.sens); });
+  q("#duelAdsSens").value = d.adsSens;
+  q("#duelAdsSens").addEventListener("input", (e) => { d.adsSens = Number(e.target.value) || 0.7; duelSetPref("ads", d.adsSens); });
   q("#duelSnd").checked = d.sound;
   q("#duelSnd").addEventListener("change", (e) => { d.sound = e.target.checked; duelSetPref("snd", d.sound ? "1" : "0"); });
+  q("#duelBand").addEventListener("click", () => duelUse(d, "band"));
+  q("#duelMed").addEventListener("click", () => duelUse(d, "med"));
   q("#duelAgain").addEventListener("click", () => {
     d.rematch[0] = true;
     duelSend(d, "safe", { t: "rematch" });
@@ -172,16 +211,38 @@ function duelHud(d) {
   }
 }
 
+/** Weapon slots, ammo, reload bar, bandage / medkit counts, the super power timer and the heal bar. Cheap: only writes what changed. */
 function duelAmmoHud(d, now) {
-  const me = d.me, reloading = now < me.reloadUntil;
-  const key = reloading ? -1 : me.ammo;
-  const bar = d.root.querySelector("#duelRelBar");
-  if (reloading) bar.style.width = (100 - ((me.reloadUntil - now) / DUEL_RELOAD_MS) * 100) + "%";
-  else if (d.ammoShown === -1 || bar.style.width !== "0%") bar.style.width = "0%";
-  if (key === d.ammoShown) return;
-  d.ammoShown = key;
-  d.root.querySelector("#duelAmmo").innerHTML = "<b>" + me.ammo + "</b> / " + DUEL_MAG;
-  d.root.querySelector("#duelAmmoHint").textContent = reloading ? "Reloading…" : me.ammo === 0 ? "Empty — reload" : me.ammo <= 8 ? "Low" : "";
+  const me = d.me, W = DUEL_WEAPONS[me.w], r = d.root;
+  const reloading = Boolean(me.reload);
+  const bar = r.querySelector("#duelRelBar");
+  const w = reloading ? 100 - ((me.reload.until - now) / W.reload) * 100 : 0;
+  bar.style.width = Math.max(0, Math.min(100, w)) + "%";
+  const key = [me.w, me.mag[me.w], me.res[me.w], reloading, DUEL_WORDER.map((k) => (me.have[k] ? 1 : 0)).join("")].join("|");
+  if (key !== d.ammoShown) {
+    d.ammoShown = key;
+    r.querySelector("#duelAmmo").innerHTML = "<small>" + W.name + "</small> <b>" + me.mag[me.w] + "</b> / " + me.res[me.w];
+    r.querySelector("#duelAmmoHint").textContent = reloading ? "Reloading…" : me.mag[me.w] === 0 ? (me.res[me.w] > 0 ? "Empty — reload" : "No ammo — find an ammo box") : me.mag[me.w] <= Math.ceil(W.mag / 4) ? "Low" : "";
+    r.querySelector("#duelSlots").innerHTML = DUEL_WORDER.map((k, i) => '<span class="' + (k === me.w ? "on " : "") + (me.have[k] ? "" : "off") + '"><i>' + (i + 1) + "</i>" + DUEL_WEAPONS[k].name + "</span>").join("");
+  }
+  const inv = me.inv.band + "," + me.inv.med + "," + me.st + "," + (me.power ? Math.ceil((me.power.until - now) / 1000) + me.power.kind : "") + "," + (me.using ? 1 : 0);
+  if (inv !== d.invShown) {
+    d.invShown = inv;
+    r.querySelector("#duelBand b").textContent = me.inv.band;
+    r.querySelector("#duelMed b").textContent = me.inv.med;
+    r.querySelector("#duelBand").classList.toggle("off", me.inv.band === 0);
+    r.querySelector("#duelMed").classList.toggle("off", me.inv.med === 0);
+    r.querySelector("#duelStance").textContent = ["", "crouching", "prone"][me.st];
+    const pw = r.querySelector("#duelPower");
+    if (me.power) { pw.textContent = { speed: "⚡ SPEED", shield: "🛡 SHIELD", rage: "🔥 RAGE ×2" }[me.power.kind] + " " + Math.ceil((me.power.until - now) / 1000) + "s"; pw.dataset.k = me.power.kind; }
+    pw.classList.toggle("hidden", !me.power);
+  }
+  const use = r.querySelector(".duel-use");
+  use.classList.toggle("hidden", !me.using);
+  if (me.using) {
+    r.querySelector("#duelUseTxt").textContent = me.using.kind === "band" ? "Using bandage…" : "Using medkit…";
+    r.querySelector("#duelUseBar").style.width = Math.min(100, ((now - me.using.start) / (me.using.end - me.using.start)) * 100) + "%";
+  }
 }
 
 function duelFeed(d, html, cls) {
@@ -287,12 +348,17 @@ function duelSound(d, kind, vol) {
       o.connect(g); o.start(t); o.stop(t + len);
     };
     if (kind === "shot") { g.gain.setValueAtTime(0.5 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.14); noise(0.14, 5000, 300); tone("sine", 140, 50, 0.1); }
+    else if (kind === "snipe") { g.gain.setValueAtTime(0.7 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.5); noise(0.5, 4000, 120); tone("sine", 90, 30, 0.4); }
     else if (kind === "hit") { g.gain.setValueAtTime(0.22 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.08); tone("square", 900, 700, 0.08); }
     else if (kind === "head") { g.gain.setValueAtTime(0.25 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22); tone("triangle", 1500, 1900, 0.22); }
     else if (kind === "hurt") { g.gain.setValueAtTime(0.4 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); tone("sine", 160, 60, 0.18); }
     else if (kind === "empty") { g.gain.setValueAtTime(0.18 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.04); noise(0.04, 3000, 1500); }
     else if (kind === "reload") { g.gain.setValueAtTime(0.25 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05); noise(0.05, 3500, 1200); d.timers.push(setTimeout(() => duelSound(d, "click"), 1100)); }
     else if (kind === "click") { g.gain.setValueAtTime(0.3 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.07); noise(0.07, 4000, 800); }
+    else if (kind === "switch") { g.gain.setValueAtTime(0.25 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.09); noise(0.09, 2500, 600); }
+    else if (kind === "pick") { g.gain.setValueAtTime(0.25 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); tone("triangle", 700, 1200, 0.18); }
+    else if (kind === "heal") { g.gain.setValueAtTime(0.28 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.45); tone("sine", 520, 1040, 0.45); }
+    else if (kind === "power") { g.gain.setValueAtTime(0.3 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.6); tone("sawtooth", 200, 900, 0.6); }
     else if (kind === "die") { g.gain.setValueAtTime(0.4 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.7); tone("sawtooth", 260, 40, 0.7); }
     else if (kind === "win") { g.gain.setValueAtTime(0.3 * v, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.9); tone("triangle", 523, 1046, 0.9); }
   } catch (e) { /* sound is optional */ }
@@ -406,6 +472,12 @@ function duelBuildWorld(d) {
     hill.position.set(Math.cos(a) * rad, 6, Math.sin(a) * rad);
     sc.add(hill);
   }
+  DUEL_PICKS.forEach((p, i) => {
+    const m = duelPickMesh(T, p.k);
+    m.position.set(p.x, 0, p.z);
+    sc.add(m);
+    d.pickMeshes[i] = m;
+  });
   sc.updateMatrixWorld(true);
   d.meFig = duelFigure(T, DUEL_TEAMS[d.host ? 0 : 1]);
   d.oppFig = duelFigure(T, DUEL_TEAMS[d.host ? 1 : 0]);
@@ -416,7 +488,27 @@ function duelBuildWorld(d) {
   duelResize(d);
 }
 
-/** A soldier: helmet, goggles, vest, backpack, legs and arms that move, and a rifle. Faces -Z. */
+/** What a pickup looks like on the ground: a small spinning object and a light column so it can be seen from afar. */
+function duelPickMesh(T, kind) {
+  const g = new T.Group(), item = new T.Group();
+  const mat = (c) => new T.MeshLambertMaterial({ color: c });
+  const box = (w, h, dp, c, x, y, z, parent) => { const m = new T.Mesh(new T.BoxGeometry(w, h, dp), mat(c)); m.position.set(x, y, z); (parent || item).add(m); return m; };
+  if (kind === "band") { box(0.42, 0.2, 0.3, 0xf4f4f4, 0, 0, 0); box(0.3, 0.215, 0.07, 0xd62828, 0, 0, 0); box(0.07, 0.215, 0.22, 0xd62828, 0, 0, 0); }
+  else if (kind === "med") { box(0.62, 0.42, 0.34, 0xf4f4f4, 0, 0, 0); box(0.34, 0.44, 0.07, 0xd62828, 0, 0, 0.0); box(0.1, 0.44, 0.3, 0xd62828, 0, 0, 0); box(0.3, 0.06, 0.1, 0x777777, 0, 0.24, 0); }
+  else if (kind === "ammo") { box(0.6, 0.32, 0.36, 0x5b6b3a, 0, 0, 0); box(0.62, 0.08, 0.38, 0xd9b84a, 0, 0.1, 0); box(0.12, 0.34, 0.38, 0xd9b84a, 0.18, 0, 0); }
+  else if (kind === "sn") { box(0.1, 0.12, 1.1, 0x2b2b2b, 0, 0, 0); box(0.07, 0.07, 0.5, 0x1c1c1c, 0, 0.02, -0.7); box(0.07, 0.1, 0.4, 0x3a2f25, 0, -0.02, 0.6); box(0.09, 0.09, 0.32, 0x111111, 0, 0.14, -0.05); }
+  else { const o = new T.Mesh(new T.OctahedronGeometry(0.3), new T.MeshBasicMaterial({ color: DUEL_PCOL[kind] })); item.add(o); const ring = new T.Mesh(new T.TorusGeometry(0.45, 0.03, 6, 20), new T.MeshBasicMaterial({ color: DUEL_PCOL[kind] })); ring.rotation.x = Math.PI / 2; item.add(ring); }
+  item.position.y = 0.85;
+  g.add(item);
+  const col = kind === "band" || kind === "med" ? 0x5cff7a : DUEL_PCOL[kind];
+  const beam = new T.Mesh(new T.CylinderGeometry(0.22, 0.22, 5, 10, 1, true), new T.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.11, side: T.DoubleSide, depthWrite: false }));
+  beam.position.y = 2.5;
+  g.add(beam);
+  g.userData.item = item;
+  return g;
+}
+
+/** A soldier: helmet, goggles, vest, backpack, legs and arms that move, and three rifles (one shown). Faces -Z. */
 function duelFigure(T, pal) {
   const root = new T.Group(), body = new T.Group();
   root.add(body);
@@ -456,34 +548,66 @@ function duelFigure(T, pal) {
   };
   arm(0.33, -1.35, 0.12);
   arm(-0.33, -1.5, -0.5);
-  box(0.12, 0.12, 0.05, pal.band, 0.335, 1.1, -0.01).rotation.y = 0; // armband
+  box(0.12, 0.12, 0.05, pal.band, 0.335, 1.1, -0.01); // armband
   const rifle = new T.Group();
   rifle.position.set(0.17, 1.17, -0.4);
   body.add(rifle);
-  box(0.07, 0.11, 0.62, 0x2b2b2b, 0, 0, 0, rifle);
-  box(0.06, 0.07, 0.3, 0x1c1c1c, 0, 0.02, -0.4, rifle);
-  box(0.05, 0.14, 0.2, 0x3a2f25, 0, -0.02, 0.36, rifle);
-  box(0.055, 0.22, 0.08, 0x202020, 0, -0.15, 0.04, rifle).rotation.x = 0.18;
-  box(0.05, 0.05, 0.12, 0x111111, 0, 0.08, -0.06, rifle);
-  const flash = new T.Mesh(new T.SphereGeometry(0.1, 8, 8), new T.MeshBasicMaterial({ color: 0xffd25a }));
-  flash.position.set(0, 0.02, -0.62);
-  flash.visible = false;
-  rifle.add(flash);
-  return { root, body, legs, flash, flashUntil: 0 };
+  const flash = (parent, z) => { const f = new T.Mesh(new T.SphereGeometry(0.1, 8, 8), new T.MeshBasicMaterial({ color: 0xffd25a })); f.position.set(0, 0.02, z); f.visible = false; parent.add(f); return f; };
+  const guns = {}, flashes = {};
+  guns.ar = new T.Group();
+  box(0.07, 0.11, 0.62, 0x2b2b2b, 0, 0, 0, guns.ar);
+  box(0.06, 0.07, 0.3, 0x1c1c1c, 0, 0.02, -0.4, guns.ar);
+  box(0.05, 0.14, 0.2, 0x3a2f25, 0, -0.02, 0.36, guns.ar);
+  box(0.055, 0.22, 0.08, 0x202020, 0, -0.15, 0.04, guns.ar).rotation.x = 0.18;
+  box(0.05, 0.05, 0.12, 0x111111, 0, 0.08, -0.06, guns.ar);
+  flashes.ar = flash(guns.ar, -0.62);
+  guns.smg = new T.Group();
+  box(0.07, 0.12, 0.42, 0x2f2f2f, 0, 0, 0, guns.smg);
+  box(0.05, 0.05, 0.2, 0x1c1c1c, 0, 0.02, -0.3, guns.smg);
+  box(0.05, 0.12, 0.14, 0x202020, 0, -0.04, 0.26, guns.smg);
+  box(0.05, 0.28, 0.07, 0x1a1a1a, 0, -0.18, -0.02, guns.smg);
+  flashes.smg = flash(guns.smg, -0.46);
+  guns.sn = new T.Group();
+  box(0.07, 0.1, 0.8, 0x2a2e2a, 0, 0, 0, guns.sn);
+  box(0.04, 0.04, 0.55, 0x151515, 0, 0.02, -0.65, guns.sn);
+  box(0.06, 0.15, 0.3, 0x4a3b2c, 0, -0.03, 0.5, guns.sn);
+  const scope = new T.Mesh(new T.CylinderGeometry(0.05, 0.05, 0.34, 10), mat(0x111111));
+  scope.rotation.x = Math.PI / 2; scope.position.set(0, 0.12, -0.05); guns.sn.add(scope);
+  flashes.sn = flash(guns.sn, -0.95);
+  DUEL_WORDER.forEach((k) => { guns[k].visible = k === "ar"; rifle.add(guns[k]); });
+  const aura = new T.Mesh(new T.SphereGeometry(1.05, 14, 10), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }));
+  aura.position.y = 0.95; aura.visible = false;
+  root.add(aura);
+  return { root, body, legs, guns, flashes, rifle, aura, flashUntil: 0, scale: 1 };
 }
 
-/** Legs swing with the speed; the body bobs; a defeated soldier falls backwards. */
+/** Legs swing with the speed, the body bobs, crouch and prone lower it, a defeated soldier falls backwards. `p` carries speed, phase, dead, st, w, pw. */
 function duelPose(fig, p, dt, now) {
   const run = Math.min(1, p.speed / DUEL_RUN);
   p.phase += dt * (3 + p.speed * 1.25);
-  const sw = Math.sin(p.phase) * (0.25 + 0.65 * run) * Math.min(1, p.speed / 2);
+  const walk = Math.min(1, p.speed / 2);
+  const sw = Math.sin(p.phase) * (0.25 + 0.65 * run) * walk;
   fig.legs[0].rotation.x = sw;
   fig.legs[1].rotation.x = -sw;
-  fig.body.position.y = Math.abs(Math.sin(p.phase)) * 0.06 * Math.min(1, p.speed / 3) + (p.grounded === false ? 0.05 : 0);
-  const target = p.dead ? 1.45 : 0;
-  fig.body.rotation.x += (target - fig.body.rotation.x) * Math.min(1, dt * 9);
-  fig.body.position.y += p.dead ? 0.22 * Math.min(1, fig.body.rotation.x) : 0;
-  fig.flash.visible = now < fig.flashUntil;
+  const st = p.st || 0;
+  const k = Math.min(1, dt * 9);
+  const targetX = p.dead ? 1.45 : st === 2 ? -1.5 : 0;
+  fig.body.rotation.x += (targetX - fig.body.rotation.x) * k;
+  const targetS = st === 1 && !p.dead ? 0.72 : 1;
+  fig.scale += (targetS - fig.scale) * k;
+  fig.body.scale.y = fig.scale;
+  let y = Math.abs(Math.sin(p.phase)) * 0.06 * walk * (st ? 0.3 : 1) + (p.grounded === false ? 0.05 : 0);
+  if (p.dead) y += 0.22 * Math.min(1, fig.body.rotation.x);
+  else if (st === 2) y += 0.36 * Math.min(1, -fig.body.rotation.x / 1.5);
+  fig.body.position.y = y;
+  fig.rifle.rotation.x = st === 2 && !p.dead ? -fig.body.rotation.x : 0; // prone: the rifle stays pointing ahead
+  DUEL_WORDER.forEach((w) => { fig.guns[w].visible = w === (p.w || "ar"); });
+  const fl = fig.flashes[p.w || "ar"];
+  DUEL_WORDER.forEach((w) => { fig.flashes[w].visible = false; });
+  if (fl) fl.visible = now < fig.flashUntil;
+  const pw = p.pw || 0;
+  fig.aura.visible = pw > 0 && !p.dead;
+  if (pw) fig.aura.material.color.setHex(pw === 1 ? DUEL_PCOL.speed : pw === 2 ? DUEL_PCOL.shield : DUEL_PCOL.rage);
 }
 
 /** A floating name and health bar over the opponent. */
@@ -518,29 +642,45 @@ function duelResize(d) {
 
 function duelOn(d, t, ev, fn, opt) { t.addEventListener(ev, fn, opt); d.listeners.push([t, ev, fn, opt]); }
 
+/** Sensitivity now: aiming has its own setting, and a scope turns slower still. */
+const duelSensNow = (d) => d.sens * (d.me.ads ? d.adsSens * (d.me.w === "sn" ? 0.5 : 1) : 1);
+
 function duelBind(d) {
   const canvas = d.root.querySelector("#duelCanvas");
   duelOn(d, window, "resize", () => duelResize(d));
   duelOn(d, window, "keydown", (e) => {
     if (d.over) return;
     d.keys[e.code] = true;
+    if (e.repeat) { if (/^(Space|Arrow)/.test(e.code)) e.preventDefault(); return; }
     if (e.code === "KeyR") duelReload(d);
+    else if (e.code === "Digit1") duelSwitch(d, "ar");
+    else if (e.code === "Digit2") duelSwitch(d, "smg");
+    else if (e.code === "Digit3") duelSwitch(d, "sn");
+    else if (e.code === "KeyQ") duelCycle(d);
+    else if (e.code === "KeyB") duelUse(d, "band");
+    else if (e.code === "KeyN") duelUse(d, "med");
+    else if (e.code === "KeyC") duelStance(d, 1);
+    else if (e.code === "KeyZ") duelStance(d, 2);
     if (/^(Space|Arrow)/.test(e.code)) e.preventDefault();
   });
   duelOn(d, window, "keyup", (e) => { d.keys[e.code] = false; });
   duelOn(d, window, "blur", () => { d.keys = {}; d.fireDown = false; });
+  duelOn(d, canvas, "contextmenu", (e) => e.preventDefault());
   duelOn(d, canvas, "mousedown", (e) => {
-    if (e.button !== 0 || d.touch) return;
+    if (d.touch) return;
     if (document.pointerLockElement !== canvas) { try { canvas.requestPointerLock(); } catch (er) { /* ignore */ } }
-    d.fireDown = true;
+    if (e.button === 0) d.fireDown = true;
+    else if (e.button === 2) { d.me.ads = true; duelCancelUse(d); }
   });
-  duelOn(d, window, "mouseup", () => { d.fireDown = false; });
+  duelOn(d, window, "mouseup", (e) => { if (e.button === 0) d.fireDown = false; else if (e.button === 2) d.me.ads = false; });
+  duelOn(d, canvas, "wheel", (e) => { e.preventDefault(); duelCycle(d); }, { passive: false });
   duelOn(d, document, "mousemove", (e) => {
     if (document.pointerLockElement !== canvas) return;
-    d.me.yaw -= e.movementX * 0.0025 * d.sens;
-    d.me.el = Math.max(-0.9, Math.min(0.6, d.me.el - e.movementY * 0.0025 * d.sens));
+    const s = duelSensNow(d);
+    d.me.yaw -= e.movementX * 0.0025 * s;
+    d.me.el = Math.max(-0.9, Math.min(0.6, d.me.el - e.movementY * 0.0025 * s));
   });
-  // touch: left side is a stick (push it to the edge to run), right side turns the view, buttons fire / jump / reload
+  // touch: left side is a stick (push it to the edge to run), right side turns the view, buttons do the rest
   const q = (id) => d.root.querySelector(id);
   const hold = (el, on, off) => {
     duelOn(d, el, "touchstart", (e) => { on(); e.preventDefault(); e.stopPropagation(); }, { passive: false });
@@ -550,6 +690,10 @@ function duelBind(d) {
   hold(q("#duelFire"), () => { d.fireDown = true; }, () => { d.fireDown = false; });
   hold(q("#duelJump"), () => { d.jumpTouch = true; }, () => { d.jumpTouch = false; });
   hold(q("#duelReload"), () => duelReload(d), () => {});
+  hold(q("#duelAim"), () => { d.me.ads = !d.me.ads; if (d.me.ads) duelCancelUse(d); q("#duelAim").classList.toggle("on", d.me.ads); }, () => {});
+  hold(q("#duelCrouch"), () => duelStance(d, 1), () => {});
+  hold(q("#duelProne"), () => duelStance(d, 2), () => {});
+  hold(q("#duelSwitch"), () => duelCycle(d), () => {});
   const stick = q("#duelStick");
   duelOn(d, canvas, "touchstart", (e) => {
     e.preventDefault();
@@ -573,8 +717,9 @@ function duelBind(d) {
         stick.firstChild.style.transform = "translate(" + dx * 32 + "px," + dy * 32 + "px)";
         stick.classList.toggle("run", d.sprintTouch);
       } else if (d.look && t.identifier === d.look.id) {
-        d.me.yaw -= (t.clientX - d.look.x) * 0.006 * d.sens;
-        d.me.el = Math.max(-0.9, Math.min(0.6, d.me.el - (t.clientY - d.look.y) * 0.006 * d.sens));
+        const s = duelSensNow(d);
+        d.me.yaw -= (t.clientX - d.look.x) * 0.006 * s;
+        d.me.el = Math.max(-0.9, Math.min(0.6, d.me.el - (t.clientY - d.look.y) * 0.006 * s));
         d.look.x = t.clientX; d.look.y = t.clientY;
       }
     }
@@ -598,8 +743,10 @@ function duelGround(x, z, r) {
   return h;
 }
 
+/** A fresh soldier: full health, the rifle and the SMG with their rounds, nothing else. */
 function duelSpawn(d, i) {
   const me = d.me;
+  duelCancelReload(d);
   me.x = DUEL_SPAWNS[i][0];
   me.z = DUEL_SPAWNS[i][1];
   me.y = 0; me.vy = 0;
@@ -607,18 +754,73 @@ function duelSpawn(d, i) {
   me.el = -0.2;
   me.hp = DUEL_HP;
   me.dead = false;
-  me.ammo = DUEL_MAG;
-  me.reloadUntil = 0;
+  me.st = 0; me.eyeH = DUEL_EYE[0];
+  me.w = "ar";
+  me.have = { ar: true, smg: true, sn: false };
+  me.mag = { ar: DUEL_WEAPONS.ar.mag, smg: DUEL_WEAPONS.smg.mag, sn: 0 };
+  me.res = { ar: DUEL_WEAPONS.ar.start, smg: DUEL_WEAPONS.smg.start, sn: 0 };
+  me.inv = { band: 0, med: 0 };
+  me.using = null; me.power = null; me.ads = false; me.switchUntil = 0;
   me.safeUntil = performance.now() + DUEL_SAFE_MS;
+  d.ammoShown = ""; d.invShown = "";
 }
 
 function duelReload(d) {
-  const me = d.me, now = performance.now();
-  if (me.dead || d.over || now < me.reloadUntil || me.ammo >= DUEL_MAG) return;
-  me.reloadUntil = now + DUEL_RELOAD_MS;
+  const me = d.me, W = DUEL_WEAPONS[me.w], now = performance.now();
+  if (me.dead || d.over || me.reload || now < me.switchUntil || me.mag[me.w] >= W.mag || me.res[me.w] <= 0) return;
+  duelCancelUse(d);
+  const w = me.w;
+  me.reload = { w, until: now + W.reload };
   duelSound(d, "reload");
-  d.timers.push(setTimeout(() => { if (!d.closed && d.me.reloadUntil > 0 && !d.me.dead) { d.me.ammo = DUEL_MAG; d.me.reloadUntil = 0; d.ammoShown = -2; } }, DUEL_RELOAD_MS));
+  me.reload.timer = setTimeout(() => {
+    if (d.closed || !me.reload || me.reload.w !== w) return;
+    const take = Math.min(W.mag - me.mag[w], me.res[w]);
+    me.mag[w] += take; me.res[w] -= take;
+    me.reload = null;
+  }, W.reload);
+  d.timers.push(me.reload.timer);
 }
+
+function duelCancelReload(d) {
+  const r = d.me.reload;
+  if (r) { clearTimeout(r.timer); d.me.reload = null; }
+}
+
+function duelSwitch(d, w) {
+  const me = d.me;
+  if (me.dead || d.over || !me.have[w] || me.w === w) return;
+  duelCancelReload(d); duelCancelUse(d);
+  me.w = w; me.switchUntil = performance.now() + DUEL_SWITCH_MS; me.ads = false;
+  const a = d.root.querySelector("#duelAim"); if (a) a.classList.remove("on");
+  duelSound(d, "switch");
+}
+
+function duelCycle(d) {
+  const have = DUEL_WORDER.filter((w) => d.me.have[w]);
+  if (have.length > 1) duelSwitch(d, have[(have.indexOf(d.me.w) + 1) % have.length]);
+}
+
+/** Crouch and prone toggle; pressing the same one again stands up. */
+function duelStance(d, s) {
+  const me = d.me;
+  if (me.dead || d.over) return;
+  me.st = me.st === s ? 0 : s;
+}
+
+/** Bandage (2.2 s, up to 75 health) or medkit (4 s, to full). Being hit, shooting, aiming, reloading or switching stops it. */
+function duelUse(d, kind) {
+  const me = d.me, now = performance.now();
+  if (me.dead || d.over || me.using) return;
+  if (me.inv[kind] <= 0) { toast(kind === "band" ? "No bandages. Find one on the map." : "No medkits. Find one on the map."); return; }
+  if (me.hp >= (kind === "band" ? 75 : 100)) { toast(kind === "band" ? "A bandage only heals up to 75. Use a medkit." : "Your health is full."); return; }
+  duelCancelReload(d);
+  me.ads = false;
+  me.using = { kind, start: now, end: now + (kind === "band" ? 2200 : 4000) };
+}
+
+function duelCancelUse(d) { d.me.using = null; }
+
+const duelPowerOn = (me, kind, now) => Boolean(me.power && me.power.kind === kind && now < me.power.until);
 
 function duelFrame(d, now) {
   if (d.closed) return;
@@ -626,6 +828,7 @@ function duelFrame(d, now) {
   const dt = Math.min(0.05, (now - d.last) / 1000);
   d.last = now;
   const me = d.me;
+  if (me.power && now >= me.power.until) me.power = null;
   let sp = 0;
   if (!me.dead && !d.over) {
     let fx = 0, fz = 0; // forward / strafe input
@@ -636,10 +839,10 @@ function duelFrame(d, now) {
     if (d.joy) { fx += d.joy.dx; fz -= d.joy.dy; }
     const m = Math.hypot(fx, fz);
     me.moving = m > 0.05;
-    const running = me.moving && (d.keys.ShiftLeft || d.keys.ShiftRight || d.sprintTouch) && fz > -0.1;
+    const running = me.moving && me.st === 0 && !me.ads && !me.using && (d.keys.ShiftLeft || d.keys.ShiftRight || d.sprintTouch) && fz > -0.1;
     if (me.moving) {
       if (m > 1) { fx /= m; fz /= m; }
-      sp = running ? DUEL_RUN : DUEL_WALK;
+      sp = (running ? DUEL_RUN : DUEL_WALK) * DUEL_STSPEED[me.st] * (me.ads ? 0.6 : 1) * (me.using ? 0.6 : 1) * (duelPowerOn(me, "speed", now) ? 1.35 : 1);
       const step = sp * dt, sy = Math.sin(me.yaw), cy = Math.cos(me.yaw);
       const dx = (-sy * fz + cy * fx) * step, dz = (-cy * fz - sy * fx) * step;
       const lim = DUEL_HALF - 0.8;
@@ -650,14 +853,25 @@ function duelFrame(d, now) {
       sp *= Math.min(1, m);
     }
     me.running = running;
-    if ((d.keys.Space || d.jumpTouch) && me.grounded) { me.vy = DUEL_JUMP; me.grounded = false; }
-    if (d.fireDown && now - d.lastShot >= DUEL_FIRE_MS && d.connected) duelShoot(d, now);
+    if (d.keys.Space || d.jumpTouch) { if (me.st) me.st = 0; else if (me.grounded) { me.vy = DUEL_JUMP; me.grounded = false; } }
+    const W = DUEL_WEAPONS[me.w];
+    if (d.fireDown && now - d.lastShot >= W.rate && d.connected) duelShoot(d, now);
+    if (me.using && now >= me.using.end) { // finished healing
+      me.hp = me.using.kind === "band" ? Math.min(75, me.hp + 25) : DUEL_HP;
+      me.inv[me.using.kind]--;
+      me.using = null;
+      duelSound(d, "heal");
+      duelHud(d);
+    }
+    duelTakePicks(d, now);
   }
   me.vy -= DUEL_GRAV * dt;
   me.y += me.vy * dt;
   const gnd = duelGround(me.x, me.z, 0.3);
   if (me.y <= gnd) { me.y = gnd; me.vy = 0; me.grounded = true; } else me.grounded = false;
   me.speed = sp;
+  me.eyeH += (DUEL_EYE[me.st] - me.eyeH) * Math.min(1, dt * 10);
+  d.adsT += ((me.ads && !me.dead ? 1 : 0) - d.adsT) * Math.min(1, dt * 12);
   // the opponent glides to the last place they reported
   const o = d.opp, k = Math.min(1, dt * 14);
   o.x += (o.tx - o.x) * k;
@@ -666,10 +880,12 @@ function duelFrame(d, now) {
   let dy = o.tyaw - o.yaw;
   dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   o.yaw += dy * k;
+  duelPickups(d, now, dt);
   duelDraw(d, now, dt);
   if (now - d.lastSend > 50 && d.connected && !d.solo) {
     d.lastSend = now;
-    duelSend(d, "fast", { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), y: +me.y.toFixed(2), yaw: +me.yaw.toFixed(3), hp: me.hp, d: me.dead ? 1 : 0, sp: +me.speed.toFixed(1) });
+    const pw = me.power && now < me.power.until ? DUEL_PWCODE[me.power.kind] : 0;
+    duelSend(d, "fast", { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), y: +me.y.toFixed(2), yaw: +me.yaw.toFixed(3), hp: me.hp, d: me.dead ? 1 : 0, sp: +me.speed.toFixed(1), st: me.st, w: me.w, pw });
   }
   d.flash = Math.max(0, d.flash - dt * 2.2);
   d.marker = Math.max(0, d.marker - dt * 4);
@@ -678,11 +894,56 @@ function duelFrame(d, now) {
   r.querySelector("#duelFlash").style.opacity = d.flash;
   r.querySelector("#duelDmg").style.opacity = Math.max(0, d.flash * 1.2 - 0.1);
   r.querySelector("#duelHit").style.opacity = d.marker;
-  r.querySelector("#duelCross").style.setProperty("--gap", (6 + (me.moving ? (me.running ? 12 : 5) : 0) + (me.grounded ? 0 : 8) + d.kick * 14) + "px");
+  r.querySelector("#duelCross").style.setProperty("--gap", (6 + (me.moving ? (me.running ? 12 : 5) : 0) + (me.grounded ? 0 : 8) + d.kick * 14 - d.adsT * 4) + "px");
+  r.querySelector("#duelScope").classList.toggle("hidden", !(me.w === "sn" && d.adsT > 0.85 && !me.dead));
+  r.querySelector("#duelCross").style.opacity = me.w === "sn" && d.adsT > 0.85 ? 0 : 1;
   duelAmmoHud(d, now);
-  duelMap(d);
+  duelMap(d, now);
   if ((d.frames = (d.frames || 0) + 1) % 6 === 0) duelTalking(d);
-  if (me.ammo === 0 && d.fireDown && now - d.lastShot > 300 && !me.dead && now >= me.reloadUntil) { d.lastShot = now; duelSound(d, "empty"); duelReload(d); }
+  if (me.mag[me.w] === 0 && d.fireDown && now - d.lastShot > 300 && !me.dead && !me.reload) { d.lastShot = now; duelSound(d, "empty"); duelReload(d); }
+}
+
+/** Walk into a pickup to take it. */
+function duelTakePicks(d, now) {
+  const me = d.me;
+  DUEL_PICKS.forEach((p, i) => {
+    const s = d.picks[i];
+    if (!s.on || Math.hypot(p.x - me.x, p.z - me.z) > 1.3 || Math.abs(me.y - 0) > 1.5) return;
+    if (p.k === "band" && me.inv.band >= 5) return;
+    if (p.k === "med" && me.inv.med >= 2) return;
+    if (p.k === "sn" && me.have.sn && me.res.sn >= DUEL_WEAPONS.sn.cap) return;
+    duelTake(d, i, now, true);
+  });
+}
+
+/** `mine`: I took it (apply it to me and tell the other browser); otherwise the other player took it (just hide it). */
+function duelTake(d, i, now, mine) {
+  const p = DUEL_PICKS[i], s = d.picks[i], me = d.me;
+  s.on = false;
+  s.until = now + DUEL_PBACK[p.k];
+  if (!mine) return;
+  duelSend(d, "safe", { t: "pick", i });
+  duelSound(d, p.k === "speed" || p.k === "shield" || p.k === "rage" ? "power" : "pick");
+  if (p.k === "band") { me.inv.band = Math.min(5, me.inv.band + 3); duelFeed(d, "Picked up <b>3 bandages</b>", "good"); }
+  else if (p.k === "med") { me.inv.med = Math.min(2, me.inv.med + 1); duelFeed(d, "Picked up a <b>medkit</b>", "good"); }
+  else if (p.k === "ammo") { DUEL_WORDER.forEach((w) => { if (me.have[w]) me.res[w] = Math.min(DUEL_WEAPONS[w].cap, me.res[w] + DUEL_WEAPONS[w].pack); }); duelFeed(d, "Picked up <b>ammo</b>", "good"); }
+  else if (p.k === "sn") {
+    me.have.sn = true; me.res.sn = Math.min(DUEL_WEAPONS.sn.cap, me.res.sn + DUEL_WEAPONS.sn.pack + 5);
+    if (me.mag.sn === 0) { const take = Math.min(DUEL_WEAPONS.sn.mag, me.res.sn); me.mag.sn = take; me.res.sn -= take; }
+    duelFeed(d, "Picked up the <b>sniper rifle</b> (key 3)", "good");
+  } else { me.power = { kind: p.k, until: now + DUEL_POWER_MS }; duelFeed(d, "<b>" + DUEL_PNAME[p.k] + "</b> for 10 seconds!", "good"); }
+  d.ammoShown = ""; d.invShown = "";
+}
+
+/** The pickups spin and bob, and come back after their wait. */
+function duelPickups(d, now, dt) {
+  DUEL_PICKS.forEach((p, i) => {
+    const s = d.picks[i], m = d.pickMeshes[i];
+    if (!s.on && now >= s.until) s.on = true;
+    if (!m) return;
+    m.visible = s.on;
+    if (s.on) { const it = m.userData.item; it.rotation.y += dt * 1.6; it.position.y = 0.85 + Math.sin(now / 400 + i) * 0.1; }
+  });
 }
 
 function duelAim(d) {
@@ -690,19 +951,31 @@ function duelAim(d) {
   return { a: [-Math.sin(me.yaw) * ce, Math.sin(me.el), -Math.cos(me.yaw) * ce], right: [Math.cos(me.yaw), 0, -Math.sin(me.yaw)] };
 }
 
-/** Over the player's right shoulder, 4.2 behind; the crosshair is the middle of this view. */
+/** How far behind and to the right the camera sits, and its field of view. Aiming brings it in; a sniper scope puts it at the eyes. */
+function duelCamParams(d) {
+  const t = d.adsT, sn = d.me.w === "sn";
+  return {
+    dist: sn ? 4.2 + (0.15 - 4.2) * t : 4.2 + (2.6 - 4.2) * t,
+    side: sn ? 0.8 * (1 - t) : 0.8 + (0.5 - 0.8) * t,
+    fov: sn ? 65 + (14 - 65) * t : 65 + (50 - 65) * t,
+  };
+}
+
+/** Over the player's shoulder; the crosshair is the middle of this view. */
 function duelCamPos(d) {
-  const me = d.me, { a, right } = duelAim(d), dist = 4.2, lim = DUEL_HALF - 0.3;
-  return [Math.max(-lim, Math.min(lim, me.x - a[0] * dist + right[0] * 0.8)), Math.max(me.y + 0.5, me.y + 1.6 - a[1] * dist), Math.max(-lim, Math.min(lim, me.z - a[2] * dist + right[2] * 0.8))];
+  const me = d.me, { a, right } = duelAim(d), { dist, side } = duelCamParams(d), lim = DUEL_HALF - 0.3;
+  return [Math.max(-lim, Math.min(lim, me.x - a[0] * dist + right[0] * side)), Math.max(me.y + 0.4, me.y + me.eyeH - a[1] * dist), Math.max(-lim, Math.min(lim, me.z - a[2] * dist + right[2] * side))];
 }
 
 function duelDraw(d, now, dt) {
   const T = window.THREE, me = d.me, o = d.opp;
   const blink = now < me.safeUntil && Math.floor(now / 120) % 2;
+  const scoped = me.w === "sn" && d.adsT > 0.85;
+  const myPw = me.power && now < me.power.until ? DUEL_PWCODE[me.power.kind] : 0;
   d.meFig.root.position.set(me.x, me.y, me.z);
   d.meFig.root.rotation.y = me.yaw;
-  d.meFig.root.visible = !blink;
-  duelPose(d.meFig, { speed: me.speed, phase: me.phase, dead: me.dead, grounded: me.grounded }, dt, now);
+  d.meFig.root.visible = !blink && !scoped;
+  duelPose(d.meFig, { speed: me.speed, phase: me.phase, dead: me.dead, grounded: me.grounded, st: me.st, w: me.w, pw: myPw }, dt, now);
   me.phase += dt * (3 + me.speed * 1.25);
   d.oppFig.root.position.set(o.x, o.y, o.z);
   d.oppFig.root.rotation.y = o.yaw;
@@ -713,17 +986,19 @@ function duelDraw(d, now, dt) {
   if (d.oppTag.hp !== o.hp) { d.oppTag.hp = o.hp; d.oppTag.draw(o.hp); }
   const cp = duelCamPos(d);
   const { a } = duelAim(d);
+  const params = duelCamParams(d);
   // the camera pulls in when a wall is behind the player
-  const head = new T.Vector3(me.x, me.y + 1.5, me.z), to = new T.Vector3(cp[0] - me.x, cp[1] - me.y - 1.5, cp[2] - me.z);
+  const eyeY = me.y + me.eyeH - 0.1;
+  const head = new T.Vector3(me.x, eyeY, me.z), to = new T.Vector3(cp[0] - me.x, cp[1] - eyeY, cp[2] - me.z);
   const len = to.length();
-  if (len > 0.01) {
+  if (len > 0.5) {
     to.normalize();
     const wall = new T.Raycaster(head, to, 0, len + 0.3).intersectObjects(d.solids, false)[0];
-    if (wall && wall.distance < len + 0.3) { const k = Math.max(0.15, (wall.distance - 0.3) / len); cp[0] = me.x + (cp[0] - me.x) * k; cp[1] = me.y + 1.5 + (cp[1] - me.y - 1.5) * k; cp[2] = me.z + (cp[2] - me.z) * k; }
+    if (wall && wall.distance < len + 0.3) { const k = Math.max(0.15, (wall.distance - 0.3) / len); cp[0] = me.x + (cp[0] - me.x) * k; cp[1] = eyeY + (cp[1] - eyeY) * k; cp[2] = me.z + (cp[2] - me.z) * k; }
   }
   d.cam.position.set(cp[0], cp[1], cp[2]);
-  const targetFov = me.running && me.moving ? 74 : 65;
-  d.fov += (targetFov - d.fov) * Math.min(1, dt * 8);
+  const targetFov = params.fov + (me.running && me.moving ? 9 : 0) + (duelPowerOn(me, "speed", now) && me.moving ? 4 : 0);
+  d.fov = d.fov === undefined ? targetFov : d.fov + (targetFov - d.fov) * Math.min(1, dt * 10);
   if (Math.abs(d.cam.fov - d.fov) > 0.05) { d.cam.fov = d.fov; d.cam.updateProjectionMatrix(); }
   const kick = d.kick * 0.03;
   d.cam.lookAt(d.cam.position.x + a[0] * 50, d.cam.position.y + (a[1] + kick) * 50, d.cam.position.z + a[2] * 50);
@@ -736,7 +1011,7 @@ function duelDraw(d, now, dt) {
   d.renderer.render(d.scene, d.cam);
 }
 
-/** The corner map: cover, you (arrow) and the other player. */
+/** The corner map: cover, pickups, you (arrow) and the other player. */
 function duelMap(d) {
   const c = d.map, S = 120, k = S / (DUEL_HALF * 2), me = d.me, o = d.opp;
   c.clearRect(0, 0, S, S);
@@ -745,6 +1020,11 @@ function duelMap(d) {
     c.fillStyle = kind === "t" ? "#2f7a3a" : kind === "c" ? "#b58a4f" : kind === "k" ? "#b34a3a" : "#9aa0a8";
     if (kind === "t") { c.beginPath(); c.arc((x + DUEL_HALF) * k, (z + DUEL_HALF) * k, 2.2, 0, 6.3); c.fill(); } else c.fillRect((x - w / 2 + DUEL_HALF) * k, (z - dp / 2 + DUEL_HALF) * k, w * k, dp * k);
   }
+  DUEL_PICKS.forEach((p, i) => {
+    if (!d.picks[i].on) return;
+    c.fillStyle = p.k === "band" || p.k === "med" ? "#5cff7a" : "#" + DUEL_PCOL[p.k].toString(16).padStart(6, "0");
+    c.fillRect((p.x + DUEL_HALF) * k - 2, (p.z + DUEL_HALF) * k - 2, 4, 4);
+  });
   if (!o.dead && (d.connected || d.solo)) { c.fillStyle = "#ff4d4d"; c.beginPath(); c.arc((o.x + DUEL_HALF) * k, (o.z + DUEL_HALF) * k, 4, 0, 6.3); c.fill(); }
   c.save();
   c.translate((me.x + DUEL_HALF) * k, (me.z + DUEL_HALF) * k);
@@ -768,44 +1048,49 @@ function duelRaySphere(o, dir, c, r) {
 }
 
 function duelShoot(d, now) {
-  const T = window.THREE, me = d.me, o = d.opp;
+  const T = window.THREE, me = d.me, o = d.opp, W = DUEL_WEAPONS[me.w];
   now = now || performance.now();
-  if (me.dead || d.over || now < me.reloadUntil) return;
-  if (me.ammo <= 0) { duelReload(d); return; }
-  me.ammo--;
+  if (me.dead || d.over || me.reload || now < me.switchUntil) return;
+  if (me.mag[me.w] <= 0) { duelReload(d); return; }
+  me.mag[me.w]--;
   d.lastShot = now;
+  duelCancelUse(d);
   const aim = duelAim(d), right = aim.right;
-  // the shot spreads more when running, jumping or moving, and the view kicks up a little
-  const spread = 0.004 + (me.moving ? 0.008 : 0) + (me.running ? 0.012 : 0) + (me.grounded ? 0 : 0.02);
+  const scoped = me.w === "sn" && d.adsT > 0.85;
+  // the shot spreads more when moving, running or in the air (and a lot for an un-scoped sniper); aiming tightens it; the view kicks up
+  const spread = (W.spread + (me.moving ? 0.008 : 0) + (me.running ? 0.012 : 0) + (me.grounded ? 0 : 0.02) + (me.w === "sn" && !scoped ? 0.03 : 0)) * (me.ads ? 0.4 : 1) * (me.st ? 0.7 : 1);
   const a0 = aim.a, a = [a0[0] + (Math.random() - 0.5) * spread * 2, a0[1] + (Math.random() - 0.5) * spread * 2, a0[2] + (Math.random() - 0.5) * spread * 2];
   const al = Math.hypot(a[0], a[1], a[2]);
   a[0] /= al; a[1] /= al; a[2] /= al;
-  d.kick = Math.min(1.2, d.kick + 0.35);
-  const cam = duelCamPos(d), dist = 4.2;
+  d.kick = Math.min(1.4, d.kick + W.kick);
+  const cam = duelCamPos(d), dist = duelCamParams(d).dist;
   const origin = [cam[0] + a[0] * dist, cam[1] + a[1] * dist, cam[2] + a[2] * dist];
-  const ray = new T.Raycaster(new T.Vector3(...origin), new T.Vector3(...a), 0, 90);
+  const ray = new T.Raycaster(new T.Vector3(...origin), new T.Vector3(...a), 0, 120);
   const wall = ray.intersectObjects(d.solids, false)[0];
-  let tMax = wall ? wall.distance : 90, hit = 0, head = false;
+  let tMax = wall ? wall.distance : 120, hit = 0, head = false;
   if (!o.dead) {
-    const h = duelRaySphere(origin, a, [o.x, o.y + 1.58, o.z], 0.27);
-    const b = duelRaySphere(origin, a, [o.x, o.y + 0.85, o.z], 0.5);
-    if (h >= 0 && h < tMax) { tMax = h; hit = DUEL_HEAD; head = true; }
-    else if (b >= 0 && b < tMax) { tMax = b; hit = DUEL_BODY; }
+    const ost = o.st || 0;
+    const h = duelRaySphere(origin, a, [o.x, o.y + DUEL_HEADY[ost], o.z], 0.27);
+    const b = duelRaySphere(origin, a, [o.x, o.y + DUEL_BODYY[ost], o.z], ost === 2 ? 0.42 : 0.5);
+    const mult = duelPowerOn(me, "rage", now) ? 2 : 1;
+    if (h >= 0 && h < tMax) { tMax = h; hit = W.head * mult; head = true; }
+    else if (b >= 0 && b < tMax) { tMax = b; hit = W.dmg * mult; }
   }
-  const muzzle = [me.x + right[0] * 0.2 - Math.sin(me.yaw) * 1.0, me.y + 1.2, me.z + right[2] * 0.2 - Math.cos(me.yaw) * 1.0];
+  const muzzle = [me.x + right[0] * 0.2 - Math.sin(me.yaw) * W.len, me.y + DUEL_MUZZY[me.st], me.z + right[2] * 0.2 - Math.cos(me.yaw) * W.len];
   const end = [origin[0] + a[0] * tMax, origin[1] + a[1] * tMax, origin[2] + a[2] * tMax];
   duelTracer(d, muzzle, end);
   d.meFig.flashUntil = now + 55;
-  duelSound(d, "shot");
-  duelSend(d, "fast", { t: "shot", a: muzzle, b: end });
+  duelSound(d, me.w === "sn" ? "snipe" : "shot");
+  duelSend(d, "fast", { t: "shot", a: muzzle, b: end, w: me.w });
   if (hit) {
     d.marker = 1;
     o.hp = Math.max(0, o.hp - hit);
     d.root.querySelector("#duelHit").className = head ? "head" : "";
     duelSound(d, head ? "head" : "hit");
     duelDamageNumber(d, hit, head);
-    duelSend(d, "safe", { t: "hit", d: hit });
+    duelSend(d, "safe", { t: "hit", d: hit, h: head ? 1 : 0 });
   }
+  if (me.mag[me.w] === 0 && me.res[me.w] > 0) d.timers.push(setTimeout(() => { if (!d.closed) duelReload(d); }, 250));
 }
 
 /** A number floating up from the opponent when you hit them. */
@@ -814,7 +1099,7 @@ function duelDamageNumber(d, dmg, head) {
   const v = new T.Vector3(o.x, o.y + 2.0, o.z).project(d.cam);
   const el = document.createElement("div");
   el.className = "duel-dmgnum" + (head ? " head" : "");
-  el.textContent = (head ? "HEADSHOT " : "") + dmg;
+  el.textContent = (head ? "HEADSHOT " : "") + Math.round(dmg);
   el.style.left = (v.x * 0.5 + 0.5) * window.innerWidth + "px";
   el.style.top = (-v.y * 0.5 + 0.5) * window.innerHeight + "px";
   d.root.appendChild(el);
@@ -829,12 +1114,14 @@ function duelTracer(d, a, b) {
   d.tracers.push({ line, life: 7 });
 }
 
-function duelGotHit(d, dmg) {
+function duelGotHit(d, dmgIn, head) {
   const me = d.me, now = performance.now();
   if (me.dead || d.over || now < me.safeUntil) return;
+  const dmg = duelPowerOn(me, "shield", now) ? dmgIn * 0.4 : dmgIn;
   me.hp = Math.max(0, me.hp - dmg);
-  d.lastHeadHit = dmg === DUEL_HEAD;
+  d.lastHeadHit = Boolean(head);
   d.flash = 1;
+  duelCancelUse(d);
   // a red wedge on the side the shot came from
   const dx = d.opp.x - me.x, dz = d.opp.z - me.z;
   const lx = dx * Math.cos(me.yaw) - dz * Math.sin(me.yaw), ly = -dx * Math.sin(me.yaw) - dz * Math.cos(me.yaw);
@@ -842,7 +1129,8 @@ function duelGotHit(d, dmg) {
   duelSound(d, "hurt");
   if (me.hp > 0) { duelHud(d); return; }
   me.dead = true;
-  me.reloadUntil = 0;
+  duelCancelReload(d);
+  me.ads = false; me.power = null;
   d.deaths++;
   duelSend(d, "safe", { t: "died", hs: d.lastHeadHit ? 1 : 0 });
   duelFeed(d, "<b>" + duelEsc(d.oppName) + "</b> eliminated you" + (d.lastHeadHit ? " 💀" : ""), "bad");
@@ -850,7 +1138,7 @@ function duelGotHit(d, dmg) {
   if (d.deaths >= DUEL_WIN) { d.over = true; document.exitPointerLock && document.exitPointerLock(); }
   else {
     const spot = DUEL_SPAWNS.map((p, i) => [Math.hypot(p[0] - d.opp.x, p[1] - d.opp.z), i]).sort((x, y) => y[0] - x[0])[0][1];
-    d.timers.push(setTimeout(() => { if (!d.closed && !d.over) { duelSpawn(d, spot); d.ammoShown = -2; duelHud(d); } }, DUEL_RESPAWN_MS));
+    d.timers.push(setTimeout(() => { if (!d.closed && !d.over) { duelSpawn(d, spot); duelHud(d); } }, DUEL_RESPAWN_MS));
   }
   duelHud(d);
 }
@@ -866,16 +1154,18 @@ function duelOnMessage(d, raw) {
   switch (m.t) {
     case "p":
       o.tx = +m.x || 0; o.tz = +m.z || 0; o.ty = +m.y || 0; o.tyaw = +m.yaw || 0; o.hp = +m.hp; o.dead = Boolean(m.d); o.sp = +m.sp || 0;
+      o.st = m.st === 1 || m.st === 2 ? m.st : 0; o.w = DUEL_WEAPONS[m.w] ? m.w : "ar"; o.pw = m.pw === 1 || m.pw === 2 || m.pw === 3 ? m.pw : 0;
       if (!o.seen) { o.seen = true; o.x = o.tx; o.z = o.tz; o.y = o.ty; o.yaw = o.tyaw; }
       break;
     case "shot":
       if (Array.isArray(m.a) && Array.isArray(m.b)) {
         duelTracer(d, m.a.map(Number), m.b.map(Number));
         d.oppFig.flashUntil = performance.now() + 55;
-        duelSound(d, "shot", Math.max(0.15, 1 - Math.hypot(o.x - d.me.x, o.z - d.me.z) / 50));
+        duelSound(d, m.w === "sn" ? "snipe" : "shot", Math.max(0.15, 1 - Math.hypot(o.x - d.me.x, o.z - d.me.z) / 50));
       }
       break;
-    case "hit": duelGotHit(d, m.d === DUEL_HEAD ? DUEL_HEAD : DUEL_BODY); break;
+    case "hit": duelGotHit(d, Math.max(1, Math.min(150, +m.d || 0)), m.h === 1); break;
+    case "pick": { const i = +m.i; if (Number.isInteger(i) && d.picks[i]) duelTake(d, i, performance.now(), false); break; }
     case "died":
       if (!d.over) {
         d.kills++; o.dead = true;
@@ -896,8 +1186,8 @@ function duelRematchCheck(d) {
   d.rematch = [false, false];
   d.kills = 0; d.deaths = 0; d.over = false; d.status = "";
   d.opp.hp = DUEL_HP; d.opp.dead = false;
+  d.picks.forEach((s) => { s.on = true; s.until = 0; });
   duelSpawn(d, d.host ? 0 : 1);
-  d.ammoShown = -2;
   duelHud(d);
 }
 
