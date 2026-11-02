@@ -352,6 +352,7 @@ function renderActiveRooms(list) {
     box.append(li);
   }
 }
+$("joinCode").addEventListener("input", () => { $("joinPinRow").classList.add("hidden"); $("joinPin").value = ""; }); // a different room: the PIN box only comes back if that room is off
 $("activeRefresh").addEventListener("click", () => loadActiveRooms(true));
 setInterval(loadActiveRooms, 6000);
 
