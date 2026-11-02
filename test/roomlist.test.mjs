@@ -69,11 +69,17 @@ test('turning a room off locks it: it leaves other lists and a new person needs 
   assert.equal((await call({ op: 'roomOn', sys: cat, target: 'rl-cat' })).code, 200);
   assert.equal((await call({ op: 'join', sys: gus, room: 'rl-cat' })).code, 200, 'open to everyone again, and the tries are forgotten');
 
-  // another room's co-admin cannot lock it; the real admin can lock any room; no such room
+  // only the creator can lock a room: not another player, and not the admin account either when a player made it; no such room
   const eve = await pub('Eve');
   await call({ op: 'join', sys: eve, room: 'rl-eve', create: true });
   assert.equal((await call({ op: 'roomOff', sys: cat, target: 'rl-eve', pin: '1111' })).code, 401);
-  assert.equal((await call({ op: 'roomOff', sys: admin, target: 'rl-eve', pin: '1111' })).code, 200, 'the admin can lock any room');
+  assert.equal((await call({ op: 'roomOff', sys: admin, target: 'rl-eve', pin: '1111' })).code, 401, 'the admin did not create it');
+  assert.equal((await call({ op: 'roomOff', sys: eve, target: 'rl-eve', pin: '1111' })).code, 200, 'its creator can');
+  // a room the admin made belongs to the admin account; a player who joined it cannot lock it
+  await call({ op: 'join', sys: admin, room: 'rl-adm', create: true });
+  await call({ op: 'join', sys: eve, room: 'rl-adm' });
+  assert.equal((await call({ op: 'roomOff', sys: eve, target: 'rl-adm', pin: '1111' })).code, 401);
+  assert.equal((await call({ op: 'roomOff', sys: admin, target: 'rl-adm', pin: '1111' })).code, 200);
   assert.equal((await call({ op: 'roomOff', sys: admin, target: 'rl-nope', pin: '1111' })).code, 400, 'no such room');
 });
 
@@ -86,9 +92,21 @@ test('a room whose admin is out of it stays in their list (with Turn off), but n
   await withRoom('rl-idle', (s) => { for (const m of s.members) m.lastSeen = 0; }); // everybody has left
   const idle = (await call({ op: 'roomList', sys: gil })).body.rooms.find((r) => r.code === 'rl-idle');
   assert.deepEqual([idle.online, idle.canOff], [0, true], 'its own co-admin still sees it, with the button');
-  assert.equal((await codes(admin)).includes('rl-idle'), true, 'and so does the real admin');
+  assert.equal((await codes(admin)).includes('rl-idle'), false, 'the admin account did not create it, so it is not in their list');
   assert.equal((await codes(hal)).includes('rl-idle'), false, 'an empty room is not offered to anybody else');
   // everybody leaves for good: the room is empty, so it is no longer offered to anyone
   await call({ op: 'leave', room: 'rl-idle', playerId: (await call({ op: 'join', sys: gil, room: 'rl-idle' })).body.state.you });
   assert.equal((await codes(admin)).includes('rl-idle'), false, 'an empty room is not listed, not even for the admin');
+});
+
+test('a room made before owners were recorded (like main) belongs to whoever joined it first; the admin account is the admin of its rooms', async () => {
+  const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
+  const ivy = await pub('Ivy');
+  await call({ op: 'join', sys: admin, room: 'rl-main', create: true });
+  const { withRoom } = await import('../api/_lib/store.js');
+  await withRoom('rl-main', (s) => { delete s.owner; delete s.ownerRole; });
+  const row = (await call({ op: 'roomList', sys: admin })).body.rooms.find((r) => r.code === 'rl-main');
+  assert.equal(row.canOff, true, 'first member was the admin account, so the admin account owns it');
+  await call({ op: 'join', sys: ivy, room: 'rl-main' });
+  assert.equal((await call({ op: 'roomOff', sys: ivy, target: 'rl-main', pin: '1234' })).code, 401, 'a later player does not');
 });

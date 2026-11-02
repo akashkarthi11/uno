@@ -228,14 +228,20 @@ async function handle(req, res) {
 
     // The room screen's list of active rooms (somebody is online in them), and turning a room off from there. Each role sees only the rooms it
     // could join: public players public rooms, private players private rooms; the admin and the observer see both. A public player is never
-    // told a private room exists. A room can be turned off by the real admin, or, for a public room, by its appointed co-admin (the first
-    // public player in, or whoever the admin allowed to start games).
+    // told a private room exists. A room can be turned off only by its own admin: the person who created it.
     if (b.op === 'roomList' || b.op === 'roomOff' || b.op === 'roomOn') {
       const sys = verifyToken(String(b.sys ?? ''), '*', now, SYS_SALT);
       if (!sys) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
       const seesAll = sys.role === 'admin' || sys.role === 'observer';
-      const canOff = (room) => sys.role === 'admin' || (sys.role === 'public' && !room.private
-        && (room.members || []).some((m) => !m.bot && !m.observer && m.starter && String(m.name).toLowerCase() === String(sys.n).toLowerCase()));
+      // The room's own admin is whoever created it. A room made before that was recorded (like "main") belongs to whoever joined it first.
+      // A room the admin account made belongs to the admin account, so a new admin takes it over; a public player's room stays with that player.
+      const canOff = (room) => {
+        const first = (room.members || []).find((m) => !m.bot && !m.observer);
+        const owner = room.owner ? { n: room.owner, role: room.ownerRole } : first ? { n: first.name, role: first.role } : null;
+        if (!owner) return sys.role === 'admin';
+        if (owner.role === 'admin') return sys.role === 'admin';
+        return sys.role === owner.role && String(owner.n).toLowerCase() === String(sys.n).toLowerCase();
+      };
       // "Off" locks the room: it keeps its game and players but leaves everyone else's list, and a new person needs the PIN the admin chose
       // to join it ("On" removes the PIN). Players already in the room are not affected.
       if (b.op === 'roomOff' || b.op === 'roomOn') {
@@ -285,6 +291,7 @@ async function handle(req, res) {
       let claim;
       const state = await withRoom(rc, (s) => {
         G.tick(s, now);
+        if (!s.owner && !s.members.length && sys.role !== 'observer') { s.owner = sys.n; s.ownerRole = sys.role; } // whoever opens the room owns it
         const me = G.join(s, { name: sys.n, admin: sys.role === 'admin', role: sys.role, playerId: b.playerId, observer: sys.role === 'observer' }, now);
         claim = { r: rc, p: me.id, role: sys.role, n: me.name, co: false, obs: Boolean(me.observer), a0: Boolean(sys.a0) };
         return G.view(s, me, now);
@@ -352,6 +359,7 @@ async function handle(req, res) {
       const state = await withRoom(code, (s) => {
         G.tick(s, now);
         const role = admin ? 'admin' : observer ? 'observer' : pw === PRIVATE_PASSWORD ? 'private' : 'public';
+        if (!s.owner && !s.members.length && !observer) { s.owner = joinName; s.ownerRole = role; }
         const me = G.join(s, { name: observer ? 'Observer' : joinName, admin, role, playerId: b.playerId, observer }, now);
         claim = { r: code, p: me.id, role, n: me.name, co: false, obs: Boolean(me.observer) };
         return G.view(s, me, now);

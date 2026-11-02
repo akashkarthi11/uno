@@ -315,7 +315,8 @@ co-admin. Listing uses one Redis scan and one batched read, only while the windo
 
 After signing in, the room screen lists the **active rooms** (somebody is online in them) that the signed-in person could join: public players see public rooms,
 private players private rooms, the admin and the observer both. A public player is never told a private room exists. Tap **Join** to go in.
-The real admin, and the co-admin of a public room (the first public player in, or whoever the admin allowed to start games), also get **Turn off** on that
-room. It asks for a **PIN of 4 to 8 digits**. Off means *locked*: the room keeps its game and players, but it leaves everyone else's list and a new person must
+The room's own admin, the person who **created** it, also gets **Turn off** on that room (nobody else does, not even another admin or co-admin). The
+creator is recorded when the room is opened; a room from before that (like `main`) belongs to whoever joined it first. A room made by the admin account belongs to
+the admin account, so if the admin account changes, the new admin sees those rooms; a player's room stays with that player. It asks for a **PIN of 4 to 8 digits**. Off means *locked*: the room keeps its game and players, but it leaves everyone else's list and a new person must
 type the PIN to join (players already inside, the real admin and the observer are not asked). Five wrong PINs stop all guessing for five minutes.
 The room still shows for whoever can turn it off, as **🔒 PIN** with a **Turn on** button that removes the PIN. The PIN is kept only as a salted hash in the room (`pinHash`).
