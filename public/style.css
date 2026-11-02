@@ -1550,3 +1550,5 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 #duelOver.hidden { display: none; }
 #duelOver h2 { font-size: clamp(28px, 7vw, 54px); margin: 0; letter-spacing: .04em; color: #ffd23f; text-shadow: 0 3px 10px rgba(0,0,0,.6); }
 #duelOver button { min-width: 220px; }
+#duelMic.off { background: rgba(170,30,30,.85); }
+#duelScore .op.talk { text-shadow: 0 0 8px #ffb070, 0 0 14px #ffb070; }

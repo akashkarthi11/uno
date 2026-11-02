@@ -91,7 +91,7 @@ async function duelOpen({ host, oppId, oppName, solo }) {
   duelBind(d);
   d.last = performance.now();
   d.raf = requestAnimationFrame((t) => duelFrame(d, t));
-  if (d.solo) { d.status = ""; d.connected = true; } else duelConnect(d);
+  if (d.solo) { d.status = ""; d.connected = true; } else { await duelStartMic(d); if (!d.closed) duelConnect(d); }
   duelHud(d);
 }
 
@@ -104,7 +104,7 @@ function duelBuildUi(d) {
     '<canvas id="duelCanvas"></canvas>' +
     '<div id="duelDmg"></div><div id="duelFlash"></div><div id="duelLow"></div>' +
     '<div class="duel-top"><canvas id="duelMap" width="120" height="120"></canvas><div id="duelScore"></div>' +
-    '<div class="duel-btns"><button id="duelGear" type="button" aria-label="Settings">⚙</button><button id="duelLeave" type="button">✕</button></div></div>' +
+    '<div class="duel-btns"><button id="duelMic" type="button" aria-label="Microphone">🎤</button><button id="duelGear" type="button" aria-label="Settings">⚙</button><button id="duelLeave" type="button">✕</button></div></div>' +
     '<div id="duelSet" class="hidden"><label>Sensitivity <input id="duelSens" type="range" min="0.4" max="2.2" step="0.1"></label>' +
     '<label class="duel-chk"><input id="duelSnd" type="checkbox"> Sound</label></div>' +
     '<ul id="duelFeed"></ul>' +
@@ -127,6 +127,12 @@ function duelBuildUi(d) {
   const q = (id) => root.querySelector(id);
   q("#duelLeave").addEventListener("click", () => duelClose(true));
   q("#duelOut").addEventListener("click", () => duelClose(true));
+  q("#duelMic").addEventListener("click", () => {
+    if (!d.mic) { toast("Microphone not allowed. Allow it in the browser, then reopen the duel."); return; }
+    d.micOn = !d.micOn;
+    d.mic.getAudioTracks().forEach((tr) => { tr.enabled = d.micOn; });
+    duelMicHud(d);
+  });
   q("#duelGear").addEventListener("click", () => q("#duelSet").classList.toggle("hidden"));
   q("#duelSens").value = d.sens;
   q("#duelSens").addEventListener("input", (e) => { d.sens = Number(e.target.value) || 1; duelSetPref("sens", d.sens); });
@@ -201,10 +207,61 @@ function duelClose(tell) {
   for (const [t, ev, fn, opt] of d.listeners) t.removeEventListener(ev, fn, opt);
   try { if (document.pointerLockElement) document.exitPointerLock(); } catch (e) { /* ignore */ }
   try { if (d.pc) d.pc.close(); } catch (e) { /* ignore */ }
+  try { if (d.mic) d.mic.getTracks().forEach((tr) => tr.stop()); } catch (e) { /* ignore */ }
   try { if (d.renderer) { d.renderer.dispose(); } } catch (e) { /* ignore */ }
   try { if (d.audio) d.audio.close(); } catch (e) { /* ignore */ }
   if (d.root) d.root.remove();
   if (state) duelSync(state);
+}
+
+/* ---------------- voice (the same direct connection carries it) ---------------- */
+
+async function duelStartMic(d) {
+  try {
+    d.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    d.micOn = true;
+    if (d.closed) d.mic.getTracks().forEach((tr) => tr.stop());
+  } catch (e) {
+    d.mic = null;
+    d.micOn = false;
+    toast("The microphone is off. Allow it in the browser to talk during the duel.");
+  }
+  duelMicHud(d);
+}
+
+function duelMicHud(d) {
+  const b = d.root && d.root.querySelector("#duelMic");
+  if (!b) return;
+  b.textContent = d.micOn ? "🎤" : "🔇";
+  b.classList.toggle("off", !d.micOn);
+  b.title = d.micOn ? "Mute your microphone" : d.mic ? "Unmute your microphone" : "Microphone not allowed";
+}
+
+/** The other player's voice: played from an audio element; a level meter lights their name while they talk. */
+function duelRemoteVoice(d, stream) {
+  let a = d.remoteAudio;
+  if (!a) { a = d.remoteAudio = document.createElement("audio"); a.autoplay = true; a.playsInline = true; d.root.appendChild(a); }
+  a.srcObject = stream;
+  a.play().catch(() => {});
+  try {
+    if (d.audio && !d.meter) {
+      const src = d.audio.createMediaStreamSource(stream), an = d.audio.createAnalyser();
+      an.fftSize = 256;
+      src.connect(an);
+      const buf = new Uint8Array(an.frequencyBinCount);
+      d.meter = { an, buf };
+    }
+  } catch (e) { /* the name just will not light up */ }
+}
+
+function duelTalking(d) {
+  const m = d.meter;
+  if (!m) return;
+  m.an.getByteTimeDomainData(m.buf);
+  let peak = 0;
+  for (let i = 0; i < m.buf.length; i++) peak = Math.max(peak, Math.abs(m.buf[i] - 128));
+  const op = d.root.querySelector("#duelScore .op");
+  if (op) op.classList.toggle("talk", peak > 14);
 }
 
 /* ---------------- sound (made in the browser, no files) ---------------- */
@@ -624,6 +681,7 @@ function duelFrame(d, now) {
   r.querySelector("#duelCross").style.setProperty("--gap", (6 + (me.moving ? (me.running ? 12 : 5) : 0) + (me.grounded ? 0 : 8) + d.kick * 14) + "px");
   duelAmmoHud(d, now);
   duelMap(d);
+  if ((d.frames = (d.frames || 0) + 1) % 6 === 0) duelTalking(d);
   if (me.ammo === 0 && d.fireDown && now - d.lastShot > 300 && !me.dead && now >= me.reloadUntil) { d.lastShot = now; duelSound(d, "empty"); duelReload(d); }
 }
 
@@ -882,6 +940,8 @@ function duelPeer(d, viaRelay) {
   const pc = d.pc = new RTCPeerConnection({ iceServers: [...base, ...relay] });
   const sid = d.sid;
   d.queue = [];
+  if (d.mic) d.mic.getTracks().forEach((tr) => pc.addTrack(tr, d.mic));
+  pc.ontrack = (e) => { if (e.streams && e.streams[0]) duelRemoteVoice(d, e.streams[0]); };
   pc.onicecandidate = (e) => { if (e.candidate && d.pc === pc) duelSignal(d, "ice", { sid, c: e.candidate }); };
   pc.onconnectionstatechange = () => {
     if (d.pc !== pc || d.closed) return;
