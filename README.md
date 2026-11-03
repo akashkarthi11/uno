@@ -366,3 +366,12 @@ Everyone in the room who is sharing sees everyone else who is sharing, and the r
 Positions are rounded to about a metre and kept only in the room (never in the database).
 Indoors, phone GPS can be off by 10-50 m. For room-level accuracy indoors, ESP32 or access-point readers could report an issued tag's position to the same
 `mapPos` action, which needs its own consent and a server-side check.
+
+## Cube puzzle
+
+A **🧊 Cube puzzle** button in the lobby of every room (not for the observer account) opens a full-screen 3D Rubik's cube (`public/cube.js`, the same three.js build as the duel,
+loaded when it is first opened). **Drag a face** to turn that layer (the layer follows your finger), **drag the background** to look around. **Scramble** mixes it with 22 animated
+moves; the clock starts with your first turn and stops by itself when every face is one colour, then shows your time and moves. **↺ Solved cube** resets it.
+The 🏆 button lists the room's best times: one per player (only a personal best is kept), top 10, kept in the room's state (`cubeBest`, op `cubeTime`).
+The cube runs in the browser, so the server only refuses implausible results (under 4 seconds, under 8 moves); it is for friends, not ranked play.
+

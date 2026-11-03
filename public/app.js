@@ -916,6 +916,7 @@ function renderLobby(s) {
   radarSync(s.map);
   if (!$("mapModal").classList.contains("hidden")) renderMap(s.map);
   if (typeof duelSync === "function") duelSync(s); // the 3D duel button (duel.js)
+  if (typeof cubeSync === "function") cubeSync(s); // the cube puzzle button and best times (cube.js)
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
   $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over) || s.canBot === false); // anyone may start a practice match against the bot
   $("lobbyCount").textContent = s.players.length + (s.players.length === 1 ? " player" : " players");
