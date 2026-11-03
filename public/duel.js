@@ -103,7 +103,7 @@ async function duelOpen({ host, oppId, oppName, solo }) {
     opp: { x: 0, y: 0, z: 0, yaw: 0, tx: 0, ty: 0, tz: 0, tyaw: 0, hp: DUEL_HP, dead: false, seen: false, speed: 0, phase: 0, st: 0, w: "ar", pw: 0, sp: 0 },
     kills: 0, deaths: 0, over: false, rematch: [false, false], keys: {}, fireDown: false, lastShot: 0, lastSend: 0, lastHeadHit: false,
     joy: null, look: null, tracers: [], status: "Loading the arena…", pc: null, sid: "", chFast: null, chSafe: null,
-    connected: false, relayTried: false, startedAt: 0, queue: [], timers: [], listeners: [], flash: 0, marker: 0, kick: 0, adsT: 0,
+    connected: false, relayTried: false, startedAt: 0, t0: performance.now(), ping: 0, lastRx: 0, weak: false, route: "", netAt: 0, pingShown: "", queue: [], timers: [], listeners: [], flash: 0, marker: 0, kick: 0, adsT: 0,
     sens: Number(duelPref("sens", 1)) || 1, adsSens: Number(duelPref("ads", 0.7)) || 0.7, sound: duelPref("snd", "1") === "1",
     sprintTouch: false, jumpTouch: false, invShown: "", ammoShown: "", lastMsg: "", picks: DUEL_PICKS.map(() => ({ on: true, until: 0 })), pickMeshes: [],
   };
@@ -130,7 +130,7 @@ function duelBuildUi(d) {
   root.innerHTML =
     '<canvas id="duelCanvas"></canvas><div id="duelScope" class="hidden"></div>' +
     '<div id="duelDmg"></div><div id="duelFlash"></div><div id="duelLow"></div>' +
-    '<div class="duel-top"><canvas id="duelMap" width="120" height="120"></canvas><div id="duelScore"></div>' +
+    '<div class="duel-top"><canvas id="duelMap" width="120" height="120"></canvas><div id="duelScore"></div><div id="duelPing" class="hidden"></div>' +
     '<div class="duel-btns"><button id="duelMic" type="button" aria-label="Microphone">🎤</button><button id="duelGear" type="button" aria-label="Settings">⚙</button><button id="duelLeave" type="button">✕</button></div></div>' +
     '<div id="duelPower" class="hidden"></div>' +
     '<div id="duelSet" class="hidden"><label>Sensitivity <input id="duelSens" type="range" min="0.4" max="2.2" step="0.1"></label>' +
@@ -975,6 +975,7 @@ function duelFrame(d, now) {
   o.yaw += dy * k;
   duelPickups(d, now, dt);
   duelDraw(d, now, dt);
+  duelNet(d, now);
   if (now - d.lastSend > 50 && d.connected && !d.solo) {
     d.lastSend = now;
     const pw = me.power && now < me.power.until ? DUEL_PWCODE[me.power.kind] : 0;
@@ -1332,8 +1333,12 @@ const duelEsc = (s) => String(s).replace(/[<>&"']/g, "");
 function duelOnMessage(d, raw) {
   let m;
   try { m = JSON.parse(raw); } catch (e) { return; }
+  if (!m || typeof m !== "object") return;
   const o = d.opp;
+  d.lastRx = performance.now();
   switch (m.t) {
+    case "ping": duelSend(d, "fast", { t: "pong", n: +m.n || 0 }); break;
+    case "pong": { const rtt = performance.now() - (+m.n || 0); if (rtt >= 0 && rtt < 10000) d.ping = d.ping ? d.ping * 0.7 + rtt * 0.3 : rtt; break; }
     case "p":
       o.tx = +m.x || 0; o.tz = +m.z || 0; o.ty = +m.y || 0; o.tyaw = +m.yaw || 0; o.hp = +m.hp; o.dead = Boolean(m.d); o.sp = +m.sp || 0;
       o.st = m.st === 1 || m.st === 2 ? m.st : 0; o.w = DUEL_WEAPONS[m.w] ? m.w : "ar"; o.pw = m.pw === 1 || m.pw === 2 || m.pw === 3 ? m.pw : 0;
@@ -1399,12 +1404,54 @@ function duelConnect(d) {
     hello();
     d.timers.push(setInterval(hello, 2500));
   }
-  d.timers.push(setInterval(() => { // nothing after a while: try through the relay, then give up
-    if (d.connected || d.closed || !d.host || !d.pc) return;
-    const waited = performance.now() - d.startedAt;
-    if (waited > 8000 && !d.relayTried && state && state.relayServers && state.relayServers.length) { d.relayTried = true; duelStartPeer(d, true); }
-    else if (waited > 25000 && d.status.indexOf("could not") < 0) { d.status = "Could not connect to " + d.oppName + " (strict network?). Leave and try again."; duelHud(d); }
+  d.timers.push(setInterval(() => { // nothing after a while: try through the relay, then say what is wrong
+    if (d.connected || d.closed) return;
+    const now = performance.now();
+    if (d.host && d.pc) {
+      const waited = now - d.startedAt;
+      if (waited > 8000 && !d.relayTried && state && state.relayServers && state.relayServers.length) { d.relayTried = true; duelStartPeer(d, true); }
+      else if (waited > 25000 && !d.status.startsWith("Could not")) { d.status = "Could not connect to " + d.oppName + " (strict network or no relay). Leave and try again."; duelHud(d); }
+    } else if (!d.host && !d.pc && now - d.t0 > 20000 && !d.status.startsWith("Could not")) {
+      d.status = "Could not reach " + d.oppName + ". Are they still in the duel? Leave and try again."; duelHud(d);
+    }
   }, 1000));
+}
+
+/** Once a second: ping the other browser (the ms on screen), and if nothing has arrived for a while say so, then reconnect. */
+function duelNet(d, now) {
+  if (d.solo || d.closed) return;
+  const chip = d.root.querySelector("#duelPing");
+  if (!d.connected) { if (d.pingShown) { chip.className = "hidden"; d.pingShown = ""; } return; }
+  if (now - d.netAt < 1000) return;
+  d.netAt = now;
+  const silent = now - d.lastRx;
+  if (silent > 10000) { // dead link: the host starts a new connection, the guest answers when it arrives
+    d.connected = false; d.weak = false; d.ping = 0;
+    d.status = "Connection lost — reconnecting…";
+    if (d.host) duelStartPeer(d, d.relayTried).catch(() => {});
+    duelHud(d);
+    return;
+  }
+  d.weak = silent > 3000;
+  duelSend(d, "fast", { t: "ping", n: now });
+  const ms = Math.round(d.ping);
+  const txt = d.weak ? "⚠ weak connection" : (d.ping ? ms + " ms" : "… ms") + (d.route ? " · " + d.route : "");
+  if (txt !== d.pingShown) { d.pingShown = txt; chip.textContent = txt; chip.className = d.weak || ms >= 160 ? "bad" : ms >= 80 ? "mid" : "good"; }
+}
+
+/** Whether the connection goes straight between the two browsers or through the relay. */
+function duelRoute(d, pc) {
+  d.timers.push(setTimeout(async () => {
+    try {
+      const all = {};
+      let pair = null;
+      (await pc.getStats()).forEach((r) => { if (r.type === "candidate-pair" && (r.nominated || r.state === "succeeded")) pair = pair && pair.nominated ? pair : r; else if (/-candidate$/.test(r.type)) all[r.id] = r; });
+      if (!pair || d.pc !== pc) return;
+      const l = all[pair.localCandidateId], rm = all[pair.remoteCandidateId];
+      d.route = (l && l.candidateType === "relay") || (rm && rm.candidateType === "relay") ? "relay" : "direct";
+      d.pingShown = "";
+    } catch (e) { /* stats are optional */ }
+  }, 800));
 }
 
 function duelPeer(d, viaRelay) {
@@ -1432,7 +1479,9 @@ function duelChannels(d, pc) {
       if (d.pc !== pc) return;
       if (which === "fast") d.chFast = ch; else d.chSafe = ch;
       if (d.chFast && d.chFast.readyState === "open" && d.chSafe && d.chSafe.readyState === "open" && !d.connected) {
-        d.connected = true; d.status = ""; duelHud(d);
+        d.connected = true; d.status = ""; d.lastRx = performance.now(); d.weak = false; d.ping = 0; d.route = "";
+        duelHud(d);
+        duelRoute(d, pc);
       }
     };
     ch.onclose = () => { if (d.pc === pc && !d.closed && d.connected) { d.connected = false; d.status = d.oppName + " disconnected."; duelHud(d); } };

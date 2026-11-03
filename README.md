@@ -346,6 +346,7 @@ the other player sees a coloured aura around you while one is active. Being hit,
 **🎒 / Tab / I** opens the inventory panel (tap a weapon to equip it, tap healing to use it, see the active power). Tapping the corner map, or **M**, opens the full-screen tactical map: grid, cover, every
 pickup that is currently on the ground, where you look (a cone), and the other player. Both panels leave the match running; Esc closes them. There is no armour item in the game yet, so the shield power is the only armour.
 
+**Connection:** a chip under the score shows the round-trip time in ms (green under 80, yellow under 160, red above) and whether the link is direct or through the relay. If nothing arrives for 3 s it says "weak connection"; after 10 s the host reconnects automatically and the guest answers. A guest that never gets an offer now sees a message after 20 s instead of waiting forever.
 **Look:** on computers the sun casts real shadows (phones get a soft blob under each soldier). Shots leave dust and sparks on cover and a bullet hole that fades after 12 s, and a puff on a soldier that is hit. The soldier's rifle kicks back on each shot and dips while reloading, and a hit makes them flinch. All of it is drawn in code; no downloaded models.
 
 How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown to the room as `duel` and `canDuel`) and passes the connection set-up messages
