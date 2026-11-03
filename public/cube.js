@@ -41,13 +41,16 @@ function cubeStyle() {
 .cube-top, .cube-bar { position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px max(14px, env(safe-area-inset-left)) 12px max(14px, env(safe-area-inset-right)); pointer-events: none; }
 .cube-top { top: env(safe-area-inset-top, 0px); }
 .cube-bar { bottom: env(safe-area-inset-bottom, 0px); justify-content: center; flex-wrap: wrap; }
-.cube-box button { pointer-events: auto; font: inherit; font-weight: 700; color: #eef0ff; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22); border-radius: 14px; padding: 10px 16px; min-height: 44px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 18px rgba(0,0,0,.35); cursor: pointer; }
+.cube-box button { pointer-events: auto; font: inherit; font-weight: 700; color: #eef0ff; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22); border-radius: 14px; padding: 10px 13px; min-height: 44px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 6px 18px rgba(0,0,0,.35); cursor: pointer; }
 .cube-box button:active { transform: scale(.96); }
 .cube-box button.primary { background: linear-gradient(135deg, #7c5cf0, #4f7cff); border-color: transparent; }
 .cube-stat { display: flex; flex-direction: column; align-items: center; line-height: 1.1; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
 .cube-stat b { font-size: 30px; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
 .cube-stat span { font-size: 13px; opacity: .75; }
-.cube-hint { position: absolute; left: 0; right: 0; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); text-align: center; font-size: 13px; opacity: .7; pointer-events: none; padding: 0 20px; }
+.cube-pad { position: absolute; left: 0; right: 0; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 9px; justify-content: center; align-items: center; padding: 0 12px; pointer-events: none; }
+.cube-box .cube-dot { width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); box-shadow: 0 3px 10px rgba(0,0,0,.45), inset 0 -4px 8px rgba(0,0,0,.2), inset 0 3px 6px rgba(255,255,255,.35); }
+.cube-box .cube-dirbtn { width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%; font-size: 22px; }
+.cube-hint { position: absolute; left: 0; right: 0; bottom: calc(126px + env(safe-area-inset-bottom, 0px)); text-align: center; font-size: 13px; opacity: .7; pointer-events: none; padding: 0 20px; }
 .cube-board, .cube-win { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92vw, 360px); max-height: 80vh; overflow: auto; background: rgba(18,20,40,.92); border: 1px solid rgba(255,255,255,.18); border-radius: 20px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .cube-board.hidden, .cube-win.hidden { display: none; }
 .cube-board h3, .cube-win h3 { margin: 0 0 10px; font-size: 18px; }
@@ -75,12 +78,16 @@ function cubeDom() {
     <div class="cube-stat"><b id="cubeClock">0:00.0</b><span id="cubeMoves">0 moves</span></div>
     <button id="cubeTop" type="button" aria-label="Best times">🏆</button>
   </div>
-  <div class="cube-hint" id="cubeHint">Drag a face to turn it. Drag the background to look around.</div>
+  <div class="cube-hint" id="cubeHint">Drag a face: it follows your finger. Drag the background to look around.</div>
+  <div class="cube-pad" id="cubePad" aria-label="Turn a face">
+    ${Object.values(CUBE_COLORS).map((c) => `<button type="button" class="cube-dot" data-col="${c}" style="background:#${c.toString(16).padStart(6, "0")}" aria-label="Turn this colour's face"></button>`).join("")}
+    <button type="button" id="cubeDir" class="cube-dirbtn" aria-label="Direction">↻</button>
+  </div>
   <div class="cube-bar">
     <button id="cubeScramble" class="primary" type="button">🔀 Scramble</button>
     <button id="cubeUndo" type="button">↶ Undo</button>
     <button id="cubeView" type="button" aria-label="Reset the view">🧭 View</button>
-    <button id="cubeReset" type="button">↺ Solved cube</button>
+    <button id="cubeReset" type="button">↺ Reset</button>
   </div>
   <div class="cube-board hidden" id="cubeBoard"></div>
   <div class="cube-win hidden" id="cubeWin"></div>`;
@@ -90,6 +97,9 @@ function cubeDom() {
   q("cubeScramble").addEventListener("click", () => cubeScramble());
   q("cubeReset").addEventListener("click", () => { cubeBuild(); cubeStatus(false); });
   q("cubeUndo").addEventListener("click", cubeUndo);
+  let ccw = false;
+  box.querySelectorAll(".cube-dot").forEach((b) => b.addEventListener("click", () => cubeFaceTurn(Number(b.dataset.col), ccw)));
+  q("cubeDir").addEventListener("click", () => { ccw = !ccw; q("cubeDir").textContent = ccw ? "↺" : "↻"; });
   q("cubeView").addEventListener("click", () => { cube.tx = 1.05; cube.ty = 0.75; });
   q("cubeTop").addEventListener("click", () => { cubeRenderBoard(); q("cubeBoard").classList.toggle("hidden"); });
   return box;
@@ -157,27 +167,14 @@ function cubeStickerGeo(T) {
 
 const cubeEase = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-/** Turns one layer a quarter turn (dir +1 or -1 about the axis), animated; moves queued behind it run in order. */
-function cubeTurn(axis, layer, dir, ms, byUser) {
-  if (byUser && cube.scrambled && !cube.running) { cube.running = true; cube.t0 = performance.now(); } // the clock starts with the first turn
-  cube.queue.push({ axis: axis.clone(), layer, dir, ms, byUser });
-  if (!cube.busy) cubeNext();
-}
-function cubeNext() {
-  const mv = cube.queue.shift();
-  if (!mv) { cube.busy = false; return; }
-  const T = cube.T;
-  cube.busy = true;
-  const pivot = new T.Group();
-  cube.group.add(pivot);
-  const turning = cube.cubies.filter((c) => Math.round(c.position.dot(mv.axis)) === mv.layer);
-  turning.forEach((c) => pivot.attach(c));
-  const t0 = performance.now();
+/** Settles a layer from its current angle to a whole number of quarter turns, then puts its pieces back in the cube, snapped to the grid. */
+function cubeSettle(pivot, turning, axis, from, quarters, ms, done) {
+  const T = cube.T, to = (quarters * Math.PI) / 2, t0 = performance.now();
   const step = (now) => {
-    const k = Math.min(1, (now - t0) / mv.ms);
-    pivot.quaternion.setFromAxisAngle(mv.axis, mv.dir * (Math.PI / 2) * cubeEase(k));
+    const k = ms <= 0 ? 1 : Math.min(1, (now - t0) / ms);
+    pivot.quaternion.setFromAxisAngle(axis, from + (to - from) * cubeEase(k));
     if (k < 1) { requestAnimationFrame(step); return; }
-    pivot.quaternion.setFromAxisAngle(mv.axis, mv.dir * Math.PI / 2);
+    pivot.quaternion.setFromAxisAngle(axis, to);
     pivot.updateMatrixWorld(true);
     turning.forEach((c) => {
       cube.group.attach(c);
@@ -187,10 +184,35 @@ function cubeNext() {
       c.quaternion.setFromRotationMatrix(e);
     });
     cube.group.remove(pivot);
-    if (mv.byUser) cubeAfterUserMove();
-    cubeNext();
+    done();
   };
   requestAnimationFrame(step);
+}
+const cubeLayer = (axis, layer) => cube.cubies.filter((c) => Math.round(c.position.dot(axis)) === layer);
+function cubeGrab(axis, layer) {
+  const pivot = new cube.T.Group();
+  cube.group.add(pivot);
+  const turning = cubeLayer(axis, layer);
+  turning.forEach((c) => pivot.attach(c));
+  return { pivot, turning };
+}
+
+/** Turns one layer a quarter turn (dir +1 or -1 about the axis), animated; moves queued behind it run in order. `record` keeps it for Undo. */
+function cubeTurn(axis, layer, dir, ms, byUser, record) {
+  if (byUser && cube.scrambled && !cube.running) { cube.running = true; cube.t0 = performance.now(); } // the clock starts with the first turn
+  if (record) cube.hist.push({ axis: axis.clone(), layer, dir });
+  cube.queue.push({ axis: axis.clone(), layer, dir, ms, byUser });
+  if (!cube.busy) cubeNext();
+}
+function cubeNext() {
+  const mv = cube.queue.shift();
+  if (!mv) { cube.busy = false; return; }
+  cube.busy = true;
+  const { pivot, turning } = cubeGrab(mv.axis, mv.layer);
+  cubeSettle(pivot, turning, mv.axis, 0, mv.dir, mv.ms, () => {
+    if (mv.byUser) cubeAfterUserMove(1);
+    cubeNext();
+  });
 }
 
 function cubeSolved() {
@@ -207,10 +229,10 @@ function cubeSolved() {
   return true;
 }
 
-function cubeAfterUserMove() {
+function cubeAfterUserMove(turns) {
   if (navigator.vibrate) navigator.vibrate(12);
   if (!cube.scrambled) return;
-  cube.moves++;
+  cube.moves += turns;
   document.getElementById("cubeMoves").textContent = cube.moves + (cube.moves === 1 ? " move" : " moves");
   if (cube.running && cubeSolved()) cubeWin();
 }
@@ -219,7 +241,7 @@ function cubeAfterUserMove() {
 function cubeUndo() {
   if (!cube || cube.busy || cube.queue.length || !cube.hist.length) return;
   const last = cube.hist.pop();
-  cubeTurn(last.axis, last.layer, -1, 190, true);
+  cubeTurn(last.axis, last.layer, -last.dir, 190, true, false);
 }
 
 function cubeScramble() {
@@ -258,18 +280,19 @@ function cubeWin() {
   if (state) api({ op: "cubeTime", ms, moves }).then(apply).catch(() => {}); // too-fast or too-short results are refused by the server; nothing to tell the player
 }
 
-/* ---- pointer: drag a face to turn that layer, drag the background to look around ---- */
+/* ---- pointer: drag a face and the layer follows your finger (and settles on the nearest quarter turn); drag the background to look around ---- */
 function cubePointer(el) {
   const T = cube.T, ray = new T.Raycaster(), v = new T.Vector2();
   let drag = null;
   const ndc = (e) => { const r = el.getBoundingClientRect(); v.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); return r; };
   const screenOf = (p, r) => { const q = p.clone().project(cube.camera); return [(q.x + 1) / 2 * r.width, (1 - q.y) / 2 * r.height]; };
   el.addEventListener("pointerdown", (e) => {
+    if (drag) return;
     el.setPointerCapture(e.pointerId);
     const r = ndc(e);
     ray.setFromCamera(v, cube.camera);
     const hit = ray.intersectObjects(cube.group.children, true)[0];
-    drag = { x: e.clientX, y: e.clientY, r, face: null };
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, at: performance.now(), r, face: null, live: null };
     if (hit && !cube.busy) {
       let o = hit.object;
       while (o && !o.userData.cubie) o = o.parent;
@@ -278,7 +301,18 @@ function cubePointer(el) {
     }
   });
   el.addEventListener("pointermove", (e) => {
-    if (!drag || drag.done) return; // a turn was already started by this drag
+    if (!drag || e.pointerId !== drag.id) return;
+    if (drag.live) { // the layer follows the finger
+      const L = drag.live;
+      const along = ((e.clientX - drag.x0) * L.sx + (e.clientY - drag.y0) * L.sy) / L.len2; // how far along the drag direction, in cube units
+      const angle = Math.max(-Math.PI, Math.min(Math.PI, along / 1.5)); // a point 1.5 units out moves as far as the finger does
+      const now = performance.now();
+      if (now > L.t) L.vel = 0.5 * L.vel + 0.5 * ((angle - L.angle) / Math.max(1, now - L.t)); // radians per ms, smoothed
+      L.angle = angle;
+      L.t = now;
+      L.pivot.quaternion.setFromAxisAngle(L.axis, angle);
+      return;
+    }
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.face) { // look around
       cube.ty -= dx * 0.008;
@@ -286,28 +320,63 @@ function cubePointer(el) {
       drag.x = e.clientX; drag.y = e.clientY;
       return;
     }
-    if (Math.hypot(dx, dy) < 14 || cube.busy) return;
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 10 || cube.busy) return;
     const { cubie, n, p } = drag.face;
     const base = screenOf(p, drag.r);
+    const fx = e.clientX - drag.x0, fy = e.clientY - drag.y0;
     let best = null;
     for (const t of [new T.Vector3(1, 0, 0), new T.Vector3(0, 1, 0), new T.Vector3(0, 0, 1)]) {
       if (Math.abs(t.dot(n)) > 0.5) continue; // along the face's own normal: not a drag on the face
-      const s = screenOf(p.clone().add(t), drag.r);
-      const d = (s[0] - base[0]) * dx + (s[1] - base[1]) * dy;
-      if (!best || Math.abs(d) > Math.abs(best.d)) best = { t, d };
+      const sc = screenOf(p.clone().add(t), drag.r);
+      const d = (sc[0] - base[0]) * fx + (sc[1] - base[1]) * fy;
+      if (!best || Math.abs(d) > Math.abs(best.d)) best = { t, d, s: [sc[0] - base[0], sc[1] - base[1]] };
     }
     drag.face = null;
-    drag = { ...drag, done: true };
     if (!best) return;
-    const dir = best.t.clone().multiplyScalar(Math.sign(best.d)); // the way the finger moves, in the cube's own axes
+    const sign = Math.sign(best.d) || 1;
+    const dir = best.t.clone().multiplyScalar(sign); // the way the finger moves, in the cube's own axes
     const axis = new T.Vector3().crossVectors(n, dir); // the turn that carries this spot along that way
     const layer = Math.round(cubie.position.dot(axis));
-    cube.hist.push({ axis: axis.clone(), layer });
-    cubeTurn(axis, layer, 1, 190, true);
+    cube.busy = true;
+    const g = cubeGrab(axis, layer);
+    const sx = best.s[0] * sign, sy = best.s[1] * sign;
+    drag.live = { ...g, axis, layer, sx, sy, len2: sx * sx + sy * sy, angle: 0, vel: 0, t: performance.now() };
   });
-  const end = () => { drag = null; };
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const L = drag.live, at = drag.at;
+    drag = null;
+    if (!L) return;
+    let q = Math.round(L.angle / (Math.PI / 2)); // the nearest quarter turn, or a quick flick the same way goes one further
+    const vel = performance.now() - L.t > 80 ? 0 : L.vel; // a finger that rested before letting go is not a flick
+    if (Math.abs(vel) > 0.0025 && Math.sign(vel) === Math.sign(L.angle) && Math.abs(L.angle) > 0.12) q = Math.sign(L.angle) * Math.max(1, Math.abs(q));
+    if (q !== 0 && cube.scrambled && !cube.running) { cube.running = true; cube.t0 = at; } // the clock starts when the first real turn starts
+    cubeSettle(L.pivot, L.turning, L.axis, L.angle, q, q === 0 ? 120 : 140, () => {
+      for (let i = 0; i < Math.abs(q); i++) cube.hist.push({ axis: L.axis.clone(), layer: L.layer, dir: Math.sign(q) });
+      cube.busy = false;
+      if (q !== 0) cubeAfterUserMove(Math.abs(q));
+      if (cube.queue.length) cubeNext();
+    });
+  };
   el.addEventListener("pointerup", end);
   el.addEventListener("pointercancel", end);
+  el.addEventListener("lostpointercapture", end);
+}
+
+/** A turn of one whole face, found by its colour (the centre piece names the face, wherever it is now), clockwise as you look at it. */
+function cubeFaceTurn(color, ccw) {
+  if (!cube || cube.busy || cube.queue.length) return;
+  const T = cube.T, q = new T.Quaternion(), n = new T.Vector3();
+  cube.group.updateMatrixWorld(true);
+  for (const c of cube.cubies) {
+    const st = c.children.filter((m) => m.userData.col !== undefined);
+    if (st.length !== 1 || st[0].userData.col !== color) continue; // a centre piece has exactly one sticker
+    st[0].getWorldQuaternion(q);
+    n.set(0, 0, 1).applyQuaternion(q);
+    const axis = cubeAxis(n);
+    cubeTurn(axis, 1, ccw ? 1 : -1, 170, true, true); // turning clockwise, seen from outside, is a negative turn about the outward axis
+    return;
+  }
 }
 
 function cubeInit() {
@@ -383,7 +452,7 @@ async function cubeOpen() {
   cube.stop = false;
   cube.scale = 0.6;
   cube.fit();
-  document.getElementById("cubeHint").textContent = "Drag a face to turn it. Drag the background to look around.";
+  document.getElementById("cubeHint").textContent = "Drag a face: it follows your finger. Tap a colour to turn that face.";
   cubeLoop();
 }
 function cubeClose() {
