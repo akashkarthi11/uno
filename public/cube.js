@@ -10,6 +10,7 @@ const CUBE_SCRAMBLE_MOVES = 22;
 
 let cube = null; // the running puzzle: { T, renderer, scene, camera, group, cubies, stickers, ... }
 let cubeBoard = [];
+let cubeFloor = null; // the shadow plane under the cube, hidden when you look from below
 
 function cubeLoadThree() {
   if (window.THREE) return Promise.resolve();
@@ -77,6 +78,8 @@ function cubeDom() {
   <div class="cube-hint" id="cubeHint">Drag a face to turn it. Drag the background to look around.</div>
   <div class="cube-bar">
     <button id="cubeScramble" class="primary" type="button">🔀 Scramble</button>
+    <button id="cubeUndo" type="button">↶ Undo</button>
+    <button id="cubeView" type="button" aria-label="Reset the view">🧭 View</button>
     <button id="cubeReset" type="button">↺ Solved cube</button>
   </div>
   <div class="cube-board hidden" id="cubeBoard"></div>
@@ -86,6 +89,8 @@ function cubeDom() {
   q("cubeClose").addEventListener("click", cubeClose);
   q("cubeScramble").addEventListener("click", () => cubeScramble());
   q("cubeReset").addEventListener("click", () => { cubeBuild(); cubeStatus(false); });
+  q("cubeUndo").addEventListener("click", cubeUndo);
+  q("cubeView").addEventListener("click", () => { cube.tx = 1.05; cube.ty = 0.75; });
   q("cubeTop").addEventListener("click", () => { cubeRenderBoard(); q("cubeBoard").classList.toggle("hidden"); });
   return box;
 }
@@ -114,10 +119,11 @@ function cubeBuild() {
   cube.cubies = [];
   cube.stickers = [];
   cube.queue = [];
+  cube.hist = []; // your own turns, so Undo can take them back
   cube.busy = false;
   cube.scrambled = false;
   const body = new T.BoxGeometry(0.97, 0.97, 0.97);
-  const bodyMat = new T.MeshStandardMaterial({ color: 0x0d0d10, roughness: 0.5, metalness: 0.08 });
+  const bodyMat = new T.MeshStandardMaterial({ color: 0x0b0b0e, roughness: 0.6, metalness: 0.04 });
   for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
     const c = new T.Group();
     c.position.set(x, y, z);
@@ -209,10 +215,18 @@ function cubeAfterUserMove() {
   if (cube.running && cubeSolved()) cubeWin();
 }
 
+/** Takes back your last turn (it still counts as a move, so the result stays honest). */
+function cubeUndo() {
+  if (!cube || cube.busy || cube.queue.length || !cube.hist.length) return;
+  const last = cube.hist.pop();
+  cubeTurn(last.axis, last.layer, -1, 190, true);
+}
+
 function cubeScramble() {
   if (cube.busy || cube.queue.length) return;
   const T = cube.T, axes = [new T.Vector3(1, 0, 0), new T.Vector3(0, 1, 0), new T.Vector3(0, 0, 1)];
   document.getElementById("cubeWin").classList.add("hidden");
+  cube.hist = [];
   cubeStatus(false);
   let last = -1;
   for (let i = 0; i < CUBE_SCRAMBLE_MOVES; i++) {
@@ -287,7 +301,9 @@ function cubePointer(el) {
     if (!best) return;
     const dir = best.t.clone().multiplyScalar(Math.sign(best.d)); // the way the finger moves, in the cube's own axes
     const axis = new T.Vector3().crossVectors(n, dir); // the turn that carries this spot along that way
-    cubeTurn(axis, Math.round(cubie.position.dot(axis)), 1, 190, true);
+    const layer = Math.round(cubie.position.dot(axis));
+    cube.hist.push({ axis: axis.clone(), layer });
+    cubeTurn(axis, layer, 1, 190, true);
   });
   const end = () => { drag = null; };
   el.addEventListener("pointerup", end);
@@ -302,29 +318,29 @@ function cubeInit() {
   renderer.shadowMap.type = T.PCFSoftShadowMap;
   renderer.outputEncoding = T.sRGBEncoding;
   renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMappingExposure = 1.0;
   stage.appendChild(renderer.domElement);
   const scene = new T.Scene();
   const camera = new T.PerspectiveCamera(38, 1, 0.1, 100);
-  scene.add(new T.HemisphereLight(0xdfe6ff, 0x20203a, 0.7));
-  const key = new T.DirectionalLight(0xfff4e6, 1.1);
+  scene.add(new T.HemisphereLight(0xffffff, 0xb8c0ee, 0.6)); // the underside gets nearly as much light as the top
+  for (const [x, y, z, k] of [[0, -1, 0, 0.5], [0, 0, -1, 0.45], [-1, 0, 0, 0.45], [1, 0, 0, 0.4], [0, 0, 1, 0.3]]) { // a soft light shining on each side
+    const l = new T.DirectionalLight(0xffffff, k);
+    l.position.set(x * 8, y * 8, z * 8);
+    scene.add(l);
+  }
+  const key = new T.DirectionalLight(0xfff4e6, 0.85);
   key.position.set(4, 8, 5);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 20 });
   key.shadow.radius = 5;
   scene.add(key);
-  const fill = new T.DirectionalLight(0x9db4ff, 0.45);
-  fill.position.set(-6, 2, -3);
-  scene.add(fill);
-  const rim = new T.PointLight(0xb89cff, 0.6, 30);
-  rim.position.set(-3, 4, -6);
-  scene.add(rim);
-  const floor = new T.Mesh(new T.PlaneGeometry(30, 30), new T.ShadowMaterial({ opacity: 0.38 }));
+  const floor = new T.Mesh(new T.PlaneGeometry(30, 30), new T.ShadowMaterial({ opacity: 0.28 }));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -2.35;
   floor.receiveShadow = true;
   scene.add(floor);
+  cubeFloor = floor;
   const group = new T.Group();
   scene.add(group);
   cube = { T, renderer, scene, camera, group, stickerGeo: cubeStickerGeo(T), tx: 1.05, ty: 0.75, cx: 1.05, cy: 0.75, dist: 10, t0: 0, running: false, moves: 0, scale: 0.6 };
@@ -347,6 +363,7 @@ function cubeLoop() {
   cube.cx += (cube.tx - cube.cx) * 0.18; // the camera glides to where you dragged it
   cube.cy += (cube.ty - cube.cy) * 0.18;
   cube.scale += (1 - cube.scale) * 0.12;
+  cubeFloor.visible = cube.cx < 1.5;
   cube.group.scale.setScalar(cube.scale);
   const d = cube.dist;
   cube.camera.position.set(d * Math.sin(cube.cx) * Math.sin(cube.cy), d * Math.cos(cube.cx), d * Math.sin(cube.cx) * Math.cos(cube.cy));
