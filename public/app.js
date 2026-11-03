@@ -3097,6 +3097,7 @@ function renderMap(m) {
     g.append(t);
     board.appendChild(g);
   }
+  $("mapWho").textContent = state.private ? "Only the admin and private players can see this" : "Everyone in this room can see it, including people you may not know";
   $("mapNote").textContent = m.mine ? "You are sharing your location with the people on this radar." : "You are not sharing. " + (m.people.length ? "The radar is centred on " + ref.name + "." : "Nobody is sharing yet.");
   if (!m.mine && geoWatch !== null && Date.now() - geoSentAt > 20000) stopSharing(false); // the server dropped us (a long silence): sharing has ended
   $("mapShare").textContent = geoWatch !== null ? "Stop sharing my location" : "Start sharing my location";

@@ -355,12 +355,13 @@ How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown t
 (Settings → Relay), it retries through the relay. Each browser is the referee for its own player (position and health), so this suits friends, not ranked play.
 Needs WebGL; a browser without it gets a message and the lobby stays as it was. Observers and rooms with a bot or three or more players cannot start one.
 
-## Private location radar
+## Location radar
 
-Private rooms only (the admin and private players; public players are never sent it). A **📡 Radar** button in the lobby opens a radar centred on you, north up,
+In every room (the observer account excepted). A **📡 Radar** button in the lobby opens a radar centred on you, north up,
 with a ring scale (5 m up to 50 km, chosen to fit everyone) and a dot for each person with their distance. It is automatic once a person agrees: they tap
 **Start sharing my location**, the browser asks for permission, and their phone then reports its GPS position every 5 seconds (`mapPos`). Dots slide as people move.
 Nothing is shared until someone taps Start; **Stop** or closing the page ends it; a phone silent for 90 seconds drops off. Only start and stop are logged.
-Positions are rounded to about a metre and kept only in the room (never in the database); going public clears them.
+Everyone in the room who is sharing sees everyone else who is sharing, so in a public room the window says plainly that people they may not know can see them.
+Positions are rounded to about a metre and kept only in the room (never in the database).
 Indoors, phone GPS can be off by 10-50 m. For room-level accuracy indoors, ESP32 or access-point readers could report an issued tag's position to the same
 `mapPos` action, which needs its own consent and a server-side check.

@@ -13,10 +13,13 @@ const call = (body) => new Promise((resolve) => {
 test('radar: private rooms only, opt-in, positions are checked, public players get nothing', async () => {
   const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
   const priv = (await call({ op: 'login', name: 'Pia', password: '281101' })).body.sys;
+  const pub = (await call({ op: 'login', name: 'Pub', password: '123456', newPassword: 'pub-pass-1' })).body.sys;
   const a = await call({ op: 'join', sys: admin, room: 'mp1', create: true });
   const mk = (r) => ({ room: 'mp1', token: r.body.token, playerId: r.body.state.you });
-  assert.equal(a.body.state.map, undefined, 'a public room has no radar');
-  assert.equal((await call({ op: 'mapPos', ...mk(a), lat: 12.97, lon: 77.59, acc: 8 })).code, 400, 'and refuses positions');
+  assert.deepEqual([a.body.state.map.people.length, a.body.state.map.mine], [0, false], 'a public room has the radar too');
+  const pubJoin = await call({ op: 'join', sys: pub, room: 'mp1' });
+  assert.equal((await call({ op: 'mapPos', ...mk(pubJoin), lat: 12.97, lon: 77.59, acc: 8 })).code, 200, 'and a public player can share');
+  assert.equal((await call({ op: 'mapPos', ...mk(pubJoin), stop: true })).code, 200);
   await call({ op: 'private', ...mk(a), on: true });
   const p = await call({ op: 'join', sys: priv, room: 'mp1' });
   const s0 = (await call({ op: 'state', ...mk(a) })).body.state;
@@ -28,13 +31,14 @@ test('radar: private rooms only, opt-in, positions are checked, public players g
   await call({ op: 'mapPos', ...mk(p), lat: 12.9715, lon: 77.5905, acc: 6 });
   const seen = (await call({ op: 'state', ...mk(a) })).body.state.map;
   assert.equal(seen.people[0].lat, 12.9715, 'the admin sees the new position');
-  assert.deepEqual(seen.log.map((e) => e.what), ['started sharing'], 'only start and stop are logged, not every step');
+  assert.deepEqual(seen.log.filter((e) => e.name === 'Pia').map((e) => e.what), ['started sharing'], 'only start and stop are logged, not every step');
   await call({ op: 'mapPos', ...mk(p), stop: true });
   const off = (await call({ op: 'state', ...mk(a) })).body.state.map;
-  assert.deepEqual([off.people.length, off.log.map((e) => e.what)], [0, ['started sharing', 'stopped sharing']]);
-  await call({ op: 'mapPos', ...mk(p), lat: 12.9, lon: 77.5 });
-  await call({ op: 'private', ...mk(a), on: false });
-  assert.equal((await call({ op: 'state', ...mk(a) })).body.state.map, undefined, 'going public clears and hides the radar');
+  assert.deepEqual([off.people.length, off.log.filter((e) => e.name === 'Pia').map((e) => e.what)], [0, ['started sharing', 'stopped sharing']]);
+  const obs = await call({ op: 'login', name: 'Watcher', password: '1102' });
+  const o = await call({ op: 'join', sys: obs.body.sys, room: 'mp1' });
+  assert.equal(o.body.state.map, undefined, 'the observer account gets no radar');
+  assert.equal((await call({ op: 'mapPos', ...mk(o), lat: 1, lon: 1 })).code, 400, 'and cannot share');
 });
 
 test('radar: a phone that stops reporting drops off', async () => {
