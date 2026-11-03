@@ -346,6 +346,8 @@ the other player sees a coloured aura around you while one is active. Being hit,
 **🎒 / Tab / I** opens the inventory panel (tap a weapon to equip it, tap healing to use it, see the active power). Tapping the corner map, or **M**, opens the full-screen tactical map: grid, cover, every
 pickup that is currently on the ground, where you look (a cone), and the other player. Both panels leave the match running; Esc closes them. There is no armour item in the game yet, so the shield power is the only armour.
 
+**Look:** on computers the sun casts real shadows (phones get a soft blob under each soldier). Shots leave dust and sparks on cover and a bullet hole that fades after 12 s, and a puff on a soldier that is hit. The soldier's rifle kicks back on each shot and dips while reloading, and a hit makes them flinch. All of it is drawn in code; no downloaded models.
+
 How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown to the room as `duel` and `canDuel`) and passes the connection set-up messages
 (`duelSignal` / `duelSignals`, a short-lived mailbox like voice's). The match itself runs **directly between the two browsers** over a WebRTC data channel
 (`public/duel.js`): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries

@@ -439,9 +439,15 @@ function duelBuildWorld(d) {
   sky.wrapS = sky.wrapT = T.ClampToEdgeWrapping;
   sc.background = sky;
   sc.fog = new T.Fog(0xcfe4fa, 45, 125);
-  sc.add(new T.HemisphereLight(0xdcecff, 0x58704a, 0.72));
-  const sun = new T.DirectionalLight(0xfff1d6, 0.6);
+  sc.add(new T.HemisphereLight(0xdcecff, 0x58704a, 0.6));
+  const sun = new T.DirectionalLight(0xffe6bd, 0.8);
   sun.position.set(30, 50, 20);
+  d.shadows = !d.touch; // real shadows on computers; phones get a cheap blob under each soldier
+  if (d.shadows) {
+    r.shadowMap.enabled = true; r.shadowMap.type = T.PCFSoftShadowMap;
+    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0006;
+    Object.assign(sun.shadow.camera, { left: -42, right: 42, top: 42, bottom: -42, near: 1, far: 130 });
+  }
   sc.add(sun);
   d.cam = new T.PerspectiveCamera(65, 1, 0.1, 220);
 
@@ -451,6 +457,7 @@ function duelBuildWorld(d) {
   }, 14);
   const ground = new T.Mesh(new T.PlaneGeometry(DUEL_HALF * 2, DUEL_HALF * 2), new T.MeshLambertMaterial({ map: grass }));
   ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
   sc.add(ground);
   const dirt = duelTexture(T, 128, (x, s) => { x.fillStyle = "#a08a64"; x.fillRect(0, 0, s, s); for (let i = 0; i < 500; i++) { x.fillStyle = i % 2 ? "#8f7a55" : "#b09a73"; x.fillRect(Math.random() * s, Math.random() * s, 3, 3); } }, 3, 1);
   const road = new T.Mesh(new T.PlaneGeometry(DUEL_HALF * 2, 5), new T.MeshLambertMaterial({ map: dirt }));
@@ -492,6 +499,7 @@ function duelBuildWorld(d) {
         cone.position.y = y; tree.add(cone);
       });
       tree.position.set(x, 0, z);
+      tree.traverse((o) => { o.castShadow = true; });
       sc.add(tree);
       const hit = new T.Mesh(new T.BoxGeometry(w, h, dp), new T.MeshBasicMaterial({ visible: false }));
       hit.position.set(x, h / 2, z);
@@ -502,6 +510,7 @@ function duelBuildWorld(d) {
     const mat = kind === "k" ? (kc++ % 2 ? mats.k2 : mats.k1) : mats[kind];
     const m = new T.Mesh(new T.BoxGeometry(w, h, dp), mat);
     m.position.set(x, h / 2, z);
+    m.castShadow = m.receiveShadow = true;
     sc.add(m);
     d.solids.push(m);
   });
@@ -531,6 +540,13 @@ function duelBuildWorld(d) {
   d.oppTag.sprite.position.set(0, 2.1, 0);
   d.oppFig.root.add(d.oppTag.sprite);
   sc.add(d.meFig.root, d.oppFig.root);
+  [d.meFig, d.oppFig].forEach((f) => {
+    if (d.shadows) { f.root.traverse((o) => { if (o.isMesh && o !== f.aura) o.castShadow = true; }); return; }
+    const blob = new T.Mesh(new T.PlaneGeometry(1.1, 1.1), new T.MeshBasicMaterial({ map: duelTexture(T, 64, (x, s) => { const g = x.createRadialGradient(s / 2, s / 2, 2, s / 2, s / 2, s / 2); g.addColorStop(0, "rgba(0,0,0,.5)"); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.fillRect(0, 0, s, s); }), transparent: true, depthWrite: false }));
+    blob.rotation.x = -Math.PI / 2; blob.position.y = 0.03;
+    f.root.add(blob);
+  });
+  duelEffectsInit(d);
   duelResize(d);
 }
 
@@ -624,7 +640,7 @@ function duelFigure(T, pal) {
   const aura = new T.Mesh(new T.SphereGeometry(1.05, 14, 10), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }));
   aura.position.y = 0.95; aura.visible = false;
   root.add(aura);
-  return { root, body, legs, guns, flashes, rifle, aura, flashUntil: 0, scale: 1 };
+  return { root, body, legs, guns, flashes, rifle, aura, flashUntil: 0, scale: 1, dip: 0, hitAt: 0 };
 }
 
 /** Legs swing with the speed, the body bobs, crouch and prone lower it, a defeated soldier falls backwards. `p` carries speed, phase, dead, st, w, pw. */
@@ -646,7 +662,13 @@ function duelPose(fig, p, dt, now) {
   if (p.dead) y += 0.22 * Math.min(1, fig.body.rotation.x);
   else if (st === 2) y += 0.36 * Math.min(1, -fig.body.rotation.x / 1.5);
   fig.body.position.y = y;
-  fig.rifle.rotation.x = st === 2 && !p.dead ? -fig.body.rotation.x : 0; // prone: the rifle stays pointing ahead
+  // the rifle kicks back with each shot and dips while reloading; a hit makes the soldier flinch sideways
+  const since = now - (fig.flashUntil - 55), kickBack = since >= 0 && since < 110 ? 1 - since / 110 : 0;
+  fig.dip += ((p.reload && !p.dead ? 1 : 0) - fig.dip) * k;
+  fig.rifle.position.set(0.17, 1.17 - 0.2 * fig.dip, -0.4 + 0.08 * kickBack);
+  fig.rifle.rotation.x = (st === 2 && !p.dead ? -fig.body.rotation.x : 0) + 0.5 * fig.dip + 0.05 * kickBack; // prone: the rifle stays pointing ahead
+  const flinch = fig.hitAt && now - fig.hitAt < 200 ? 1 - (now - fig.hitAt) / 200 : 0;
+  fig.body.rotation.z = flinch * 0.16;
   DUEL_WORDER.forEach((w) => { fig.guns[w].visible = w === (p.w || "ar"); });
   const fl = fig.flashes[p.w || "ar"];
   DUEL_WORDER.forEach((w) => { fig.flashes[w].visible = false; });
@@ -1046,7 +1068,7 @@ function duelDraw(d, now, dt) {
   d.meFig.root.position.set(me.x, me.y, me.z);
   d.meFig.root.rotation.y = me.yaw;
   d.meFig.root.visible = !blink && !scoped;
-  duelPose(d.meFig, { speed: me.speed, phase: me.phase, dead: me.dead, grounded: me.grounded, st: me.st, w: me.w, pw: myPw }, dt, now);
+  duelPose(d.meFig, { speed: me.speed, phase: me.phase, dead: me.dead, grounded: me.grounded, st: me.st, w: me.w, pw: myPw, reload: Boolean(me.reload) }, dt, now);
   me.phase += dt * (3 + me.speed * 1.25);
   d.oppFig.root.position.set(o.x, o.y, o.z);
   d.oppFig.root.rotation.y = o.yaw;
@@ -1079,6 +1101,7 @@ function duelDraw(d, now, dt) {
     t.line.material.opacity = t.life / 7;
     return true;
   });
+  duelEffectsStep(d, now, dt);
   d.renderer.render(d.scene, d.cam);
 }
 
@@ -1169,6 +1192,8 @@ function duelShoot(d, now) {
   const end = [origin[0] + a[0] * tMax, origin[1] + a[1] * tMax, origin[2] + a[2] * tMax];
   duelTracer(d, muzzle, end);
   d.meFig.flashUntil = now + 55;
+  duelImpact(d, end, hit ? null : wall && wall.distance <= tMax + 0.01 && wall.face ? [wall.face.normal.x, wall.face.normal.y, wall.face.normal.z] : null, Boolean(hit));
+  if (hit) d.oppFig.hitAt = now;
   duelSound(d, me.w === "sn" ? "snipe" : "shot");
   duelSend(d, "fast", { t: "shot", a: muzzle, b: end, w: me.w });
   if (hit) {
@@ -1195,6 +1220,73 @@ function duelDamageNumber(d, dmg, head) {
   d.timers.push(setTimeout(() => el.remove(), 800));
 }
 
+const DUEL_PARTS = 56, DUEL_HOLES = 20;
+
+/** A pool of small puffs (dust, sparks, a hit puff) and bullet holes, made once and reused so shooting never allocates. */
+function duelEffectsInit(d) {
+  const T = window.THREE, geo = new T.SphereGeometry(0.5, 5, 4);
+  d.parts = []; d.partAt = 0;
+  for (let i = 0; i < DUEL_PARTS; i++) {
+    const m = new T.Mesh(geo, new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false;
+    d.scene.add(m);
+    d.parts.push({ m, vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.1, grow: 0, grav: 0 });
+  }
+  const tex = duelTexture(T, 32, (x, s) => { const g = x.createRadialGradient(s / 2, s / 2, 1, s / 2, s / 2, s / 2); g.addColorStop(0, "rgba(10,10,10,.95)"); g.addColorStop(0.55, "rgba(20,20,20,.7)"); g.addColorStop(1, "rgba(20,20,20,0)"); x.fillStyle = g; x.fillRect(0, 0, s, s); });
+  const hgeo = new T.PlaneGeometry(0.16, 0.16);
+  d.holes = []; d.holeAt = 0;
+  for (let i = 0; i < DUEL_HOLES; i++) {
+    const m = new T.Mesh(hgeo, new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    m.visible = false;
+    d.scene.add(m);
+    d.holes.push({ m, until: 0 });
+  }
+}
+
+/** Throws `n` puffs from a point. kind: dust (wall or ground), spark (a flash of hot specks on a wall), hit (a soldier was hit). */
+function duelBurst(d, p, kind, n) {
+  if (!d.parts) return;
+  const spec = { dust: [0xcdbf9f, 0.5, 0.18, 0.5, 1.6, 2.2], spark: [0xffd27a, 0.22, 0.05, -0.02, 4.5, 8], hit: [0xd9d2c8, 0.45, 0.14, 0.4, 1.4, 1.8] }[kind];
+  for (let i = 0; i < n; i++) {
+    const q = d.parts[d.partAt++ % DUEL_PARTS], sp = spec[4] * (0.4 + Math.random() * 0.6);
+    q.m.material.color.setHex(spec[0]);
+    q.m.position.set(p[0], p[1], p[2]);
+    q.vx = (Math.random() - 0.5) * sp; q.vy = Math.random() * sp * 0.8 + 0.4; q.vz = (Math.random() - 0.5) * sp;
+    q.life = q.max = spec[1] * (0.6 + Math.random() * 0.6); q.size = spec[2]; q.grow = spec[3]; q.grav = spec[5];
+    q.m.scale.setScalar(q.size);
+    q.m.visible = true;
+  }
+}
+
+/** Where a shot ended: a puff on a soldier, dust and sparks on cover, plus a bullet hole on a wall (`normal` is the wall face, known for your own shots). */
+function duelImpact(d, end, normal, onPlayer) {
+  if (Math.hypot(end[0] - d.cam.position.x, end[2] - d.cam.position.z) > 90) return; // a miss into the distance
+  if (onPlayer) { duelBurst(d, end, "hit", 6); return; }
+  duelBurst(d, end, "dust", 5);
+  duelBurst(d, end, "spark", 4);
+  if (!normal || !d.holes) return;
+  const h = d.holes[d.holeAt++ % DUEL_HOLES], T = window.THREE;
+  h.m.position.set(end[0] + normal[0] * 0.02, end[1] + normal[1] * 0.02, end[2] + normal[2] * 0.02);
+  h.m.lookAt(end[0] + normal[0], end[1] + normal[1], end[2] + normal[2]);
+  h.m.visible = true;
+  h.until = performance.now() + 12000;
+}
+
+function duelEffectsStep(d, now, dt) {
+  if (!d.parts) return;
+  for (const q of d.parts) {
+    if (q.life <= 0) continue;
+    q.life -= dt;
+    if (q.life <= 0) { q.m.visible = false; continue; }
+    q.vy -= q.grav * dt;
+    q.m.position.x += q.vx * dt; q.m.position.y = Math.max(0.02, q.m.position.y + q.vy * dt); q.m.position.z += q.vz * dt;
+    q.size += q.grow * dt;
+    q.m.scale.setScalar(Math.max(0.02, q.size));
+    q.m.material.opacity = Math.min(1, q.life / q.max * 1.2);
+  }
+  for (const h of d.holes) if (h.m.visible && now > h.until) h.m.visible = false;
+}
+
 function duelTracer(d, a, b) {
   const T = window.THREE;
   const g = new T.BufferGeometry().setFromPoints([new T.Vector3(...a), new T.Vector3(...b)]);
@@ -1210,6 +1302,7 @@ function duelGotHit(d, dmgIn, head) {
   me.hp = Math.max(0, me.hp - dmg);
   d.lastHeadHit = Boolean(head);
   d.flash = 1;
+  d.meFig.hitAt = now;
   duelCancelUse(d);
   // a red wedge on the side the shot came from
   const dx = d.opp.x - me.x, dz = d.opp.z - me.z;
@@ -1250,6 +1343,8 @@ function duelOnMessage(d, raw) {
       if (Array.isArray(m.a) && Array.isArray(m.b)) {
         duelTracer(d, m.a.map(Number), m.b.map(Number));
         d.oppFig.flashUntil = performance.now() + 55;
+        const e = m.b.map(Number), near = Math.abs(e[0] - d.me.x) < 0.7 && Math.abs(e[2] - d.me.z) < 0.7 && e[1] > d.me.y - 0.1 && e[1] < d.me.y + 1.9;
+        duelImpact(d, e, null, near);
         duelSound(d, m.w === "sn" ? "snipe" : "shot", Math.max(0.15, 1 - Math.hypot(o.x - d.me.x, o.z - d.me.z) / 50));
       }
       break;
