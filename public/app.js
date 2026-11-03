@@ -911,7 +911,9 @@ function renderLobby(s) {
   const canVid = Boolean(s.canAiVideo);
   $("videoBtn").classList.toggle("hidden", !canVid);
   $("videoBtn2").classList.toggle("hidden", !canVid);
-  $("mapBtn").classList.toggle("hidden", !s.map); // the private location radar: only sent to the admin and private players
+  $("mapBtn").classList.toggle("hidden", !s.map); // the location radar: everyone in the room except the observer account
+  $("radarBtn").classList.toggle("hidden", !s.map);
+  radarSync(s.map);
   if (!$("mapModal").classList.contains("hidden")) renderMap(s.map);
   if (typeof duelSync === "function") duelSync(s); // the 3D duel button (duel.js)
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
@@ -3045,24 +3047,37 @@ async function openLearn() {
 const RING_STEPS = [5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 50000];
 let geoWatch = null; // the browser's watchPosition id while this phone is sharing
 let geoSentAt = 0;
+let geoBlocked = false; // permission refused or no position: do not ask again until the page is reloaded
+const radarOn = () => store("radar") !== "off"; // sharing is on by default; this phone's Settings switch turns it off
 const SVGNS = "http://www.w3.org/2000/svg";
 const svgEl = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
 
+function radarLabel() {
+  $("radarBtn").textContent = "📡 Share my location: " + (radarOn() ? (geoBlocked ? "on (blocked by the browser)" : "on") : "off");
+  $("mapBtn").textContent = geoWatch !== null ? "📡 Radar · sharing" : "📡 Radar";
+}
 function stopSharing(tell) {
   if (geoWatch !== null) { navigator.geolocation.clearWatch(geoWatch); geoWatch = null; }
   if (tell && state && state.map && state.map.mine) send({ op: "mapPos", stop: true });
-  $("mapShare").textContent = "Start sharing my location";
+  radarLabel();
 }
 function startSharing() {
-  if (!navigator.geolocation) { toast("This browser cannot share a location."); return; }
-  $("mapShare").textContent = "Stop sharing my location";
+  if (geoWatch !== null || geoBlocked || !navigator.geolocation) return;
   geoWatch = navigator.geolocation.watchPosition((p) => {
     const now = Date.now();
     if (now - geoSentAt < 5000 || !state) return; // one report every 5 seconds is plenty
     geoSentAt = now;
     api({ op: "mapPos", lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }).then(apply).catch(() => {});
-  }, (e) => { stopSharing(false); toast(e.code === 1 ? "Location permission was refused." : "Could not get your location."); },
+  }, (e) => { geoBlocked = true; stopSharing(false); toast(e.code === 1 ? "Location permission was refused, so you are not on the radar." : "Could not get your location."); },
   { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  radarLabel();
+}
+/** Called with every state update: join the radar by itself unless this phone switched sharing off. */
+function radarSync(m) {
+  if (!m) return;
+  if (radarOn()) startSharing();
+  else if (geoWatch !== null) stopSharing(true);
+  radarLabel();
 }
 
 function renderMap(m) {
@@ -3099,14 +3114,16 @@ function renderMap(m) {
   }
   $("mapWho").textContent = state.private ? "Only the admin and private players can see this" : "Everyone in this room can see it, including people you may not know";
   $("mapNote").textContent = m.mine ? "You are sharing your location with the people on this radar." : "You are not sharing. " + (m.people.length ? "The radar is centred on " + ref.name + "." : "Nobody is sharing yet.");
-  if (!m.mine && geoWatch !== null && Date.now() - geoSentAt > 20000) stopSharing(false); // the server dropped us (a long silence): sharing has ended
-  $("mapShare").textContent = geoWatch !== null ? "Stop sharing my location" : "Start sharing my location";
   const ul = $("mapLog");
   ul.replaceChildren(...m.log.slice().reverse().map((e) => { const li = document.createElement("li"); li.textContent = e.name + " " + e.what; return li; }));
   if (!m.log.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "Nothing yet."; ul.append(li); }
 }
 $("mapBtn").addEventListener("click", () => { $("mapModal").classList.remove("hidden"); renderMap(state && state.map); });
-$("mapShare").addEventListener("click", () => { if (geoWatch !== null) stopSharing(true); else startSharing(); });
+$("radarBtn").addEventListener("click", () => {
+  if (radarOn()) { store("radar", "off"); stopSharing(true); toast("You are off the radar."); }
+  else { store("radar", "on"); geoBlocked = false; startSharing(); toast("Sharing your location on the radar."); }
+  radarLabel();
+});
 ["mapX", "mapClose"].forEach((id) => $(id).addEventListener("click", () => $("mapModal").classList.add("hidden")));
 $("mapModal").addEventListener("click", (e) => { if (e.target === $("mapModal")) $("mapModal").classList.add("hidden"); });
 window.addEventListener("pagehide", () => stopSharing(false)); // closing the page ends sharing

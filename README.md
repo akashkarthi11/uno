@@ -358,10 +358,11 @@ Needs WebGL; a browser without it gets a message and the lobby stays as it was. 
 ## Location radar
 
 In every room (the observer account excepted). A **📡 Radar** button in the lobby opens a radar centred on you, north up,
-with a ring scale (5 m up to 50 km, chosen to fit everyone) and a dot for each person with their distance. It is automatic once a person agrees: they tap
-**Start sharing my location**, the browser asks for permission, and their phone then reports its GPS position every 5 seconds (`mapPos`). Dots slide as people move.
-Nothing is shared until someone taps Start; **Stop** or closing the page ends it; a phone silent for 90 seconds drops off. Only start and stop are logged.
-Everyone in the room who is sharing sees everyone else who is sharing, so in a public room the window says plainly that people they may not know can see them.
+with a ring scale (5 m up to 50 km, chosen to fit everyone) and a dot for each person with their distance. Sharing is **automatic**: when someone joins a room
+the browser asks for permission once, and then their phone reports its GPS position every 5 seconds (`mapPos`) while the page is open. The Radar button reads
+"📡 Radar · sharing" while it is on. Each person turns it off on their own phone in **Settings → 📡 Share my location** (remembered on that phone); if the browser
+refuses permission they are simply not on the radar. Closing the page, 90 seconds of silence, or the switch ends it. Only start and stop are logged.
+Everyone in the room who is sharing sees everyone else who is sharing, and the radar window says so (in a public room: including people they may not know).
 Positions are rounded to about a metre and kept only in the room (never in the database).
 Indoors, phone GPS can be off by 10-50 m. For room-level accuracy indoors, ESP32 or access-point readers could report an issued tag's position to the same
 `mapPos` action, which needs its own consent and a server-side check.
