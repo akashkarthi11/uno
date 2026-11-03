@@ -355,10 +355,12 @@ How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown t
 (Settings → Relay), it retries through the relay. Each browser is the referee for its own player (position and health), so this suits friends, not ranked play.
 Needs WebGL; a browser without it gets a message and the lobby stays as it was. Observers and rooms with a bot or three or more players cannot start one.
 
-## Private location map
+## Private location radar
 
-Private rooms only (the admin and private players; public players are never sent it). A **🗺 Map** button in the lobby opens a floor plan with the places
-Lobby, Kitchen, Lounge and Office (`MAP_ZONES` in `api/_lib/game.js`). It is opt-in: nobody is on the map until they tap **I'm in <place>**, they can move
-whenever they like, and **Stop sharing my location** takes them off. Dots slide to the new place and a short log lists the moves ("Ann: Kitchen → Lounge").
-Going public clears the map. Nothing is tracked automatically: a browser cannot scan other people's Wi-Fi or Bluetooth. Real readers (ESP32 or access points)
-could later send the same `mapMove` for an issued tag, which needs its own consent and a server-side check.
+Private rooms only (the admin and private players; public players are never sent it). A **📡 Radar** button in the lobby opens a radar centred on you, north up,
+with a ring scale (5 m up to 50 km, chosen to fit everyone) and a dot for each person with their distance. It is automatic once a person agrees: they tap
+**Start sharing my location**, the browser asks for permission, and their phone then reports its GPS position every 5 seconds (`mapPos`). Dots slide as people move.
+Nothing is shared until someone taps Start; **Stop** or closing the page ends it; a phone silent for 90 seconds drops off. Only start and stop are logged.
+Positions are rounded to about a metre and kept only in the room (never in the database); going public clears them.
+Indoors, phone GPS can be off by 10-50 m. For room-level accuracy indoors, ESP32 or access-point readers could report an issued tag's position to the same
+`mapPos` action, which needs its own consent and a server-side check.

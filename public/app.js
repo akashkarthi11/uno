@@ -911,7 +911,7 @@ function renderLobby(s) {
   const canVid = Boolean(s.canAiVideo);
   $("videoBtn").classList.toggle("hidden", !canVid);
   $("videoBtn2").classList.toggle("hidden", !canVid);
-  $("mapBtn").classList.toggle("hidden", !s.map); // the private location map: only sent to the admin and private players
+  $("mapBtn").classList.toggle("hidden", !s.map); // the private location radar: only sent to the admin and private players
   if (!$("mapModal").classList.contains("hidden")) renderMap(s.map);
   if (typeof duelSync === "function") duelSync(s); // the 3D duel button (duel.js)
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
@@ -3041,62 +3041,74 @@ async function openLearn() {
   }
   renderLearn(state);
 }
-/* ---- the private location map: people who chose to share, shown in the place they picked ---- */
-const mapDots = new Map(); // player id -> its dot, kept between updates so a move slides instead of jumping
+/* ---- the private location radar: phones that chose to share report their GPS position; everyone sees each other around them ---- */
+const RING_STEPS = [5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 50000];
+let geoWatch = null; // the browser's watchPosition id while this phone is sharing
+let geoSentAt = 0;
+const SVGNS = "http://www.w3.org/2000/svg";
+const svgEl = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+function stopSharing(tell) {
+  if (geoWatch !== null) { navigator.geolocation.clearWatch(geoWatch); geoWatch = null; }
+  if (tell && state && state.map && state.map.mine) send({ op: "mapPos", stop: true });
+  $("mapShare").textContent = "Start sharing my location";
+}
+function startSharing() {
+  if (!navigator.geolocation) { toast("This browser cannot share a location."); return; }
+  $("mapShare").textContent = "Stop sharing my location";
+  geoWatch = navigator.geolocation.watchPosition((p) => {
+    const now = Date.now();
+    if (now - geoSentAt < 5000 || !state) return; // one report every 5 seconds is plenty
+    geoSentAt = now;
+    api({ op: "mapPos", lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }).then(apply).catch(() => {});
+  }, (e) => { stopSharing(false); toast(e.code === 1 ? "Location permission was refused." : "Could not get your location."); },
+  { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+}
+
 function renderMap(m) {
   const board = $("mapBoard");
   if (!m) { $("mapModal").classList.add("hidden"); return; }
-  if (board.dataset.zones !== m.zones.join("|")) {
-    board.dataset.zones = m.zones.join("|");
-    board.replaceChildren(...m.zones.map((z) => { const t = document.createElement("div"); t.className = "map-zone"; t.textContent = z; return t; }));
-    mapDots.clear();
-    $("mapPick").replaceChildren(...m.zones.map((z) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "ghost";
-      b.dataset.zone = z;
-      b.textContent = "I'm in " + z;
-      b.addEventListener("click", () => send({ op: "mapMove", zone: z }));
-      return b;
-    }));
-  }
-  const slots = {};
-  const seen = new Set();
+  const me = m.people.find((p) => p.id === state.you);
+  const ref = me || m.people[0]; // the radar is centred on you, or on the first person while you are not sharing
+  const rel = (p) => { // metres east / north of the centre
+    const k = Math.cos((ref.lat * Math.PI) / 180);
+    return { x: (p.lon - ref.lon) * 111320 * k, y: (p.lat - ref.lat) * 110540 };
+  };
+  const far = ref ? Math.max(0, ...m.people.map((p) => Math.hypot(rel(p).x, rel(p).y))) : 0;
+  const range = RING_STEPS.find((r) => r >= far * 1.15) || RING_STEPS[RING_STEPS.length - 1]; // the outer ring, in metres
+  const px = 90 / range;
+  board.replaceChildren(
+    ...[1, 0.5].map((f) => svgEl("circle", { cx: 0, cy: 0, r: 90 * f, class: "r-ring" })),
+    svgEl("line", { x1: -90, y1: 0, x2: 90, y2: 0, class: "r-ring" }),
+    svgEl("line", { x1: 0, y1: -90, x2: 0, y2: 90, class: "r-ring" }),
+    svgEl("path", { d: "M0 0 L90 0 A90 90 0 0 0 63.6 -63.6 Z", class: "r-sweep" }),
+  );
+  const lab = svgEl("text", { x: 88, y: -3, class: "r-lab", "text-anchor": "end" });
+  lab.textContent = range >= 1000 ? range / 1000 + " km" : range + " m";
+  const north = svgEl("text", { x: 0, y: -93, class: "r-lab", "text-anchor": "middle" });
+  north.textContent = "N";
+  board.append(lab, north);
   for (const p of m.people) {
-    seen.add(p.id);
-    let d = mapDots.get(p.id);
-    if (!d) {
-      d = document.createElement("div");
-      d.className = "map-dot";
-      d.append(document.createElement("b"), document.createElement("span"));
-      board.appendChild(d);
-      mapDots.set(p.id, d);
-    }
-    d.firstChild.textContent = p.name.slice(0, 2).toUpperCase();
-    d.lastChild.textContent = p.id === state.you ? p.name + " (you)" : p.name;
-    d.classList.toggle("away", !p.connected);
-    const zi = m.zones.indexOf(p.zone);
-    const slot = slots[zi] = (slots[zi] ?? -1) + 1;
-    d.style.left = "calc(" + (zi % 2) * 50 + "% + " + (10 + (slot % 3) * 62) + "px)";
-    d.style.top = "calc(" + Math.floor(zi / 2) * 50 + "% + " + (34 + Math.floor(slot / 3) * 58) + "px)";
+    const r = rel(p);
+    const g = svgEl("g", { class: "r-dot" + (p.id === state.you ? " me" : ""), transform: "translate(" + (r.x * px).toFixed(1) + " " + (-r.y * px).toFixed(1) + ")" });
+    g.append(svgEl("circle", { r: 5 }));
+    const t = svgEl("text", { y: -8, "text-anchor": "middle" });
+    t.textContent = p.name + (p.id === state.you ? "" : " · " + Math.round(Math.hypot(r.x, r.y)) + " m");
+    g.append(t);
+    board.appendChild(g);
   }
-  for (const [id, d] of mapDots) if (!seen.has(id)) { d.remove(); mapDots.delete(id); }
-  board.style.setProperty("--rows", Math.ceil(m.zones.length / 2));
-  $("mapPick").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.zone === m.mine));
-  $("mapStop").classList.toggle("hidden", !m.mine);
-  $("mapNote").textContent = m.mine ? "You are sharing: everyone on the map can see you in " + m.mine + "." : "You are not on the map. Tap a place to appear there.";
+  $("mapNote").textContent = m.mine ? "You are sharing your location with the people on this radar." : "You are not sharing. " + (m.people.length ? "The radar is centred on " + ref.name + "." : "Nobody is sharing yet.");
+  if (!m.mine && geoWatch !== null && Date.now() - geoSentAt > 20000) stopSharing(false); // the server dropped us (a long silence): sharing has ended
+  $("mapShare").textContent = geoWatch !== null ? "Stop sharing my location" : "Start sharing my location";
   const ul = $("mapLog");
-  ul.replaceChildren(...m.log.slice().reverse().map((e) => {
-    const li = document.createElement("li");
-    li.textContent = e.name + ": " + (e.to ? (e.from ? e.from + " → " + e.to : "now in " + e.to) : "stopped sharing");
-    return li;
-  }));
+  ul.replaceChildren(...m.log.slice().reverse().map((e) => { const li = document.createElement("li"); li.textContent = e.name + " " + e.what; return li; }));
   if (!m.log.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "Nothing yet."; ul.append(li); }
 }
 $("mapBtn").addEventListener("click", () => { $("mapModal").classList.remove("hidden"); renderMap(state && state.map); });
-$("mapStop").addEventListener("click", () => send({ op: "mapMove", zone: "" }));
+$("mapShare").addEventListener("click", () => { if (geoWatch !== null) stopSharing(true); else startSharing(); });
 ["mapX", "mapClose"].forEach((id) => $(id).addEventListener("click", () => $("mapModal").classList.add("hidden")));
 $("mapModal").addEventListener("click", (e) => { if (e.target === $("mapModal")) $("mapModal").classList.add("hidden"); });
+window.addEventListener("pagehide", () => stopSharing(false)); // closing the page ends sharing
 
 $("koreanBtn").addEventListener("click", openLearn);
 

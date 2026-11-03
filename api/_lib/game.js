@@ -199,34 +199,35 @@ export function join(s, { name, admin, role, playerId, coadmin, observer }, now)
   return p;
 }
 
-/* ---------------- location map (private games only, opt-in) ---------------- */
+/* ---------------- location radar (private games only, opt-in) ---------------- */
 
-/** The places on the map. A person is in at most one; they choose it themselves, and can stop sharing at any time. */
-export const MAP_ZONES = ['Lobby', 'Kitchen', 'Lounge', 'Office'];
 const MAP_LOG_MAX = 30;
+const MAP_FRESH_MS = 90000; // a phone that has not reported for this long drops off the radar
+const num = (v, lo, hi) => (typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi ? v : null);
 
-function mapMove(s, p, zone, now) {
+/** A phone that chose to share reports where it is, every few seconds; { stop: true } takes it off the radar. */
+function mapPos(s, p, b, now) {
   if (!s.private || !canLearn(p)) fail('Unknown action.');
   const log = (s.mapLog ||= []);
-  const note = (from, to) => { log.push({ at: now, name: p.name, from, to }); while (log.length > MAP_LOG_MAX) log.shift(); };
-  if (zone === '') { // stop sharing: the dot leaves the map
-    if (p.zone) note(p.zone, '');
-    delete p.zone;
+  const note = (what) => { log.push({ at: now, name: p.name, what }); while (log.length > MAP_LOG_MAX) log.shift(); };
+  if (b.stop === true) {
+    if (p.pos) note('stopped sharing');
+    delete p.pos;
     return;
   }
-  if (!MAP_ZONES.includes(zone)) fail('Choose a place on the map.');
-  if (p.zone === zone) return;
-  note(p.zone || '', zone);
-  p.zone = zone;
+  const lat = num(b.lat, -90, 90), lon = num(b.lon, -180, 180), acc = num(b.acc, 0, 100000);
+  if (lat === null || lon === null) fail('No location received.');
+  if (!p.pos || now - p.pos.at > MAP_FRESH_MS) note('started sharing');
+  p.pos = { lat: Math.round(lat * 1e5) / 1e5, lon: Math.round(lon * 1e5) / 1e5, acc: Math.round(acc ?? 0), at: now };
 }
 
-/** The map as a member sees it: only people who chose to share are on it, and nobody but the admin and private players gets the field. */
+/** The radar as a member sees it: only people who are sharing right now, and nobody but the admin and private players gets the field. */
 function mapView(s, me, now) {
   if (!s.private || !canLearn(me)) return undefined;
   return {
-    zones: MAP_ZONES,
-    mine: me.zone || '',
-    people: s.members.filter((m) => m.zone && !m.bot && !m.observer && canLearn(m)).map((m) => ({ id: m.id, name: m.name, zone: m.zone, connected: online(m, now) })),
+    mine: Boolean(me.pos && now - me.pos.at <= MAP_FRESH_MS),
+    people: s.members.filter((m) => m.pos && now - m.pos.at <= MAP_FRESH_MS && !m.bot && !m.observer && canLearn(m))
+      .map((m) => ({ id: m.id, name: m.name, lat: m.pos.lat, lon: m.pos.lon, acc: m.pos.acc })),
     log: (s.mapLog || []).slice(-12),
   };
 }
@@ -543,7 +544,7 @@ function dispatch(s, me, b, now) {
     case 'chat': return chat(s, me, b.text, now, { imgId: b.imgId, replyT: Number.isFinite(b.replyT) ? b.replyT : 0, replyFrom: String(b.replyFrom ?? '') });
     case 'learnShow': case 'learnQuiz': case 'learnReveal': case 'learnAnswer': case 'learnEnd':
     case 'learnAsk': case 'learnWrite': case 'learnMark': case 'learnRemoveAsk': case 'learnWordAdd': case 'learnWordRemove': return learn(s, me, b, now);
-    case 'mapMove': return mapMove(s, me, String(b.zone ?? ''), now);
+    case 'mapPos': return mapPos(s, me, b, now);
     case 'pause': return setPaused(s, me, true, now);
     case 'resume': return setPaused(s, me, false, now);
     case 'voiceJoin': return voiceJoin(s, me);
@@ -689,7 +690,7 @@ function setPrivate(s, p, on, now) {
   if (on && s.settings) s.settings = { ...s.settings, publicVoice: false }; // a private game has no public voice, and it stays off when the game goes public again
   if (changed) s.chat = []; // switching public/private starts a clean chat
   if (!on) s.learn = null; // the Korean lesson belongs to private games
-  if (!on) { s.mapLog = []; s.members.forEach((m) => { delete m.zone; }); } // so does the map
+  if (!on) { s.mapLog = []; s.members.forEach((m) => { delete m.pos; }); } // so does the map
   addLog(s, on ? 'The admin made this game private.' : 'The admin made this game public.');
   const want = on ? 'private' : 'public';
   for (const m of [...s.members]) {
@@ -1423,7 +1424,7 @@ export function view(s, me, now) {
     })),
     chat: (s.chat || []).slice(-30),
     settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), botMatch: botOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
-    map: mapView(s, me, now), // the private location map: undefined for anyone but the admin and private players, and in public rooms
+    map: mapView(s, me, now), // the private location radar: undefined for anyone but the admin and private players, and in public rooms
     learn: learnView(s, me), // the live Korean lesson: undefined (not even sent) for anyone but the admin and private players
     canVoice: canVoice(s, me),
     canVideo: canVideo(s, me),

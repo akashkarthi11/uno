@@ -1,4 +1,4 @@
-// The private location map: opt-in, private rooms only, the admin and private players only.
+// The private location radar: opt-in, private rooms only, the admin and private players only.
 import test from 'node:test';
 process.env.GAME_ADMIN_ANY_NAME = '1';
 import assert from 'node:assert/strict';
@@ -10,27 +10,42 @@ const call = (body) => new Promise((resolve) => {
   handler({ method: 'POST', body }, res);
 });
 
-test('map: private rooms only, opt-in, moves are logged, public players get nothing', async () => {
+test('radar: private rooms only, opt-in, positions are checked, public players get nothing', async () => {
   const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
   const priv = (await call({ op: 'login', name: 'Pia', password: '281101' })).body.sys;
   const a = await call({ op: 'join', sys: admin, room: 'mp1', create: true });
   const mk = (r) => ({ room: 'mp1', token: r.body.token, playerId: r.body.state.you });
-  assert.equal(a.body.state.map, undefined, 'a public room has no map');
-  assert.equal((await call({ op: 'mapMove', ...mk(a), zone: 'Kitchen' })).code, 400, 'and refuses moves');
+  assert.equal(a.body.state.map, undefined, 'a public room has no radar');
+  assert.equal((await call({ op: 'mapPos', ...mk(a), lat: 12.97, lon: 77.59, acc: 8 })).code, 400, 'and refuses positions');
   await call({ op: 'private', ...mk(a), on: true });
   const p = await call({ op: 'join', sys: priv, room: 'mp1' });
   const s0 = (await call({ op: 'state', ...mk(a) })).body.state;
-  assert.deepEqual([s0.map.people.length, s0.map.mine], [0, ''], 'nobody is on the map until they choose to be');
-  const moved = await call({ op: 'mapMove', ...mk(p), zone: 'Kitchen' });
-  assert.deepEqual(moved.body.state.map.people.map((x) => [x.name, x.zone]), [['Pia', 'Kitchen']]);
-  await call({ op: 'mapMove', ...mk(p), zone: 'Lounge' });
+  assert.deepEqual([s0.map.people.length, s0.map.mine], [0, false], 'nobody is on it until they choose to share');
+  assert.equal((await call({ op: 'mapPos', ...mk(p), lat: 120, lon: 77.59 })).code, 400, 'a made-up position is refused');
+  assert.equal((await call({ op: 'mapPos', ...mk(p), lat: 'x', lon: 1 })).code, 400);
+  const sent = await call({ op: 'mapPos', ...mk(p), lat: 12.971234567, lon: 77.59, acc: 8.4 });
+  assert.deepEqual(sent.body.state.map.people.map((x) => [x.name, x.lat, x.lon, x.acc]), [['Pia', 12.97123, 77.59, 8]], 'rounded to about a metre');
+  await call({ op: 'mapPos', ...mk(p), lat: 12.9715, lon: 77.5905, acc: 6 });
   const seen = (await call({ op: 'state', ...mk(a) })).body.state.map;
-  assert.equal(seen.people[0].zone, 'Lounge', 'the admin sees the dot in the new place');
-  assert.deepEqual(seen.log.map((e) => [e.from, e.to]), [['', 'Kitchen'], ['Kitchen', 'Lounge']]);
-  assert.equal((await call({ op: 'mapMove', ...mk(p), zone: 'Roof' })).code, 400, 'only places on the map');
-  await call({ op: 'mapMove', ...mk(p), zone: '' });
-  assert.equal((await call({ op: 'state', ...mk(a) })).body.state.map.people.length, 0, 'stop sharing: off the map');
-  await call({ op: 'mapMove', ...mk(p), zone: 'Office' });
+  assert.equal(seen.people[0].lat, 12.9715, 'the admin sees the new position');
+  assert.deepEqual(seen.log.map((e) => e.what), ['started sharing'], 'only start and stop are logged, not every step');
+  await call({ op: 'mapPos', ...mk(p), stop: true });
+  const off = (await call({ op: 'state', ...mk(a) })).body.state.map;
+  assert.deepEqual([off.people.length, off.log.map((e) => e.what)], [0, ['started sharing', 'stopped sharing']]);
+  await call({ op: 'mapPos', ...mk(p), lat: 12.9, lon: 77.5 });
   await call({ op: 'private', ...mk(a), on: false });
-  assert.equal((await call({ op: 'state', ...mk(a) })).body.state.map, undefined, 'going public clears and hides the map');
+  assert.equal((await call({ op: 'state', ...mk(a) })).body.state.map, undefined, 'going public clears and hides the radar');
+});
+
+test('radar: a phone that stops reporting drops off', async () => {
+  const priv = (await call({ op: 'login', name: 'Quin', password: '281101' })).body.sys;
+  const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
+  const a = await call({ op: 'join', sys: admin, room: 'mp2', create: true });
+  const mk = (r) => ({ room: 'mp2', token: r.body.token, playerId: r.body.state.you });
+  await call({ op: 'private', ...mk(a), on: true });
+  const q = await call({ op: 'join', sys: priv, room: 'mp2' });
+  await call({ op: 'mapPos', ...mk(q), lat: 1, lon: 1 });
+  const { withRoom } = await import('../api/_lib/store.js');
+  await withRoom('mp2', (s) => { for (const m of s.members) if (m.pos) m.pos.at -= 120000; });
+  assert.equal((await call({ op: 'state', ...mk(a) })).body.state.map.people.length, 0, 'stale after 90 seconds');
 });

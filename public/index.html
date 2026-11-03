@@ -81,7 +81,7 @@
   <button id="lobbyLockBtn" class="ghost hidden" type="button">⏻ Turn off room</button>
   <button id="koreanBtn" class="ghost hidden" type="button">🇰🇷 Learn Korean</button>
   <button id="videoBtn" class="ghost hidden" type="button">🎬 AI videos</button>
-  <button id="mapBtn" class="ghost hidden" type="button">🗺 Map</button>
+  <button id="mapBtn" class="ghost hidden" type="button">📡 Radar</button>
   <div id="chat">
     <div id="chatLog"></div>
     <div id="emojiBar"></div>
@@ -270,16 +270,15 @@
 <div id="mapModal" class="modal hidden">
   <div class="box sheet">
     <div class="sheet-head">
-      <h2>🗺 Map</h2>
+      <h2>📡 Radar</h2>
       <button id="mapX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
     </div>
-    <div id="mapBoard" class="map-board" aria-label="Who is where"></div>
+    <svg id="mapBoard" class="radar" viewBox="-100 -100 200 200" role="img" aria-label="Who is where, around you"></svg>
     <p id="mapNote" class="hint"></p>
-    <div id="mapPick" class="map-pick"></div>
-    <button id="mapStop" class="ghost hidden" type="button">Stop sharing my location</button>
+    <button id="mapShare" type="button">Start sharing my location</button>
     <div class="set-label">Moves</div>
     <ul id="mapLog" class="map-log"></ul>
-    <p class="hint">Only people who tap a place appear here, and only the admin and private players can see it. You choose where you are and can stop at any time.</p>
+    <p class="hint">Only the admin and private players can see this, and only people who tap Start sharing appear. Your phone asks permission first, and sharing stops when you tap Stop or close the page. North is up. Indoors a phone's GPS can be off by 10-50 m.</p>
     <button id="mapClose" class="ghost sticky-close" type="button">Close</button>
   </div>
 </div>
