@@ -911,6 +911,8 @@ function renderLobby(s) {
   const canVid = Boolean(s.canAiVideo);
   $("videoBtn").classList.toggle("hidden", !canVid);
   $("videoBtn2").classList.toggle("hidden", !canVid);
+  $("mapBtn").classList.toggle("hidden", !s.map); // the private location map: only sent to the admin and private players
+  if (!$("mapModal").classList.contains("hidden")) renderMap(s.map);
   if (typeof duelSync === "function") duelSync(s); // the 3D duel button (duel.js)
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
   $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over) || s.canBot === false); // anyone may start a practice match against the bot
@@ -3039,6 +3041,63 @@ async function openLearn() {
   }
   renderLearn(state);
 }
+/* ---- the private location map: people who chose to share, shown in the place they picked ---- */
+const mapDots = new Map(); // player id -> its dot, kept between updates so a move slides instead of jumping
+function renderMap(m) {
+  const board = $("mapBoard");
+  if (!m) { $("mapModal").classList.add("hidden"); return; }
+  if (board.dataset.zones !== m.zones.join("|")) {
+    board.dataset.zones = m.zones.join("|");
+    board.replaceChildren(...m.zones.map((z) => { const t = document.createElement("div"); t.className = "map-zone"; t.textContent = z; return t; }));
+    mapDots.clear();
+    $("mapPick").replaceChildren(...m.zones.map((z) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ghost";
+      b.dataset.zone = z;
+      b.textContent = "I'm in " + z;
+      b.addEventListener("click", () => send({ op: "mapMove", zone: z }));
+      return b;
+    }));
+  }
+  const slots = {};
+  const seen = new Set();
+  for (const p of m.people) {
+    seen.add(p.id);
+    let d = mapDots.get(p.id);
+    if (!d) {
+      d = document.createElement("div");
+      d.className = "map-dot";
+      d.append(document.createElement("b"), document.createElement("span"));
+      board.appendChild(d);
+      mapDots.set(p.id, d);
+    }
+    d.firstChild.textContent = p.name.slice(0, 2).toUpperCase();
+    d.lastChild.textContent = p.id === state.you ? p.name + " (you)" : p.name;
+    d.classList.toggle("away", !p.connected);
+    const zi = m.zones.indexOf(p.zone);
+    const slot = slots[zi] = (slots[zi] ?? -1) + 1;
+    d.style.left = "calc(" + (zi % 2) * 50 + "% + " + (10 + (slot % 3) * 62) + "px)";
+    d.style.top = "calc(" + Math.floor(zi / 2) * 50 + "% + " + (34 + Math.floor(slot / 3) * 58) + "px)";
+  }
+  for (const [id, d] of mapDots) if (!seen.has(id)) { d.remove(); mapDots.delete(id); }
+  board.style.setProperty("--rows", Math.ceil(m.zones.length / 2));
+  $("mapPick").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.zone === m.mine));
+  $("mapStop").classList.toggle("hidden", !m.mine);
+  $("mapNote").textContent = m.mine ? "You are sharing: everyone on the map can see you in " + m.mine + "." : "You are not on the map. Tap a place to appear there.";
+  const ul = $("mapLog");
+  ul.replaceChildren(...m.log.slice().reverse().map((e) => {
+    const li = document.createElement("li");
+    li.textContent = e.name + ": " + (e.to ? (e.from ? e.from + " → " + e.to : "now in " + e.to) : "stopped sharing");
+    return li;
+  }));
+  if (!m.log.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "Nothing yet."; ul.append(li); }
+}
+$("mapBtn").addEventListener("click", () => { $("mapModal").classList.remove("hidden"); renderMap(state && state.map); });
+$("mapStop").addEventListener("click", () => send({ op: "mapMove", zone: "" }));
+["mapX", "mapClose"].forEach((id) => $(id).addEventListener("click", () => $("mapModal").classList.add("hidden")));
+$("mapModal").addEventListener("click", (e) => { if (e.target === $("mapModal")) $("mapModal").classList.add("hidden"); });
+
 $("koreanBtn").addEventListener("click", openLearn);
 
 /* ---------- AI videos (private rooms): make one from words or from a picture, and keep a list until it is deleted ---------- */

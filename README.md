@@ -354,3 +354,11 @@ How it works: the server only keeps the invite (`duelStart` / `duelEnd`, shown t
 (`public/duel.js`): movement on an unordered channel, hits and deaths on a reliable one. If a direct link fails after 8 seconds and the room has relay entries
 (Settings → Relay), it retries through the relay. Each browser is the referee for its own player (position and health), so this suits friends, not ranked play.
 Needs WebGL; a browser without it gets a message and the lobby stays as it was. Observers and rooms with a bot or three or more players cannot start one.
+
+## Private location map
+
+Private rooms only (the admin and private players; public players are never sent it). A **🗺 Map** button in the lobby opens a floor plan with the places
+Lobby, Kitchen, Lounge and Office (`MAP_ZONES` in `api/_lib/game.js`). It is opt-in: nobody is on the map until they tap **I'm in <place>**, they can move
+whenever they like, and **Stop sharing my location** takes them off. Dots slide to the new place and a short log lists the moves ("Ann: Kitchen → Lounge").
+Going public clears the map. Nothing is tracked automatically: a browser cannot scan other people's Wi-Fi or Bluetooth. Real readers (ESP32 or access points)
+could later send the same `mapMove` for an issued tag, which needs its own consent and a server-side check.
