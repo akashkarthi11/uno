@@ -3081,14 +3081,50 @@ function radarSync(m) {
   radarLabel();
 }
 
+/** Distance (m) and the true compass bearing (degrees clockwise from north) from one GPS fix to another: the great-circle formulas, so they stay right at any range. */
+const toRad = (d) => (d * Math.PI) / 180;
+function geoTo(a, b) {
+  const R = 6371008.8, p1 = toRad(a.lat), p2 = toRad(b.lat), dl = toRad(b.lon - a.lon);
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  const y = Math.sin(dl) * Math.cos(p2), x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return { d: 2 * R * Math.asin(Math.min(1, Math.sqrt(h))), brg: ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360 };
+}
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const compassName = (b) => COMPASS[Math.round(b / 45) % 8];
+const fmtDist = (d) => (d >= 1000 ? (d / 1000).toFixed(d >= 10000 ? 0 : 1) + " km" : Math.round(d) + " m");
+
+/* the phone's own compass, when it has one: the direction arrows then turn with the phone (they point from where the phone faces) */
+let heading = null; // degrees clockwise from north the top of the phone points to
+let headingDrawn = 0;
+function onOrient(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === "number") h = e.webkitCompassHeading; // iPhone
+  else if (e.absolute && typeof e.alpha === "number") h = (360 - e.alpha) % 360; // Android
+  if (h === null) return;
+  heading = h;
+  const now = Date.now();
+  if (now - headingDrawn > 150 && !$("mapModal").classList.contains("hidden") && state) { headingDrawn = now; renderMap(state.map); }
+}
+function startCompass() {
+  try {
+    const go = () => {
+      window.addEventListener("deviceorientationabsolute", onOrient, true);
+      window.addEventListener("deviceorientation", onOrient, true);
+    };
+    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      DeviceOrientationEvent.requestPermission().then((r) => { if (r === "granted") go(); }).catch(() => {});
+    } else go();
+  } catch (e) { /* no compass: the arrows stay north-up */ }
+}
+
 function renderMap(m) {
   const board = $("mapBoard");
   if (!m) { $("mapModal").classList.add("hidden"); return; }
   const me = m.people.find((p) => p.id === state.you);
   const ref = me || m.people[0]; // the radar is centred on you, or on the first person while you are not sharing
-  const rel = (p) => { // metres east / north of the centre
-    const k = Math.cos((ref.lat * Math.PI) / 180);
-    return { x: (p.lon - ref.lon) * 111320 * k, y: (p.lat - ref.lat) * 110540 };
+  const rel = (p) => { // metres east / north of the centre, from the true distance and bearing
+    const g = geoTo(ref, p);
+    return { x: g.d * Math.sin(toRad(g.brg)), y: g.d * Math.cos(toRad(g.brg)), d: g.d, brg: g.brg };
   };
   const far = ref ? Math.max(0, ...m.people.map((p) => Math.hypot(rel(p).x, rel(p).y))) : 0;
   const range = RING_STEPS.find((r) => r >= far * 1.15) || RING_STEPS[RING_STEPS.length - 1]; // the outer ring, in metres
@@ -3107,19 +3143,48 @@ function renderMap(m) {
   for (const p of m.people) {
     const r = rel(p);
     const g = svgEl("g", { class: "r-dot" + (p.id === state.you ? " me" : ""), transform: "translate(" + (r.x * px).toFixed(1) + " " + (-r.y * px).toFixed(1) + ")" });
+    if (p.id !== state.you && ref === me) board.insertBefore(svgEl("line", { x1: 0, y1: 0, x2: (r.x * px).toFixed(1), y2: (-r.y * px).toFixed(1), class: "r-ray" }), board.querySelector(".r-dot")); // a line from you toward them
     g.append(svgEl("circle", { r: 5 }));
     const t = svgEl("text", { y: -8, "text-anchor": "middle" });
-    t.textContent = p.name + (p.id === state.you ? "" : " · " + Math.round(Math.hypot(r.x, r.y)) + " m");
+    t.textContent = p.name + (p.id === state.you ? "" : " · " + compassName(r.brg) + " " + fmtDist(r.d));
     g.append(t);
     board.appendChild(g);
   }
+  // the directions: for each person, an arrow toward them, their compass bearing and how far, with the GPS error of the two phones
+  const dir = $("mapDir");
+  dir.replaceChildren();
+  if (me) {
+    for (const p of m.people) {
+      if (p.id === state.you) continue;
+      const r = rel(p);
+      const err = Math.round(Math.hypot(me.acc || 0, p.acc || 0));
+      const li = document.createElement("li");
+      const arrow = document.createElement("span");
+      arrow.className = "dir-arrow";
+      arrow.textContent = "➤";
+      arrow.style.transform = "rotate(" + Math.round(r.brg - 90 - (heading === null ? 0 : heading)) + "deg)"; // ➤ points east at 0 deg
+      const txt = document.createElement("span");
+      txt.className = "dir-text";
+      const close = r.d <= Math.max(err, 5);
+      txt.textContent = p.name + ": " + (close ? "right here (within about " + Math.max(err, 5) + " m)" : compassName(r.brg) + " · " + String(Math.round(r.brg)).padStart(3, "0") + "° · " + fmtDist(r.d) + " (±" + err + " m)");
+      li.append(arrow, txt);
+      dir.append(li);
+    }
+    if (!dir.children.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "Nobody else is sharing yet."; dir.append(li); }
+  } else {
+    const li = document.createElement("li");
+    li.className = "hint";
+    li.textContent = "Share your location to see which way everyone is.";
+    dir.append(li);
+  }
+  $("mapDirNote").textContent = heading === null ? "Arrows are north-up: the top of the screen is north." : "Arrows turn with your phone: the top of the screen is where your phone points.";
   $("mapWho").textContent = state.private ? "Only the admin and private players can see this" : "Everyone in this room can see it, including people you may not know";
   $("mapNote").textContent = m.mine ? "You are sharing your location with the people on this radar." : "You are not sharing. " + (m.people.length ? "The radar is centred on " + ref.name + "." : "Nobody is sharing yet.");
   const ul = $("mapLog");
   ul.replaceChildren(...m.log.slice().reverse().map((e) => { const li = document.createElement("li"); li.textContent = e.name + " " + e.what; return li; }));
   if (!m.log.length) { const li = document.createElement("li"); li.className = "hint"; li.textContent = "Nothing yet."; ul.append(li); }
 }
-$("mapBtn").addEventListener("click", () => { $("mapModal").classList.remove("hidden"); renderMap(state && state.map); });
+$("mapBtn").addEventListener("click", () => { $("mapModal").classList.remove("hidden"); startCompass(); renderMap(state && state.map); });
 $("radarBtn").addEventListener("click", () => {
   if (radarOn()) { store("radar", "off"); stopSharing(true); toast("You are off the radar."); }
   else { store("radar", "on"); geoBlocked = false; startSharing(); toast("Sharing your location on the radar."); }

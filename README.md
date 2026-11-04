@@ -362,7 +362,7 @@ with a ring scale (5 m up to 50 km, chosen to fit everyone) and a dot for each p
 the browser asks for permission once, and then their phone reports its GPS position every 5 seconds (`mapPos`) while the page is open. The Radar button reads
 "📡 Radar · sharing" while it is on. Each person turns it off on their own phone in **Settings → 📡 Share my location** (remembered on that phone); if the browser
 refuses permission they are simply not on the radar. Closing the page, 90 seconds of silence, or the switch ends it. Only start and stop are logged.
-Everyone in the room who is sharing sees everyone else who is sharing, and the radar window says so (in a public room: including people they may not know).
+The radar window also has a **Direction** list: for each other person an arrow toward them, their compass bearing (for example "NE · 045°"), the distance and the GPS error of the two phones. Distance and bearing use the great-circle formulas on the two GPS fixes, so they stay right at any range, and a line on the radar points from you to each person. On a phone with a compass the arrows turn with the phone (the top of the screen is where it points; an iPhone asks for motion permission when the radar opens); without one they are north-up. Everyone in the room who is sharing sees everyone else who is sharing, and the radar window says so (in a public room: including people they may not know).
 Positions are rounded to about a metre and kept only in the room (never in the database).
 Indoors, phone GPS can be off by 10-50 m. For room-level accuracy indoors, ESP32 or access-point readers could report an issued tag's position to the same
 `mapPos` action, which needs its own consent and a server-side check.

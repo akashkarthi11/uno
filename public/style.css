@@ -1659,3 +1659,9 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 .r-dot.me circle { fill: #22c55e; }
 .r-dot text { font-size: 6px; fill: currentColor; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 1.4px; }
 .map-log { list-style: none; margin: 4px 0 8px; padding: 0; font-size: 13px; display: grid; gap: 4px; }
+
+.r-ray { stroke: rgba(124,92,240,.55); stroke-width: .6; stroke-dasharray: 2 2; }
+.map-dir { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 6px; }
+.map-dir li { display: flex; align-items: center; gap: 10px; }
+.dir-arrow { flex: none; width: 34px; height: 34px; display: grid; place-items: center; font-size: 22px; line-height: 1; color: var(--brand-ink, #7c5cf0); background: var(--brand-soft, rgba(124,92,240,.15)); border-radius: 50%; transition: transform .15s linear; }
+.dir-text { min-width: 0; overflow-wrap: anywhere; }
