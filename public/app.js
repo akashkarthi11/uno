@@ -3048,6 +3048,7 @@ async function openLearn() {
 const RING_STEPS = [5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 50000];
 let geoWatch = null; // the browser's watchPosition id while this phone is sharing
 let geoSentAt = 0;
+let geoGoodAt = 0; // when the last good (150 m or better) fix came in
 let geoBlocked = false; // permission refused or no position: do not ask again until the page is reloaded
 const radarOn = () => store("radar") !== "off"; // sharing is on by default; this phone's Settings switch turns it off
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -3066,11 +3067,14 @@ function startSharing() {
   if (geoWatch !== null || geoBlocked || !navigator.geolocation) return;
   geoWatch = navigator.geolocation.watchPosition((p) => {
     const now = Date.now();
-    if (now - geoSentAt < 5000 || !state) return; // one report every 5 seconds is plenty
+    // a rough fix (Wi-Fi / cell tower, often hundreds of metres out) is not sent while a good one is on its way, unless nothing better has come in 20 s
+    if (p.coords.accuracy > 150 && now - geoGoodAt < 20000) return;
+    if (p.coords.accuracy <= 150) geoGoodAt = now;
+    if (now - geoSentAt < (!$("mapModal").classList.contains("hidden") ? 2000 : 5000) || !state) return; // every 5 seconds, every 2 while the radar is open
     geoSentAt = now;
     api({ op: "mapPos", lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }).then(apply).catch(() => {});
   }, (e) => { geoBlocked = true; stopSharing(false); toast(e.code === 1 ? "Location permission was refused, so you are not on the radar." : "Could not get your location."); },
-  { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
   radarLabel();
 }
 /** Called with every state update: join the radar by itself unless this phone switched sharing off. */
@@ -3098,9 +3102,20 @@ let heading = null; // degrees clockwise from north the top of the phone points 
 let headingDrawn = 0;
 function onOrient(e) {
   let h = null;
-  if (typeof e.webkitCompassHeading === "number") h = e.webkitCompassHeading; // iPhone
-  else if (e.absolute && typeof e.alpha === "number") h = (360 - e.alpha) % 360; // Android
+  if (typeof e.webkitCompassHeading === "number") h = e.webkitCompassHeading; // iPhone (already tilt-corrected)
+  else if (e.absolute && typeof e.alpha === "number" && typeof e.beta === "number" && typeof e.gamma === "number") {
+    // Android: the true compass heading from all three angles, so it is right with the phone held upright or flat (W3C formula)
+    const x = toRad(e.beta), y = toRad(e.gamma), z = toRad(e.alpha);
+    const vx = -Math.cos(z) * Math.sin(y) - Math.sin(z) * Math.sin(x) * Math.cos(y);
+    const vy = -Math.sin(z) * Math.sin(y) + Math.cos(z) * Math.sin(x) * Math.cos(y);
+    h = (Math.atan2(vx, vy) * 180) / Math.PI;
+    h = (h + 360) % 360;
+  }
   if (h === null) return;
+  const turned = (screen.orientation && screen.orientation.angle) || 0; // landscape: the top of the screen is not the top of the phone
+  h = (h + turned + 360) % 360;
+  // smooth the jitter (a compass wobbles) without lagging: move 40% of the way, along the short side of the circle
+  if (heading !== null) { const dlt = ((h - heading + 540) % 360) - 180; h = (heading + dlt * 0.4 + 360) % 360; }
   heading = h;
   const now = Date.now();
   if (now - headingDrawn > 150 && !$("mapModal").classList.contains("hidden") && state) { headingDrawn = now; renderMap(state.map); }
@@ -3158,6 +3173,7 @@ function renderMap(m) {
       if (p.id === state.you) continue;
       const r = rel(p);
       const err = Math.round(Math.hypot(me.acc || 0, p.acc || 0));
+      const age = Math.round((p.age || 0) / 1000);
       const li = document.createElement("li");
       const arrow = document.createElement("span");
       arrow.className = "dir-arrow";
@@ -3166,7 +3182,8 @@ function renderMap(m) {
       const txt = document.createElement("span");
       txt.className = "dir-text";
       const close = r.d <= Math.max(err, 5);
-      txt.textContent = p.name + ": " + (close ? "right here (within about " + Math.max(err, 5) + " m)" : compassName(r.brg) + " · " + String(Math.round(r.brg)).padStart(3, "0") + "° · " + fmtDist(r.d) + " (±" + err + " m)");
+      txt.textContent = p.name + ": " + (close ? "right here (within about " + Math.max(err, 5) + " m)" : compassName(r.brg) + " · " + String(Math.round(r.brg)).padStart(3, "0") + "° · " + fmtDist(r.d) + " (±" + err + " m)") +
+        (err > r.d ? " · GPS too weak to be sure, go outside or wait" : err > r.d / 2 ? " · direction is rough" : "") + (age >= 10 ? " · seen " + age + " s ago" : "");
       li.append(arrow, txt);
       dir.append(li);
     }

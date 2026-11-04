@@ -227,7 +227,7 @@ function mapView(s, me, now) {
   return {
     mine: Boolean(me.pos && now - me.pos.at <= MAP_FRESH_MS),
     people: s.members.filter((m) => m.pos && now - m.pos.at <= MAP_FRESH_MS && !m.bot && !m.observer)
-      .map((m) => ({ id: m.id, name: m.name, lat: m.pos.lat, lon: m.pos.lon, acc: m.pos.acc })),
+      .map((m) => ({ id: m.id, name: m.name, lat: m.pos.lat, lon: m.pos.lon, acc: m.pos.acc, age: Math.max(0, now - m.pos.at) })),
     log: (s.mapLog || []).slice(-12),
   };
 }
