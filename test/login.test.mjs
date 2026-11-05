@@ -73,14 +73,16 @@ test('the admin makes it private; private players join it, public players are to
   const refused = await call({ op: 'join', sys: pub, room: room.room });
   assert.equal(refused.code, 401);
   assert.equal(refused.body.error, 'System down', 'no hint that the game is private');
-  // private players and observers cannot create rooms, and a private player cannot enter a public room
-  assert.equal((await call({ op: 'join', sys: priv, create: true })).code, 400);
+  // a private player can create a room, which is private (public players cannot enter it), and runs it; a private player cannot enter a public room
+  const privMade = await call({ op: 'join', sys: priv, create: true });
+  assert.deepEqual([privMade.code, privMade.body.state.private, privMade.body.state.canStart, privMade.body.state.owns], [200, true, true, true]);
+  assert.equal((await call({ op: 'join', sys: pub, room: privMade.body.room })).code, 401, 'a public player cannot enter it');
   const pubRoom = (await call({ op: 'join', sys: pub, create: true })).body.room;
   assert.equal((await call({ op: 'join', sys: priv, room: pubRoom })).code, 401);
   // the observer can sit in any room, private or public, without creating
   const obs = (await login('x', '1102')).sys;
   assert.equal((await call({ op: 'join', sys: obs, room: room.room })).code, 200);
-  assert.equal((await call({ op: 'join', sys: obs, create: true })).code, 400);
+  assert.equal((await call({ op: 'join', sys: obs, create: true })).code, 400, 'the observer cannot create rooms');
 });
 
 test('the shutdown switch stops public players signing in and entering rooms; the admin is not affected', async () => {

@@ -265,7 +265,7 @@ async function handle(req, res) {
       const sys = verifyToken(String(b.sys), '*', now, SYS_SALT);
       if (!sys) return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
       const named = /^[A-Za-z0-9_-]{1,24}$/.test(String(b.room ?? '').trim()) ? String(b.room).trim() : '';
-      if (b.create && sys.role !== 'admin' && sys.role !== 'public') return res.status(400).json({ error: 'Join a room with its code.' });
+      if (b.create && sys.role !== 'admin' && sys.role !== 'public' && sys.role !== 'private') return res.status(400).json({ error: 'Join a room with its code.' });
       const rc = b.create ? named || randomBytes(3).toString('hex') : named;
       if (!rc) return res.status(400).json({ error: 'Enter the room code.' });
       const existing = await readRoom(rc);
@@ -275,7 +275,7 @@ async function handle(req, res) {
       if (sys.role === 'public') {
         if (isPrivate) return res.status(401).json({ error: 'System down', denied: true }); // a public player is never told a game is private
         if (await isShutdown()) return res.status(401).json({ error: 'System down', denied: true });
-      } else if (sys.role === 'private' && !isPrivate) {
+      } else if (sys.role === 'private' && !isPrivate && !b.create) {
         return res.status(401).json({ error: 'This game is public.', denied: true });
       } else if (sys.role === 'observer' && (await isObserverOff())) {
         return res.status(401).json({ error: 'Session expired — sign in again.', denied: true });
@@ -286,7 +286,9 @@ async function handle(req, res) {
       const state = await withRoom(rc, (s) => {
         G.tick(s, now);
         if (!s.owner && !s.members.length && sys.role !== 'observer') { s.owner = sys.n; s.ownerRole = sys.role; } // whoever opens the room owns it
+        if (b.create && sys.role === 'private') s.private = true; // a room a private player opens is a private room
         const me = G.join(s, { name: sys.n, admin: sys.role === 'admin', role: sys.role, playerId: b.playerId, observer: sys.role === 'observer' }, now);
+        if (b.create && sys.role === 'private' && !s.members.some((m) => m !== me && !m.observer)) me.starter = true; // the private player who opened it runs it, like a public room's first player
         claim = { r: rc, p: me.id, role: sys.role, n: me.name, co: false, obs: Boolean(me.observer), a0: Boolean(sys.a0) };
         return G.view(s, me, now);
       });

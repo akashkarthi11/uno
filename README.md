@@ -270,8 +270,8 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
   room any more. The Stats window shows the room's table and last 10 games from there, plus the viewer's own totals across every room (played,
   wins, losses, points, streaks) instead of numbers kept in the browser. Games against the bot are still not counted.
 - **Sign-in is for the whole system, not for a room.** You sign in once (name and password, or Auth0), then choose **Create room** (a name of your
-  own or a random code) or **Join room** (the code a friend gave you). Admins and public players can create rooms; private players and the
-  observer join existing ones. Joining a code that does not exist says so instead of making a new room. Sign out is on that screen.
+  own or a random code) or **Join room** (the code a friend gave you). Admins, public players and private players can create rooms (a private player's room is private, and they run it); the
+  observer joins existing ones. Joining a code that does not exist says so instead of making a new room. Sign out is on that screen.
 - **Co-admin:** the first public player into an empty public room is its co-admin (shown as "admin", can start games, change game
   settings, pause / resume / restart; no relay / public voice / public-private switch, no removing players). The real admin can
   also appoint or remove co-admins. The old 12345678 password is gone.

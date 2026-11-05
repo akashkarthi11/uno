@@ -265,7 +265,7 @@ function showRoomScreen() {
   $("roomHello").textContent = "Hi, " + (myName || "there");
   $("linkBtn").classList.toggle("hidden", !sysA0);
   $("linkBox").classList.add("hidden");
-  const canCreate = sysRole === "admin" || sysRole === "public"; // private players and observers join the admin's rooms
+  const canCreate = sysRole === "admin" || sysRole === "public" || sysRole === "private"; // the observer joins rooms; a room a private player creates is private
   ["createName", "createBtn"].forEach((id) => { const el = $(id); (el.closest("label") || el).classList.toggle("hidden", !canCreate); });
   const want = new URLSearchParams(location.search).get("room") || session("uno-want") || "";
   if (want && !$("joinCode").value) $("joinCode").value = want;
