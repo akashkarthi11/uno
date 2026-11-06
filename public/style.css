@@ -1665,3 +1665,7 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 .map-dir li { display: flex; align-items: center; gap: 10px; }
 .dir-arrow { flex: none; width: 34px; height: 34px; display: grid; place-items: center; font-size: 22px; line-height: 1; color: var(--brand-ink, #7c5cf0); background: var(--brand-soft, rgba(124,92,240,.15)); border-radius: 50%; transition: transform .15s linear; }
 .dir-text { min-width: 0; overflow-wrap: anywhere; }
+#duel button#duelFireL { position: absolute; border-radius: 50%; padding: 0; color: #fff; border: 3px solid rgba(255,255,255,.7); display: none; left: 22px; bottom: max(150px, calc(env(safe-area-inset-bottom) + 134px)); width: 78px; height: 78px; font-size: 30px; background: rgba(239,68,68,.6); }
+#duel.touch button#duelFireL { display: block; }
+#duel button#duelFireL.down { background: rgba(239,68,68,.95); transform: scale(.94); }
+@media (max-height: 420px) { #duel button#duelFireL { bottom: 84px; width: 66px; height: 66px; } }

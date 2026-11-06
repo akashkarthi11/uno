@@ -146,7 +146,7 @@ function duelBuildUi(d) {
     '<div class="duel-ammo"><div id="duelSlots"></div><span id="duelAmmo"></span><small id="duelAmmoHint"></small><div class="duel-rel"><div id="duelRelBar"></div></div></div></div>' +
     '<div id="duelPanel" class="hidden"><div class="duel-panel-in"><div class="duel-panel-head"><b>Inventory</b><button id="duelPanelX" type="button">✕</button></div><div id="duelPanelBody"></div><p class="duel-note">The match keeps running while this is open.</p></div></div>' +
     '<div id="duelBigMap" class="hidden"><div class="duel-map-in"><div class="duel-panel-head"><b>Tactical map</b><button id="duelMapX" type="button">✕</button></div><canvas id="duelMapBig" width="560" height="560"></canvas><div id="duelLegend"></div></div></div>' +
-    '<button id="duelFire" type="button" aria-label="Fire">🔫</button>' +
+    '<button id="duelFire" type="button" aria-label="Fire">🔫</button><button id="duelFireL" type="button" aria-label="Fire (left)">🔫</button>' +
     '<button id="duelAim" type="button" aria-label="Aim">◎</button>' +
     '<button id="duelJump" type="button" aria-label="Jump">⤒</button>' +
     '<button id="duelCrouch" type="button" aria-label="Crouch">⤓</button>' +
@@ -759,28 +759,31 @@ function duelBind(d) {
     duelOn(d, el, "touchcancel", off);
   };
   // the fire button also turns the view: hold it and drag the same thumb to aim while shooting
-  const fireBtn = q("#duelFire");
   let fireTouch = null;
-  duelOn(d, fireBtn, "touchstart", (e) => {
-    e.preventDefault(); e.stopPropagation();
-    const t = e.changedTouches[0];
-    fireTouch = { id: t.identifier, x: t.clientX, y: t.clientY };
-    d.fireDown = true;
-    fireBtn.classList.add("down");
-  }, { passive: false });
-  duelOn(d, fireBtn, "touchmove", (e) => {
-    e.preventDefault(); e.stopPropagation();
-    for (const t of e.changedTouches) {
-      if (!fireTouch || t.identifier !== fireTouch.id) continue;
-      const s = duelSensNow(d);
-      d.me.yaw -= (t.clientX - fireTouch.x) * 0.006 * s;
-      d.me.el = Math.max(-0.9, Math.min(0.6, d.me.el - (t.clientY - fireTouch.y) * 0.006 * s));
-      fireTouch.x = t.clientX; fireTouch.y = t.clientY;
-    }
-  }, { passive: false });
-  const fireEnd = (e) => { e.preventDefault(); e.stopPropagation(); fireTouch = null; d.fireDown = false; fireBtn.classList.remove("down"); };
-  duelOn(d, fireBtn, "touchend", fireEnd, { passive: false });
-  duelOn(d, fireBtn, "touchcancel", fireEnd, { passive: false });
+  const fireButtons = [q("#duelFire"), q("#duelFireL")];
+  const fireEnd = (e) => { e.preventDefault(); e.stopPropagation(); fireTouch = null; d.fireDown = false; fireButtons.forEach((b) => b.classList.remove("down")); };
+  fireButtons.forEach((fireBtn) => { // one on each side, for either thumb
+    duelOn(d, fireBtn, "touchstart", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (fireTouch) return;
+      const t = e.changedTouches[0];
+      fireTouch = { id: t.identifier, x: t.clientX, y: t.clientY };
+      d.fireDown = true;
+      fireBtn.classList.add("down");
+    }, { passive: false });
+    duelOn(d, fireBtn, "touchmove", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      for (const t of e.changedTouches) {
+        if (!fireTouch || t.identifier !== fireTouch.id) continue;
+        const s = duelSensNow(d);
+        d.me.yaw -= (t.clientX - fireTouch.x) * 0.006 * s;
+        d.me.el = Math.max(-0.9, Math.min(0.6, d.me.el - (t.clientY - fireTouch.y) * 0.006 * s));
+        fireTouch.x = t.clientX; fireTouch.y = t.clientY;
+      }
+    }, { passive: false });
+    duelOn(d, fireBtn, "touchend", fireEnd, { passive: false });
+    duelOn(d, fireBtn, "touchcancel", fireEnd, { passive: false });
+  });
   hold(q("#duelJump"), () => { d.jumpTouch = true; }, () => { d.jumpTouch = false; });
   hold(q("#duelReload"), () => duelReload(d), () => {});
   hold(q("#duelAim"), () => { d.me.ads = !d.me.ads; if (d.me.ads) duelCancelUse(d); q("#duelAim").classList.toggle("on", d.me.ads); }, () => {});
