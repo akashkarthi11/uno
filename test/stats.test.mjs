@@ -8,6 +8,7 @@ process.env.GAME_DEAL = 'off'; // no dealing animation
 const G = await import('../api/_lib/game.js');
 const { default: handler } = await import('../api/game.js'); // registers the recorder that writes finished games
 const { roomStats, playerTotals, _memGames } = await import('../api/_lib/stats.js');
+const { flush } = await import('../api/_lib/dbqueue.js');
 
 const card = (id, color, value) => ({ id, color, value });
 function finishWith(s, winner, now) {
@@ -31,6 +32,8 @@ test('every finished game is saved with its players; the room table and last 10 
     G.act(s, a, { op: 'start' }, 1000);
     finishWith(s, i % 4 === 0 ? b : a, 1000); // Ann wins 9, Bob wins 3
   }
+  await new Promise((r) => setTimeout(r, 30)); // the saves run behind the game (Redis, then the queue)
+  await flush();
   assert.equal(_memGames().filter((g) => g.room === 'sx1').length, 12, 'all 12 are kept, not only the last 10');
   const r = await roomStats('sx1', 'public');
   assert.equal(r.history.length, 10, 'the window still shows the last 10');

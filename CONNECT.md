@@ -103,6 +103,26 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "C:/karthi/UAB/uno:/app" -v "C:/Users/THIN
   `curl -s "$UPSTASH_REDIS_REST_URL/get/growx:authmode" -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN"` (on Windows add `--ssl-no-revoke`).
 - The app tries the primary, and for 30 s after a failure it uses the other one.
 
+### Redis first, Postgres behind (`api/_lib/dbqueue.js`)
+
+Players never wait for Postgres. Accounts and game stats are read from Redis; changes go to Redis at once and to a queue, and the queue is applied to Postgres in the background.
+
+| Redis key | Holds |
+|---|---|
+| `growx:acct:<name>` | one account by lower-case name (`local`: password hash, or `taken`: an Auth0 user / the admin). 24 h |
+| `growx:rs:<room>:<mode>` | a room's whole table and last 10 games. 1 h |
+| `growx:pt:<name>:<mode>` | one player's totals and streaks. 1 h |
+| `growx:q:db` | the queue (a list): sign-ups, sign-in counts, finished games |
+| `growx:q:dead` | jobs that failed 30 times (kept, never dropped) |
+| `growx:q:lock`, `growx:q:due` | one drain at a time, at most one every 4 s |
+
+- A read that misses Redis first lets the queue finish, then reads Postgres once and fills Redis.
+- The queue is drained after the answer has been sent (Vercel `waitUntil`), whenever any request arrives and the queue is not empty. With nobody online it waits, safe in Redis, for the next request.
+- Jobs are safe to run twice (finished games carry a `job_id`, sign-ups use `ON CONFLICT DO NOTHING`), so a crash in the middle loses nothing.
+- Look at it: `LLEN growx:q:db` (should be 0 or tiny), `LLEN growx:q:dead` (should be 0).
+- If Redis is wiped, accounts and stats are rebuilt from Postgres. Anything still in the queue at that moment is lost, so keep the queue short (it normally is).
+- Auth0 sign-in and linking an account still write Postgres directly (rare, and they need the row at once).
+
 ## 5. Connect to Postgres (Neon, Singapore)
 
 ```sh

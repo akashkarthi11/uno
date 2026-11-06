@@ -5,6 +5,7 @@
 // The connection string comes from the Vercel project (DATABASE_URL or POSTGRES_URL). Without it, sign-in keeps working the old way
 // (the shared public password), so a missing database never locks anyone out. GAME_USERS_MEMORY=1 uses an in-memory table for tests.
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { kvGet, kvSet, kvDel, enqueue, flush, registerJob, DEFAULT_TTL } from './dbqueue.js';
 
 // The Singapore database (a second Neon resource, variables prefixed SG_) is preferred; DATABASE_URL / POSTGRES_URL are the older one in US East.
 const URL_ENV = () => process.env.SG_DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
@@ -57,6 +58,8 @@ async function q(text, params = []) {
     run.query('CREATE UNIQUE INDEX IF NOT EXISTS growx_users_pw_name ON growx_users (username_key) WHERE pw_hash IS NOT NULL'),
     run.query('CREATE TABLE IF NOT EXISTS growx_games (id BIGSERIAL PRIMARY KEY, room TEXT NOT NULL, mode TEXT NOT NULL, game_no INTEGER NOT NULL, played_at TIMESTAMPTZ NOT NULL DEFAULT now(), players JSONB NOT NULL, ranking JSONB NOT NULL, loser TEXT, notice TEXT, winner TEXT, round_points INTEGER NOT NULL DEFAULT 0)'),
     run.query('CREATE TABLE IF NOT EXISTS growx_game_players (game_id BIGINT NOT NULL REFERENCES growx_games(id) ON DELETE CASCADE, name TEXT NOT NULL, name_key TEXT NOT NULL, won BOOLEAN NOT NULL, lost BOOLEAN NOT NULL, points INTEGER NOT NULL DEFAULT 0)'),
+    run.query('ALTER TABLE growx_games ADD COLUMN IF NOT EXISTS job_id TEXT'),
+    run.query('CREATE UNIQUE INDEX IF NOT EXISTS growx_games_job ON growx_games (job_id) WHERE job_id IS NOT NULL'),
     run.query('CREATE INDEX IF NOT EXISTS growx_games_room_mode ON growx_games (room, mode, played_at DESC)'),
     run.query('CREATE INDEX IF NOT EXISTS growx_game_players_name ON growx_game_players (name_key)')]).catch((e) => { ready = null; throw e; });
   }
@@ -67,28 +70,70 @@ async function q(text, params = []) {
 const key = (name) => String(name).trim().toLowerCase();
 const useMem = () => !URL_ENV();
 
-/** The account with this username that signs in with a password (an own-login account, or one merged with Auth0), or null. */
-export async function findLocal(username) {
+/* ---- the database itself (Postgres, or the memory table in tests). Callers outside this file use the Redis-first versions below. ---- */
+
+async function dbFindLocal(username) {
   if (useMem()) return mem.rows.find((r) => r.pw_hash && r.username_key === key(username)) || null;
   return (await q('SELECT id, kind, username, pw_hash, logins, created_at FROM growx_users WHERE pw_hash IS NOT NULL AND username_key = $1', [key(username)]))[0] || null;
 }
-
-/** First sign-in: creates the account with the person's own password. Returns null when the username was taken a moment ago. */
-export async function createLocal(username, password) {
-  const pw_hash = hashPassword(password);
+async function dbNameTaken(name) {
+  if (useMem()) return mem.rows.some((r) => !r.pw_hash && r.username_key === key(name));
+  return (await q('SELECT 1 FROM growx_users WHERE pw_hash IS NULL AND username_key = $1 LIMIT 1', [key(name)])).length > 0;
+}
+async function dbCreateLocal(username, pw_hash) {
   if (useMem()) {
-    if (mem.rows.some((r) => r.pw_hash && r.username_key === key(username))) return null;
-    const row = { id: mem.seq++, kind: 'local', username, username_key: key(username), pw_hash, logins: 1, created_at: Date.now(), last_login: Date.now() };
-    mem.rows.push(row);
-    return row;
+    if (mem.rows.some((r) => r.pw_hash && r.username_key === key(username))) return;
+    mem.rows.push({ id: mem.seq++, kind: 'local', username, username_key: key(username), pw_hash, logins: 1, created_at: Date.now(), last_login: Date.now() });
+    return;
   }
-  const rows = await q("INSERT INTO growx_users (kind, username, username_key, pw_hash) VALUES ('local', $1, $2, $3) ON CONFLICT DO NOTHING RETURNING id, username", [username, key(username), pw_hash]);
-  return rows[0] || null;
+  await q("INSERT INTO growx_users (kind, username, username_key, pw_hash) VALUES ('local', $1, $2, $3) ON CONFLICT DO NOTHING", [username, key(username), pw_hash]);
+}
+async function dbTouchLocal(username) {
+  if (useMem()) { const r = mem.rows.find((x) => x.pw_hash && x.username_key === key(username)); if (r) { r.logins++; r.last_login = Date.now(); } return; }
+  await q('UPDATE growx_users SET logins = logins + 1, last_login = now() WHERE pw_hash IS NOT NULL AND username_key = $1', [key(username)]);
 }
 
-export async function touchLocal(id) {
-  if (useMem()) { const r = mem.rows.find((x) => x.id === id); if (r) { r.logins++; r.last_login = Date.now(); } return; }
-  await q('UPDATE growx_users SET logins = logins + 1, last_login = now() WHERE id = $1', [id]);
+/* ---- Redis first: the account of a name is one small key; a miss reads the database once. Changes are queued (see dbqueue.js). ---- */
+
+const acctKey = (name) => `growx:acct:${key(name)}`;
+registerJob('touchLocal', (d) => dbTouchLocal(d.u));
+registerJob('createLocal', (d) => dbCreateLocal(d.u, d.h));
+registerJob('touchAdmin', (d) => dbTouchAdmin(d.u));
+
+/**
+ * What the name is here: { k: 'local', u, h, l } (an account with a password), { k: 'taken' } (somebody without a password: an Auth0 user
+ * or the admin), or null (free). One Redis read; on a miss the queue is finished first and the database answers.
+ */
+async function lookup(name) {
+  const hit = await kvGet(acctKey(name));
+  if (hit) return hit;
+  await flush();
+  const [local, taken] = await Promise.all([dbFindLocal(name), dbNameTaken(name)]);
+  const v = local ? { k: 'local', kind: local.kind, u: local.username, h: local.pw_hash, l: local.logins } : taken ? { k: 'taken' } : null;
+  if (v) await kvSet(acctKey(name), v);
+  return v;
+}
+
+/** The account with this username that signs in with a password (an own-login account, or one merged with Auth0), or null. */
+export async function findLocal(username) {
+  const v = await lookup(username);
+  return v && v.k === 'local' ? { kind: v.kind || 'local', username: v.u, pw_hash: v.h, logins: v.l } : null;
+}
+
+/**
+ * First sign-in: creates the account with the person's own password. Returns null when the username was taken a moment ago.
+ * The name is claimed in Redis at once (only one caller can); the database row follows from the queue.
+ */
+export async function createLocal(username, password) {
+  const pw_hash = hashPassword(password);
+  const claimed = await kvSet(acctKey(username), { k: 'local', kind: 'local', u: username, h: pw_hash, l: 1 }, DEFAULT_TTL, { nx: true });
+  if (!claimed) return null;
+  await enqueue('createLocal', { u: username, h: pw_hash }, { inline: useMem() });
+  return { username };
+}
+
+export async function touchLocal(username) {
+  await enqueue('touchLocal', { u: username }, { inline: useMem() });
 }
 
 /** The real admin's username: that name belongs to the admin only (the admin password signs in as it; nobody else can register it). */
@@ -101,15 +146,21 @@ export const adminNameOk = (name) => process.env.GAME_ADMIN_ANY_NAME === '1' || 
 /** True when this username belongs to somebody who has no password here: the real admin, or an Auth0 user (not merged with an own login). */
 export async function nameTaken(name) {
   if (isOgAdmin(name)) return true;
-  if (useMem()) return mem.rows.some((r) => !r.pw_hash && r.username_key === key(name));
-  return (await q('SELECT 1 FROM growx_users WHERE pw_hash IS NULL AND username_key = $1 LIMIT 1', [key(name)])).length > 0;
+  const v = await lookup(name);
+  return Boolean(v && v.k === 'taken');
 }
 
 /**
  * Auth0 sign-in: remembers the person by Auth0's id and keeps their email current. Returns the username they play under:
  * the one already saved for them, else their Auth0 name, with a number added when somebody else already owns that name.
  */
-export async function upsertAuth0({ sub, email, name }) {
+export async function upsertAuth0(p) {
+  await flush(); // queued sign-ups must be in the database before a name is checked against it
+  const username = await upsertAuth0Db(p);
+  if (p.sub) await kvDel(acctKey(username)); // the name now belongs to an Auth0 user: the next look-up reads it fresh
+  return username;
+}
+async function upsertAuth0Db({ sub, email, name }) {
   if (!sub) return name;
   if (!useMem()) {
     // a returning person: one query finds them and records the sign-in (the common case, one trip to the database)
@@ -140,6 +191,9 @@ export async function upsertAuth0({ sub, email, name }) {
  * (the Auth0 account with that name, when there is one), marked as the admin's. Creates the row when there is none yet.
  */
 export async function touchAdmin(name) {
+  await enqueue('touchAdmin', { u: name }, { inline: useMem() });
+}
+async function dbTouchAdmin(name) {
   if (useMem()) {
     const r = mem.rows.find((x) => x.username_key === key(name) && x.kind !== 'local');
     if (r) { r.logins++; r.last_login = Date.now(); r.is_admin = true; return; }
@@ -167,7 +221,8 @@ export async function linkAccount({ sub, username, password }) {
   if (!a) fail('Sign in with Auth0 first.');
   if (a.is_admin) fail('The admin account cannot be linked.');
   if (a.pw_hash) fail('This account is already linked to an own login.');
-  const l = await findLocal(String(username).trim());
+  await flush(); // the database must hold everything queued before accounts are merged
+  const l = await dbFindLocal(String(username).trim());
   if (!l || l.kind !== 'local' || !checkPassword(password, l.pw_hash)) fail('Wrong username or password.');
 
   // the Auth0 name wins when no account other than these two uses it (and it is not the admin's)
@@ -187,6 +242,7 @@ export async function linkAccount({ sub, username, password }) {
       run.query('UPDATE growx_users SET username = $1, username_key = $2, pw_hash = $3, logins = logins + $4, created_at = LEAST(created_at, $5) WHERE id = $6', [final, key(final), l.pw_hash, l.logins, l.created_at, a.id]),
     ]);
   }
+  await Promise.all([l.username, a.username, final].map((n) => kvDel(acctKey(n)))); // the cached accounts are out of date now
   return { name: final, renamed: final !== l.username }; // renamed: the account no longer goes by its old own-login name
 }
 

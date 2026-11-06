@@ -279,6 +279,8 @@ sideways" bar offers **Landscape** (full screen + orientation lock where the bro
   time. The person then chooses their own password (6 to 32 characters) and from then on signs in with their name and that
   password. Usernames are unique (any letter case). Passwords are stored only as salted scrypt hashes in the `growx_users` table.
   The admin, private and observer passwords never use accounts. Without `DATABASE_URL` everything works the old way.
+  Accounts and game stats are read from Redis; changes are queued and written to Postgres in the background, so sign-in and the
+  Stats window never wait for the database (see `CONNECT.md`, "Redis first, Postgres behind").
 - **Linking an old account to Auth0:** a person signed in with Auth0 sees **Link my old account** on the room screen. They type their old
   username and password (that proves the account is theirs); the two become one account: the password, sign-in count and first-seen date move
   over and the old row is removed. The account takes the person's Auth0 name when no other account uses it, otherwise it keeps the old name.

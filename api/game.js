@@ -8,6 +8,7 @@ import { auth0Config, readTicket } from './_lib/auth0.js';
 import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, linkAccount, LinkError, isOgAdminName, adminNameOk, ogAdminName, checkPassword, hashPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
 import { saveGame, roomStats, playerTotals } from './_lib/stats.js';
+import { afterResponse, drainIfDue } from './_lib/dbqueue.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
 const ADMIN_PASSWORD = process.env.GAME_ADMIN_PASSWORD || '110299';
@@ -107,7 +108,8 @@ const cleanRoom = (raw) => (/^[A-Za-z0-9_-]{1,24}$/.test(String(raw ?? '').trim(
 // to reload instead of quietly running old code against the new server.
 const BUILD = process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA || 'local';
 
-// Every finished game is also written to the database. The writes run while the request is handled and are awaited before the call ends.
+// Every finished game goes to Redis (the cached tables and the database queue) while the request is handled.
+// After the answer is sent, the queue is applied to Postgres when it is due (see dbqueue.js): players never wait for the database.
 const pendingWrites = [];
 G.setGameRecorder((g) => { if (usersEnabled()) pendingWrites.push(saveGame(g).catch(() => {})); });
 
@@ -115,7 +117,9 @@ export default async function handler(req, res) {
   try {
     return await handle(req, res);
   } finally {
-    if (pendingWrites.length) await Promise.allSettled(pendingWrites.splice(0));
+    const writes = pendingWrites.splice(0);
+    if (usersEnabled()) await afterResponse((async () => { await Promise.allSettled(writes); await drainIfDue(); })());
+    else if (writes.length) await Promise.allSettled(writes);
   }
 }
 
@@ -201,7 +205,7 @@ async function handle(req, res) {
           account = await createLocal(wanted, np);
           if (!account) return res.status(401).json({ error: 'That name was just taken. Choose another.', denied: true });
         } else {
-          await touchLocal(account.id).catch(() => {});
+          await touchLocal(account.username).catch(() => {});
         }
         return done('public', account.username, false);
       }
@@ -343,7 +347,7 @@ async function handle(req, res) {
             account = await createLocal(G.cleanName(b.name), np);
             if (!account) return res.status(401).json({ error: 'That name was just taken. Choose another.', denied: true });
           } else {
-            await touchLocal(account.id).catch(() => {});
+            await touchLocal(account.username).catch(() => {});
           }
           joinName = account.username;
         }
@@ -707,11 +711,11 @@ async function handle(req, res) {
       if (usersEnabled()) {
         // the database holds every game ever played; the room only remembers the last few. A read that fails falls back to the room's own copy.
         try {
-          for (const mode of Object.keys(view.modes)) {
-            const fromDb = await roomStats(code, mode);
+          await Promise.all(Object.keys(view.modes).map(async (mode) => {
+            const [fromDb, mine] = await Promise.all([roomStats(code, mode), playerTotals(me.name, mode)]);
             if (fromDb.table.length || fromDb.history.length) Object.assign(view.modes[mode], fromDb);
-            view.modes[mode].mine = await playerTotals(me.name, mode); // this player's totals over every room
-          }
+            view.modes[mode].mine = mine; // this player's totals over every room
+          }));
         } catch { /* keep the room's own numbers */ }
       }
       return res.json({ stats: view });

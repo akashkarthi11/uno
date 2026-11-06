@@ -53,6 +53,9 @@ async function tcpClient() {
     rpush: (key, val) => c.rpush(key, val),
     expire: (key, secs) => c.expire(key, secs),
     lpop: (key, count) => c.lpop(key, count),
+    llen: (key) => c.llen(key),
+    lrange: (key, a, b) => c.lrange(key, a, b),
+    ltrim: (key, a, b) => c.ltrim(key, a, b),
     scan: (cursor, o = {}) => c.scan(cursor, 'MATCH', o.match || '*', 'COUNT', o.count || 100),
     mget: (...keys) => c.mget(...keys),
   };
@@ -85,10 +88,17 @@ const db = {
   rpush: (...a) => run('rpush', ...a),
   expire: (...a) => run('expire', ...a),
   lpop: (...a) => run('lpop', ...a),
+  llen: (...a) => run('llen', ...a),
+  lrange: (...a) => run('lrange', ...a),
+  ltrim: (...a) => run('ltrim', ...a),
   scan: (...a) => run('scan', ...a),
   mget: (...a) => run('mget', ...a),
 };
 async function client() {
+  return db;
+}
+/** The Redis client for the cache and queue in dbqueue.js. */
+export async function rawRedis() {
   return db;
 }
 
