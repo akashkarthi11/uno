@@ -1742,6 +1742,8 @@ function renderSettings(s) {
 /* ---------- the Settings window (one button; everything else hides behind it) ---------- */
 const settingsModal = $("settingsModal");
 $("settingsBtn").addEventListener("click", () => settingsModal.classList.remove("hidden"));
+// move the 3D duel's buttons from Settings, with no match running
+$("duelLayoutBtn").addEventListener("click", () => { settingsModal.classList.add("hidden"); if (typeof duelLayoutEditor === "function") duelLayoutEditor(); });
 $("settingsX").addEventListener("click", () => settingsModal.classList.add("hidden"));
 $("settingsClose").addEventListener("click", () => settingsModal.classList.add("hidden"));
 settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });

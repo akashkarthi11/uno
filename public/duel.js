@@ -772,6 +772,7 @@ function duelLoadLayout(d) {
 function duelEditMode(d, on) {
   d.editing = on;
   d.drag = null;
+  if (!on && d.onDone) d.onDone();
   d.root.classList.toggle("editing", on);
   d.root.querySelector("#duelEdit").classList.toggle("hidden", !on);
   if (on) {
@@ -801,6 +802,37 @@ function duelEditReset(d) {
   duelApplyLayout(d);
   duelEditMode(d, false);
   api({ op: "duelLayoutSave", layout: next }).then(() => toast("Buttons back to the default places")).catch(() => {});
+}
+
+/** Settings → Duel buttons: the same drag-and-save screen, opened on its own with no match running. */
+async function duelLayoutEditor() {
+  if (duel && !duel.closed) { toast("Leave the duel first."); return; }
+  if (document.getElementById("duel")) return;
+  const root = document.createElement("div");
+  root.id = "duel";
+  root.className = "touch editing";
+  root.style.zIndex = "400";
+  root.innerHTML =
+    '<div id="duelSet" class="hidden"></div>' +
+    '<div id="duelEdit"><span>Drag the buttons where you want them. Turn your phone to set the other layout.</span><button id="duelEditSave" type="button">Save</button><button id="duelEditReset" type="button" class="ghost">Reset</button><button id="duelEditCancel" type="button" class="ghost">Cancel</button></div>' +
+    '<button id="duelEditBtn" type="button" class="hidden"></button>' +
+    '<button id="duelFire" type="button">🔫</button><button id="duelFireL" type="button">🔫</button><button id="duelAim" type="button">◎</button><button id="duelJump" type="button">⤒</button>' +
+    '<button id="duelCrouch" type="button">⤓</button><button id="duelProne" type="button">▁</button><button id="duelReload" type="button">⟳</button><button id="duelSwitch" type="button">⇄</button>' +
+    '<button id="duelScopeBtn" type="button">🔭 3x</button>';
+  document.body.appendChild(root);
+  const d = { root, touch: true, layout: {}, editing: false, drag: null, moved: {}, editBackup: null, listeners: [], scope: "3", closed: false, fireDown: false, joy: null, look: null };
+  const close = () => {
+    d.closed = true;
+    d.listeners.forEach(([t, ev, fn, opt]) => t.removeEventListener(ev, fn, opt));
+    root.remove();
+  };
+  d.onDone = close;
+  duelBindEdit(d);
+  duelOn(d, window, "resize", () => duelApplyLayout(d));
+  try { const r = await api({ op: "duelLayout" }); if (r && r.layout) d.layout = r.layout; } catch (e) { /* start from the default places */ }
+  if (d.closed) return;
+  duelApplyLayout(d);
+  duelEditMode(d, true);
 }
 
 /** While editing, the buttons are dragged instead of pressed (pointer events; the touch handlers are cut off first). */
