@@ -688,8 +688,20 @@ const botDuelOf = (s) => ({ on: true, level: "medium", ...BOT_LEVELS.medium, ...
 const aimToAcc = (aim) => Math.max(0, Math.min(100, Math.round(((0.12 - aim) / 0.115) * 100)));
 const accToAim = (acc) => Math.round((0.12 - (acc / 100) * 0.115) * 1000) / 1000;
 
+const BOT_CARD_LEVELS = { easy: { think: 2200, uno: 50, smart: 40 }, medium: { think: 1300, uno: 80, smart: 90 }, hard: { think: 700, uno: 100, smart: 100 } };
+const botCardOf = (s) => ({ level: "medium", ...BOT_CARD_LEVELS.medium, ...((s && s.settings && s.settings.botCard) || {}) });
+let vsSub = "card";
+function setVsSub(name) {
+  vsSub = name;
+  $("vsCard").classList.toggle("hidden", name !== "card");
+  $("vsDuel").classList.toggle("hidden", name !== "duel");
+  $("vsSub").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.sub === name));
+}
+$("vsSub").addEventListener("click", (e) => { const b = e.target.closest("[data-sub]"); if (b) setVsSub(b.dataset.sub); });
+
 function setVsTab(on) {
   $("settingsModal").querySelector(".settings-box").classList.toggle("vs-on", on);
+  $("settingsVs").classList.toggle("hidden", !on);
   $("setTabVs").classList.toggle("on", on);
   $("setTabGen").classList.toggle("on", !on);
 }
@@ -701,7 +713,7 @@ function renderVs(s) {
   $("setTabs").classList.toggle("hidden", !show);
   if (!show) setVsTab(false);
   const c = botDuelOf(s), edit = Boolean(s.admin);
-  $("vsNote").textContent = edit ? "Choose how strong the practice bot is in the 3D duel." : "Only the main admin can change these. This is what is set now.";
+  $("vsNote").textContent = edit ? "Choose how strong the practice bots are." : "Only the main admin can change these. This is what is set now.";
   const on = $("vsOn");
   on.textContent = "Players can play it: " + (c.on ? "on" : "off");
   on.classList.toggle("on", c.on);
@@ -717,7 +729,32 @@ function renderVs(s) {
   set("vsAim", aimToAcc(c.aim), aimToAcc(c.aim) + "%");
   set("vsSpeed", c.speed, c.speed + " m/s");
   set("vsDmg", c.dmg, c.dmg + "%");
+  // the card game bot
+  const k = botCardOf(s), cardOn = !(s.settings && s.settings.botMatch === false);
+  $("vcOn").textContent = "Players can play it: " + (cardOn ? "on" : "off");
+  $("vcOn").classList.toggle("on", cardOn);
+  $("vcOn").disabled = !edit;
+  $("vcLevels").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.l === k.level); b.disabled = !edit; });
+  set("vcThink", k.think, (k.think / 1000).toFixed(1) + " s");
+  set("vcUno", k.uno, k.uno + "%");
+  set("vcSmart", k.smart, k.smart + "%");
 }
+
+/** The main admin's change to the card game bot (same pattern as the 3D bot). */
+function saveVc(patch) {
+  if (busy || !state || !state.admin) return;
+  const next = { ...botCardOf(state), ...patch };
+  const before = state;
+  state = { ...state, settings: { ...state.settings, botCard: next } };
+  render();
+  send({ op: "config", botCard: next }, () => { state = before; render(); });
+}
+$("vcOn").addEventListener("click", toggleBotSwitch);
+$("vcLevels").addEventListener("click", (e) => { const b = e.target.closest("[data-l]"); if (b) saveVc({ level: b.dataset.l, ...BOT_CARD_LEVELS[b.dataset.l] }); });
+[["vcThink", "think", (v) => (v / 1000).toFixed(1) + " s"], ["vcUno", "uno", (v) => v + "%"], ["vcSmart", "smart", (v) => v + "%"]].forEach(([id, key, label]) => {
+  $(id).addEventListener("input", () => { $(id + "V").textContent = label(Number($(id).value)); });
+  $(id).addEventListener("change", () => saveVc({ level: "custom", [key]: Number($(id).value) }));
+});
 
 /** The main admin's change to the bot: shown at once, saved to the room, and put back if the server says no. */
 function saveVs(patch) {

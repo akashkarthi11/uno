@@ -1686,7 +1686,7 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 #duel.editing button.sel { outline-color: #fff; box-shadow: 0 0 0 5px rgba(255,210,63,.65); }
 #duelEdit label { display: flex; align-items: center; gap: 6px; }
 #duelEdit input[type=range] { width: 110px; }
-#setTabs { display: flex; gap: 8px; margin: 0 0 12px; }
+#setTabs { display: flex; gap: 8px; margin: 0 0 12px; padding-top: 14px; }
 #setTabs button { flex: 1; }
 #setTabs.hidden, #settingsVs.hidden { display: none; }
 .settings-box.vs-on #settingsMine, .settings-box.vs-on #settings { display: none; }
@@ -1696,3 +1696,7 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 .vs-row { margin: 0 0 12px; }
 .vs-row label { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; font-weight: 700; }
 .vs-row input[type=range] { grid-column: 1 / -1; width: 100%; }
+#vsSub { display: flex; gap: 8px; margin: 0 0 12px; }
+#vsSub button { flex: 1; }
+#vsSub button.on { background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand-ink); }
+#vsCard.hidden, #vsDuel.hidden { display: none; }

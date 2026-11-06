@@ -232,7 +232,19 @@
   <div id="settingsVs" class="hidden">
     <h3>Game vs Bot</h3>
     <p id="vsNote" class="hint"></p>
-    <div class="set-label">🎯 3D duel bot</div>
+    <div id="vsSub"><button data-sub="card" class="ghost on" type="button">🃏 Card vs</button><button data-sub="duel" class="ghost" type="button">🎯 3D gun</button></div>
+    <div id="vsCard">
+      <div class="set-label">🃏 Card game bot</div>
+      <div class="set-buttons"><button id="vcOn" class="ghost" type="button">Players can play it: on</button></div>
+      <div class="set-label">Difficulty</div>
+      <div id="vcLevels" class="set-buttons three"><button data-l="easy" class="ghost" type="button">😊 Easy</button><button data-l="medium" class="ghost" type="button">🙂 Medium</button><button data-l="hard" class="ghost" type="button">😈 Hard</button></div>
+      <div class="vs-row"><label><span>Thinking time per move</span><b id="vcThinkV"></b><input id="vcThink" type="range" min="400" max="3000" step="100"></label></div>
+      <div class="vs-row"><label><span>Remembers to call GrowX!</span><b id="vcUnoV"></b><input id="vcUno" type="range" min="0" max="100" step="5"></label></div>
+      <div class="vs-row"><label><span>Smart play (best card, best colour)</span><b id="vcSmartV"></b><input id="vcSmart" type="range" min="0" max="100" step="5"></label></div>
+      <p class="hint">Applies from the next card game against the bot (Play vs Bot → Card game).</p>
+    </div>
+    <div id="vsDuel" class="hidden">
+    <div class="set-label">🎯 3D gun bot</div>
     <div class="set-buttons"><button id="vsOn" class="ghost" type="button">Players can play it: on</button></div>
     <div class="set-label">Difficulty</div>
     <div id="vsLevels" class="set-buttons three"><button data-l="easy" class="ghost" type="button">😊 Easy</button><button data-l="medium" class="ghost" type="button">🙂 Medium</button><button data-l="hard" class="ghost" type="button">😈 Hard</button></div>
@@ -241,6 +253,7 @@
     <div class="vs-row"><label><span>Speed</span><b id="vsSpeedV"></b><input id="vsSpeed" type="range" min="2" max="9" step="0.2"></label></div>
     <div class="vs-row"><label><span>Bot damage</span><b id="vsDmgV"></b><input id="vsDmg" type="range" min="25" max="200" step="5"></label></div>
     <p class="hint">Applies to the next 3D duel a player starts against the bot (Play vs Bot → 3D duel).</p>
+    </div>
   </div>
     <button id="settingsClose" class="ghost sticky-close" type="button">Close</button>
   </div>

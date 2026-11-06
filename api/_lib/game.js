@@ -437,6 +437,18 @@ function cleanBotDuel(v, base) {
     dmg: Math.round(clampNum(v.dmg, 25, 200, base.dmg)),
   };
 }
+/** The card game bot's settings: how long it thinks (ms), how often it calls GrowX! when it should (%), and how often it plays its smart choice instead of a random playable card (%). */
+export const BOT_CARD_DEFAULT = { level: 'medium', think: 1300, uno: 80, smart: 90 };
+export const botCardOf = (s) => ({ ...BOT_CARD_DEFAULT, ...((s.settings && s.settings.botCard) || {}) });
+function cleanBotCard(v, base) {
+  if (!v || typeof v !== 'object') fail('Bad settings.');
+  return {
+    level: ['easy', 'medium', 'hard', 'custom'].includes(v.level) ? v.level : base.level,
+    think: Math.round(clampNum(v.think, 400, 3000, base.think)),
+    uno: Math.round(clampNum(v.uno, 0, 100, base.uno)),
+    smart: Math.round(clampNum(v.smart, 0, 100, base.smart)),
+  };
+}
 export const botOf = (s) => !(s.settings && s.settings.botMatch === false);
 export const canBot = (s, p) => Boolean(!p.observer && (p.admin || botOf(s))); // an observer only watches: no bot matches either
 // Public players' camera: its own switch, independent of Public voice (off by default; the admin and private players always may).
@@ -496,7 +508,7 @@ function tickGame(s, now) {
     addLog(s, 'Game paused: ' + s.pauseNote);
     return true;
   }
-  if (p.bot && now >= Math.max(s.turnAt, s.botAt || 0) + BOT_THINK_MS) { // the bot's turn: it thinks for a moment, then makes one move
+  if (p.bot && now >= Math.max(s.turnAt, s.botAt || 0) + botCardOf(s).think) { // the bot's turn: it thinks for a moment, then makes one move
     s.botAt = now;
     botMove(s, p, now);
     return true;
@@ -653,11 +665,11 @@ function start(s, p, now, only = null) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
-  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, publicVideo, botMatch: botOpt, botDuel: botDuelOpt, stacking, challenge: challengeOpt } = b || {};
+  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, publicVideo, botMatch: botOpt, botDuel: botDuelOpt, botCard: botCardOpt, stacking, challenge: challengeOpt } = b || {};
   const hasSupers = supers && typeof supers === 'object';
   // the voice route and public voice are the real admin's alone (a co-admin has the rest of the game settings)
-  if ((voiceRelay !== undefined || publicVoice !== undefined || publicVideo !== undefined || botOpt !== undefined || botDuelOpt !== undefined) && !p.admin) fail('Only the admin can do that.');
-  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && publicVideo === undefined && botOpt === undefined && botDuelOpt === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
+  if ((voiceRelay !== undefined || publicVoice !== undefined || publicVideo !== undefined || botOpt !== undefined || botDuelOpt !== undefined || botCardOpt !== undefined) && !p.admin) fail('Only the admin can do that.');
+  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && publicVideo === undefined && botOpt === undefined && botDuelOpt === undefined && botCardOpt === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
   if (stacking !== undefined && typeof stacking !== 'boolean') fail('Bad settings.');
   if (challengeOpt !== undefined && typeof challengeOpt !== 'boolean') fail('Bad settings.');
   if (publicVoice !== undefined && typeof publicVoice !== 'boolean') fail('Bad settings.');
@@ -686,6 +698,7 @@ function setConfig(s, p, b) {
     publicVideo: publicVideo !== undefined ? publicVideo : publicVideoOf(s),
     botMatch: botOpt !== undefined ? botOpt : botOf(s),
     botDuel: botDuelOpt !== undefined ? cleanBotDuel(botDuelOpt, botDuelOf(s)) : botDuelOf(s),
+    botCard: botCardOpt !== undefined ? cleanBotCard(botCardOpt, botCardOf(s)) : botCardOf(s),
     stacking: stacking !== undefined ? stacking : stackingOf(s),
     challenge: challengeOpt !== undefined ? challengeOpt : challengeOf(s),
     turnSecs: turnSecs !== undefined ? turnSecs : turnMsOf(s) / 1000,
@@ -1226,7 +1239,6 @@ const canChallenge = (s) => {
 /* ---------------- practice match against the bot ---------------- */
 
 const BOT_NAME = 'GrowX Bot';
-const BOT_THINK_MS = 1300; // the bot waits a moment before each move, so the table can be followed
 const isBotHost = (s, p) => Boolean(s.botGame && s.botHost === p.id);
 
 /**
@@ -1259,7 +1271,8 @@ function botMatch(s, p, now) {
 /** One move for the bot: say GrowX when it should, answer a waiting +2/+4, play a card (wilds last), or draw. */
 function botMove(s, p, now) {
   try {
-    if (p.hand.length <= 2 && Math.random() < 0.8) sayUno(s, p); // now and then it forgets, so it can be caught
+    const cfg = botCardOf(s);
+    if (p.hand.length <= 2 && Math.random() * 100 < cfg.uno) sayUno(s, p); // now and then it forgets, so it can be caught
     const other = active(s).find((q) => q.id !== p.id);
     if (s.pend) {
       if (challengeOf(s) && canChallenge(s) && Math.random() < 0.3) return challenge(s, p, now);
@@ -1274,7 +1287,9 @@ function botMove(s, p, now) {
     const pool = plain.length ? plain : simpleWild.length ? simpleWild : ok;
     // action cards first now and then, otherwise the highest number (it sheds the most points)
     const acts = pool.filter((c) => !/^[0-9]$/.test(c.value));
-    const pick = acts.length && Math.random() < 0.4 ? acts[rnd(acts.length)] : [...pool].sort((a, b) => cardPoints(b) - cardPoints(a))[0];
+    const threat = cfg.smart >= 100 && other && other.hand.length <= 2; // the strongest bot hits back with action cards when you are nearly out
+    const smart = acts.length && Math.random() < (threat ? 0.9 : 0.4) ? acts[rnd(acts.length)] : [...pool].sort((a, b) => cardPoints(b) - cardPoints(a))[0];
+    const pick = Math.random() * 100 < cfg.smart ? smart : pool[rnd(pool.length)];
     return botPlay(s, p, pick, other, now);
   } catch (e) {
     if (!(e instanceof GameError)) throw e;
@@ -1287,7 +1302,7 @@ function botPlay(s, p, c, other, now) {
   const counts = {};
   for (const h of p.hand) if (h.color !== 'wild' && h.id !== c.id) counts[h.color] = (counts[h.color] || 0) + 1;
   const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-  const colour = best ? best[0] : COLORS[rnd(COLORS.length)];
+  const colour = best && Math.random() * 100 < botCardOf(s).smart ? best[0] : COLORS[rnd(COLORS.length)];
   return play(s, p, c.id, c.color === 'wild' ? colour : '', now, other ? other.id : '', c.value === 'master' ? 'draw2' : '');
 }
 
@@ -1438,7 +1453,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), botMatch: botOf(s), botDuel: botDuelOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), botMatch: botOf(s), botDuel: botDuelOf(s), botCard: botCardOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
     map: mapView(s, me, now), // the location radar (everyone in the room except the observer account)
     learn: learnView(s, me), // the live Korean lesson: undefined (not even sent) for anyone but the admin and private players
     canVoice: canVoice(s, me),

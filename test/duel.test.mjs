@@ -97,3 +97,16 @@ test('the real admin sets the 3D duel bot (difficulty and numbers); values are c
   assert.equal((await call({ op: 'config', ...A, botDuel: { level: 'easy', react: 700, aim: 0.07, speed: 3.6, dmg: 70, on: true } })).code, 200);
   assert.equal((await get(P)).level, 'easy');
 });
+
+test('the real admin sets the card game bot too (difficulty, thinking time, GrowX! chance, smartness); a player cannot', async () => {
+  const room = 'card-botcfg';
+  const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
+  const boss = await call({ op: 'join', sys: admin, room, create: true });
+  const A = who(boss, room);
+  const get = async () => (await call({ op: 'state', ...A })).body.state.settings.botCard;
+  assert.deepEqual(await get(), { level: 'medium', think: 1300, uno: 80, smart: 90 });
+  assert.equal((await call({ op: 'config', ...A, botCard: { level: 'hard', think: 100, uno: 100, smart: 200 } })).code, 200);
+  assert.deepEqual(await get(), { level: 'hard', think: 400, uno: 100, smart: 100 }, 'clamped: at least 400 ms, at most 100 %');
+  const pl = await call({ op: 'join', sys: await pub('Max'), room });
+  assert.equal((await call({ op: 'config', ...who(pl, room), botCard: { level: 'easy' } })).code, 400);
+});
