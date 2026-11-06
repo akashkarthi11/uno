@@ -9,7 +9,7 @@ const rkey = (n) => `growx:duel:layout:${key(n)}`;
 const TTL = 24 * 60 * 60;
 const IDS = ['duelFire', 'duelFireL', 'duelAim', 'duelJump', 'duelCrouch', 'duelProne', 'duelReload', 'duelSwitch', 'duelScopeBtn'];
 
-/** A layout is { land?: { <button id>: [x, y] }, port?: { … } }: x and y are the button's centre as a fraction (0 to 1) of the screen. Returns a clean copy, or null. */
+/** A layout is { land?: { <button id>: [x, y] }, port?: { … } }: x and y are the button's centre as a fraction (0 to 1) of the screen, and an optional third number is its size (0.6 to 1.8, 1 = normal). Returns a clean copy, or null. */
 export function cleanLayout(v) {
   if (!v || typeof v !== 'object') return null;
   const out = {};
@@ -18,7 +18,10 @@ export function cleanLayout(v) {
     const m = {};
     for (const id of IDS) {
       const p = v[o][id];
-      if (Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === 'number' && n >= 0 && n <= 1)) m[id] = [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000];
+      if (!Array.isArray(p) || (p.length !== 2 && p.length !== 3) || !p.slice(0, 2).every((n) => typeof n === 'number' && n >= 0 && n <= 1)) continue;
+      const s = p[2];
+      if (p.length === 3 && !(typeof s === 'number' && s >= 0.6 && s <= 1.8)) continue;
+      m[id] = [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000, ...(p.length === 3 && s !== 1 ? [Math.round(s * 100) / 100] : [])];
     }
     if (Object.keys(m).length) out[o] = m;
   }

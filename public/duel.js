@@ -140,7 +140,7 @@ function duelBuildUi(d) {
     '<div id="duelSet" class="hidden"><label>Sensitivity <input id="duelSens" type="range" min="0.4" max="2.2" step="0.1"></label>' +
     '<label>Aiming (ADS) sensitivity <input id="duelAdsSens" type="range" min="0.2" max="1.6" step="0.1"></label>' +
     '<label class="duel-chk"><input id="duelSnd" type="checkbox"> Sound</label><button id="duelEditBtn" type="button" class="hidden">Move buttons</button></div>' +
-    '<div id="duelEdit" class="hidden"><span>Drag the buttons where you want them</span><button id="duelEditSave" type="button">Save</button><button id="duelEditReset" type="button" class="ghost">Reset</button><button id="duelEditCancel" type="button" class="ghost">Cancel</button></div>' +
+    DUEL_EDITBAR(false) +
     '<ul id="duelFeed"></ul>' +
     '<div id="duelCross"><i></i><i></i><i></i><i></i></div><div id="duelHit"></div>' +
     '<div id="duelMsg"></div>' +
@@ -745,9 +745,23 @@ function duelScopeCycle(d) {
 
 /* ---------------- button layout (saved per player on the server) ---------------- */
 
+/** The bar shown while moving buttons: drag a button, tap it, then use Size. */
+const DUEL_EDITBAR = (own) => '<div id="duelEdit"' + (own ? "" : ' class="hidden"') + '><span id="duelEditHint">Drag a button to move it. Tap one, then use Size.' + (own ? " Turn your phone to set the other layout." : "") + '</span>' +
+  '<label>Size <input id="duelEditSize" type="range" min="60" max="180" step="5" value="100" disabled></label>' +
+  '<button id="duelEditSave" type="button">Save</button><button id="duelEditReset" type="button" class="ghost">Reset</button><button id="duelEditCancel" type="button" class="ghost">Cancel</button></div>';
 const DUEL_BTNS = ["duelFire", "duelFireL", "duelAim", "duelJump", "duelCrouch", "duelProne", "duelReload", "duelSwitch", "duelScopeBtn"];
 const duelOrient = () => (window.innerWidth >= window.innerHeight ? "land" : "port");
 const duelBtnOf = (el) => { const b = el && el.closest ? el.closest("button") : null; return b && DUEL_BTNS.includes(b.id) ? b : null; };
+
+/** Scales a button (1 = the style sheet's size). The base size is read fresh each time: the style sheet changes it with the screen shape. */
+function duelSizeBtn(el, s) {
+  el.style.width = el.style.height = el.style.fontSize = "";
+  if (s === 1) return;
+  const cs = getComputedStyle(el), w = parseFloat(cs.width), h = parseFloat(cs.height), f = parseFloat(cs.fontSize);
+  if (w && el.id !== "duelScopeBtn") el.style.width = Math.round(w * s) + "px";
+  if (h) el.style.height = Math.round(h * s) + "px";
+  if (f) el.style.fontSize = Math.round(f * s) + "px";
+}
 
 /** Puts each button where this player saved it (for this screen orientation); buttons not saved keep their place from the style sheet. */
 function duelApplyLayout(d) {
@@ -756,6 +770,7 @@ function duelApplyLayout(d) {
   const W = window.innerWidth, H = window.innerHeight;
   for (const id of DUEL_BTNS) {
     const el = d.root.querySelector("#" + id), p = spots[id];
+    duelSizeBtn(el, p && p[2] ? p[2] : 1);
     if (!p) { el.style.left = el.style.top = el.style.right = el.style.bottom = ""; continue; }
     const w = el.offsetWidth || 60, h = el.offsetHeight || 60;
     el.style.right = "auto"; el.style.bottom = "auto";
@@ -776,10 +791,22 @@ function duelEditMode(d, on) {
   d.root.classList.toggle("editing", on);
   d.root.querySelector("#duelEdit").classList.toggle("hidden", !on);
   if (on) {
-    d.moved = {}; d.editBackup = JSON.parse(JSON.stringify(d.layout || {}));
+    d.moved = {}; d.sel = null; d.editBackup = JSON.parse(JSON.stringify(d.layout || {}));
+    d.scales = {};
+    for (const [id, p] of Object.entries((d.layout && d.layout[duelOrient()]) || {})) if (p[2]) d.scales[id] = p[2];
+    duelEditSel(d, null);
     d.root.querySelector("#duelSet").classList.add("hidden");
     d.fireDown = false; d.joy = null; d.look = null;
   }
+}
+
+/** The tapped button is the one the Size slider changes. */
+function duelEditSel(d, b) {
+  d.sel = b;
+  d.root.querySelectorAll("button.sel").forEach((x) => x.classList.remove("sel"));
+  const sl = d.root.querySelector("#duelEditSize");
+  sl.disabled = !b;
+  if (b) { b.classList.add("sel"); sl.value = Math.round((d.scales[b.id] || 1) * 100); }
 }
 
 function duelEditSave(d) {
@@ -789,6 +816,7 @@ function duelEditSave(d) {
   for (const id of Object.keys(d.moved)) {
     const r = d.root.querySelector("#" + id).getBoundingClientRect();
     next[o][id] = [Math.max(0, Math.min(1, (r.left + r.width / 2) / W)), Math.max(0, Math.min(1, (r.top + r.height / 2) / H))];
+    if (d.scales[id] && d.scales[id] !== 1) next[o][id].push(d.scales[id]);
   }
   duelEditMode(d, false);
   d.layout = next;
@@ -814,7 +842,7 @@ async function duelLayoutEditor() {
   root.style.zIndex = "400";
   root.innerHTML =
     '<div id="duelSet" class="hidden"></div>' +
-    '<div id="duelEdit"><span>Drag the buttons where you want them. Turn your phone to set the other layout.</span><button id="duelEditSave" type="button">Save</button><button id="duelEditReset" type="button" class="ghost">Reset</button><button id="duelEditCancel" type="button" class="ghost">Cancel</button></div>' +
+    DUEL_EDITBAR(true) +
     '<button id="duelEditBtn" type="button" class="hidden"></button>' +
     '<button id="duelFire" type="button">🔫</button><button id="duelFireL" type="button">🔫</button><button id="duelAim" type="button">◎</button><button id="duelJump" type="button">⤒</button>' +
     '<button id="duelCrouch" type="button">⤓</button><button id="duelProne" type="button">▁</button><button id="duelReload" type="button">⟳</button><button id="duelSwitch" type="button">⇄</button>' +
@@ -844,6 +872,7 @@ function duelBindEdit(d) {
     if (!b) return;
     const r = b.getBoundingClientRect();
     d.drag = { el: b, dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+    duelEditSel(d, b);
     try { b.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
   }, { capture: true });
   duelOn(d, window, "pointermove", (e) => {
@@ -858,6 +887,17 @@ function duelBindEdit(d) {
   duelOn(d, window, "pointerup", up);
   duelOn(d, window, "pointercancel", up);
   const q = (s) => root.querySelector(s);
+  q("#duelEditSize").addEventListener("input", (e) => {
+    if (!d.sel) return;
+    const s = Math.round(Number(e.target.value)) / 100;
+    d.scales[d.sel.id] = s;
+    d.moved[d.sel.id] = true;
+    const r = d.sel.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    duelSizeBtn(d.sel, s);
+    d.sel.style.right = "auto"; d.sel.style.bottom = "auto"; // keep it centred where it was
+    d.sel.style.left = Math.round(Math.max(0, Math.min(window.innerWidth - d.sel.offsetWidth, cx - d.sel.offsetWidth / 2))) + "px";
+    d.sel.style.top = Math.round(Math.max(0, Math.min(window.innerHeight - d.sel.offsetHeight, cy - d.sel.offsetHeight / 2))) + "px";
+  });
   q("#duelEditBtn").classList.toggle("hidden", !d.touch);
   q("#duelEditBtn").addEventListener("click", () => duelEditMode(d, true));
   q("#duelEditSave").addEventListener("click", () => duelEditSave(d));

@@ -73,9 +73,9 @@ test('a player\'s duel button layout is saved by name, cleaned, and read back fr
   const b = await call({ op: 'join', sys: await pub('Kit'), room });
   const A = who(a, room), B = who(b, room);
   assert.deepEqual((await call({ op: 'duelLayout', ...A })).body.layout, {}, 'nothing saved: the default');
-  const sent = { land: { duelFire: [0.9, 0.7], duelBogus: [0.5, 0.5], duelJump: [2, 0.1] }, port: { duelAim: [0.2, 0.3] }, junk: 1 };
+  const sent = { land: { duelFire: [0.9, 0.7, 1.4], duelBogus: [0.5, 0.5], duelJump: [2, 0.1], duelAim: [0.5, 0.5, 9] }, port: { duelAim: [0.2, 0.3] }, junk: 1 };
   const r = await call({ op: 'duelLayoutSave', ...A, layout: sent });
-  assert.deepEqual(r.body.layout, { land: { duelFire: [0.9, 0.7] }, port: { duelAim: [0.2, 0.3] } }, 'unknown buttons and out-of-range spots are dropped');
+  assert.deepEqual(r.body.layout, { land: { duelFire: [0.9, 0.7, 1.4] }, port: { duelAim: [0.2, 0.3] } }, 'unknown buttons and out-of-range spots are dropped');
   assert.deepEqual((await call({ op: 'duelLayout', ...A })).body.layout, r.body.layout);
   assert.deepEqual((await call({ op: 'duelLayout', ...B })).body.layout, {}, 'the other player is not affected');
   assert.equal((await call({ op: 'duelLayoutSave', ...A, layout: 'nope' })).code, 400);

@@ -1683,3 +1683,6 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 #duelEdit.hidden { display: none; }
 #duel.editing button#duelFire, #duel.editing button#duelFireL, #duel.editing button#duelAim, #duel.editing button#duelJump, #duel.editing button#duelCrouch, #duel.editing button#duelProne, #duel.editing button#duelReload, #duel.editing button#duelSwitch, #duel.editing button#duelScopeBtn { display: block; outline: 2px dashed #ffd23f; outline-offset: 3px; cursor: grab; touch-action: none; z-index: 5; }
 @media (max-height: 420px) { #duel button#duelScopeBtn { bottom: 150px; right: 150px; } }
+#duel.editing button.sel { outline-color: #fff; box-shadow: 0 0 0 5px rgba(255,210,63,.65); }
+#duelEdit label { display: flex; align-items: center; gap: 6px; }
+#duelEdit input[type=range] { width: 110px; }
