@@ -781,8 +781,9 @@ async function handle(req, res) {
           ? 'You were removed by the admin.' : 'You are not in this room — rejoin.');
       }
       me.lastSeen = now;
-      G.tick(r, now);
+      const changed = G.tick(r, now);
       G.act(r, me, b, now);
+      if (b.op === 'mapPos' && !changed) r.version -= 1; // a phone's position report is not news for the game: everyone else's quiet polls stay quiet (the open radar asks for the whole state)
       return G.view(r, me, now);
     });
     return res.json({ state: withIce(state) });

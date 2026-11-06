@@ -492,7 +492,8 @@ async function pollOnce() {
   if (busy || inFlight || removed) return;
   inFlight = true;
   try {
-    const ask = () => api({ op: "state", since: state ? state.version : undefined, ps: state ? state.ps : undefined }, POLL_TIMEOUT_MS);
+    const radarOpen = !$("mapModal").classList.contains("hidden"); // positions do not change the room's version, so an open radar always asks for the whole state
+    const ask = () => api({ op: "state", since: state && !radarOpen ? state.version : undefined, ps: state ? state.ps : undefined }, POLL_TIMEOUT_MS);
     let data;
     try {
       data = await ask();
@@ -916,7 +917,6 @@ function renderLobby(s) {
   radarSync(s.map);
   if (!$("mapModal").classList.contains("hidden")) renderMap(s.map);
   if (typeof duelSync === "function") duelSync(s); // the 3D duel button (duel.js)
-  if (typeof cubeSync === "function") cubeSync(s); // the cube puzzle button and best times (cube.js)
   const isHost = s.canStart; // the admin, or a player the admin allowed to start games
   $("botBtn").classList.toggle("hidden", Boolean(s.started && !s.over) || s.canBot === false); // anyone may start a practice match against the bot
   $("lobbyCount").textContent = s.players.length + (s.players.length === 1 ? " player" : " players");
@@ -3048,6 +3048,7 @@ async function openLearn() {
 const RING_STEPS = [5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 50000];
 let geoWatch = null; // the browser's watchPosition id while this phone is sharing
 let geoSentAt = 0;
+let geoLast = null; // the last position sent
 let geoGoodAt = 0; // when the last good (150 m or better) fix came in
 let geoBlocked = false; // permission refused or no position: do not ask again until the page is reloaded
 const radarOn = () => store("radar") !== "off"; // sharing is on by default; this phone's Settings switch turns it off
@@ -3070,8 +3071,12 @@ function startSharing() {
     // a rough fix (Wi-Fi / cell tower, often hundreds of metres out) is not sent while a good one is on its way, unless nothing better has come in 20 s
     if (p.coords.accuracy > 150 && now - geoGoodAt < 20000) return;
     if (p.coords.accuracy <= 150) geoGoodAt = now;
-    if (now - geoSentAt < (!$("mapModal").classList.contains("hidden") ? 2000 : 5000) || !state) return; // every 5 seconds, every 2 while the radar is open
+    const open = !$("mapModal").classList.contains("hidden");
+    // a phone that is standing still says so only every 30 s (a position stays on the radar for 90 s); one that moved 8 m or more reports at once, every 3 s at most
+    const moved = geoLast ? geoTo(geoLast, { lat: p.coords.latitude, lon: p.coords.longitude }).d : Infinity;
+    if (!state || now - geoSentAt < (open ? 2000 : 3000) || (moved < 8 && now - geoSentAt < 30000)) return;
     geoSentAt = now;
+    geoLast = { lat: p.coords.latitude, lon: p.coords.longitude };
     api({ op: "mapPos", lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }).then(apply).catch(() => {});
   }, (e) => { geoBlocked = true; stopSharing(false); toast(e.code === 1 ? "Location permission was refused, so you are not on the radar." : "Could not get your location."); },
   { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });

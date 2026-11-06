@@ -232,27 +232,6 @@ function mapView(s, me, now) {
   };
 }
 
-/* ---------------- cube puzzle: the room's best solve times ---------------- */
-
-const CUBE_BEST_MAX = 10;
-const CUBE_MIN_MS = 4000; // a 3x3 cannot honestly be scrambled and solved faster than this by hand
-const CUBE_MIN_MOVES = 8;
-
-/** A solved cube reports its time and move count. The cube runs in the browser, so this is for friends: only implausible results are refused. */
-function cubeTime(s, p, b, now) {
-  if (p.observer) fail('Unknown action.');
-  const ms = Math.floor(Number(b.ms)), moves = Math.floor(Number(b.moves));
-  if (!Number.isFinite(ms) || !Number.isFinite(moves) || ms < CUBE_MIN_MS || ms > 6 * 3600 * 1000 || moves < CUBE_MIN_MOVES || moves > 5000) fail('That result is not valid.');
-  const best = (s.cubeBest ||= {});
-  const key = p.name.toLowerCase();
-  if (best[key] && best[key].ms <= ms) return; // only a personal best is kept
-  best[key] = { name: p.name, ms, moves, at: now };
-  const keep = Object.entries(best).sort((x, y) => x[1].ms - y[1].ms).slice(0, CUBE_BEST_MAX);
-  s.cubeBest = Object.fromEntries(keep);
-}
-
-const cubeView = (s) => Object.values(s.cubeBest || {}).sort((x, y) => x.ms - y.ms).map((e) => ({ name: e.name, ms: e.ms, moves: e.moves }));
-
 /* ---------------- lobby chat ---------------- */
 
 /** A short text or emoji message to everyone in the room (shown in the lobby). */
@@ -566,7 +545,6 @@ function dispatch(s, me, b, now) {
     case 'learnShow': case 'learnQuiz': case 'learnReveal': case 'learnAnswer': case 'learnEnd':
     case 'learnAsk': case 'learnWrite': case 'learnMark': case 'learnRemoveAsk': case 'learnWordAdd': case 'learnWordRemove': return learn(s, me, b, now);
     case 'mapPos': return mapPos(s, me, b, now);
-    case 'cubeTime': return cubeTime(s, me, b, now);
     case 'pause': return setPaused(s, me, true, now);
     case 'resume': return setPaused(s, me, false, now);
     case 'voiceJoin': return voiceJoin(s, me);
@@ -1445,7 +1423,6 @@ export function view(s, me, now) {
     })),
     chat: (s.chat || []).slice(-30),
     settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), botMatch: botOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
-    cube: cubeView(s), // the cube puzzle's best times in this room
     map: mapView(s, me, now), // the location radar (everyone in the room except the observer account)
     learn: learnView(s, me), // the live Korean lesson: undefined (not even sent) for anyone but the admin and private players
     canVoice: canVoice(s, me),
