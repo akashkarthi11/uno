@@ -8,6 +8,8 @@ import { auth0Config, readTicket } from './_lib/auth0.js';
 import { usersEnabled, findLocal, createLocal, touchLocal, touchAdmin, nameTaken, linkAccount, LinkError, isOgAdminName, adminNameOk, ogAdminName, checkPassword, hashPassword, MIN_PASSWORD } from './_lib/users.js';
 import * as V from './_lib/video.js';
 import { saveGame, roomStats, playerTotals } from './_lib/stats.js';
+import { recordDuel, duelTotals } from './_lib/duelstats.js';
+import { getLayout, saveLayout, warmLayouts } from './_lib/duellayout.js';
 import { afterResponse, drainIfDue } from './_lib/dbqueue.js';
 
 const PLAYER_PASSWORD = process.env.GAME_PLAYER_PASSWORD || '123456';
@@ -718,6 +720,7 @@ async function handle(req, res) {
           }));
         } catch { /* keep the room's own numbers */ }
       }
+      if (me.admin) view.duel = await duelTotals().catch(() => []); // the admin also sees the 3D duel's total score
       return res.json({ stats: view });
     }
 
@@ -771,6 +774,23 @@ async function handle(req, res) {
       await pushSignal(code + ':duel', to.id, { from: me.id, kind: b.kind, data: b.data });
       return res.json({ ok: true });
     }
+    // A finished duel, reported by each player for themselves (the name comes from the room, never from the request).
+    if (b.op === 'duelResult') {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      if (!me || me.observer) throw new G.GameError('Not in this room.');
+      return res.json({ ok: await recordDuel(me.name, b.id, b.kills, b.deaths) });
+    }
+    // The player's own button layout for the duel: read when a duel opens, saved from the "Move buttons" screen (the name comes from the room).
+    if (b.op === 'duelLayout' || b.op === 'duelLayoutSave') {
+      const s = await readRoom(code);
+      const me = s && s.members.find((m) => m.id === b.playerId);
+      if (!me || me.observer) throw new G.GameError('Not in this room.');
+      if (b.op === 'duelLayout') return res.json({ layout: await getLayout(me.name) });
+      const saved = await saveLayout(me.name, b.layout);
+      if (!saved) throw new G.GameError('Bad layout.');
+      return res.json({ layout: saved });
+    }
     if (b.op === 'duelSignals') {
       return res.json({ signals: await takeSignals(code + ':duel', String(b.playerId ?? '').slice(0, 64)) });
     }
@@ -790,6 +810,10 @@ async function handle(req, res) {
       if (b.op === 'mapPos' && !changed) r.version -= 1; // a phone's position report is not news for the game: everyone else's quiet polls stay quiet (the open radar asks for the whole state)
       return G.view(r, me, now);
     });
+    if (b.op === 'duelStart') { // the duel is starting: both players' button layouts go into Redis now
+      const s = await readRoom(code);
+      await warmLayouts(((s && s.members) || []).filter((m) => !m.observer).map((m) => m.name)).catch(() => {});
+    }
     return res.json({ state: withIce(state) });
   } catch (e) {
     if (e instanceof G.GameError) return res.status(400).json({ error: e.message });

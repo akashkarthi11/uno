@@ -103,7 +103,8 @@ async function duelOpen({ host, oppId, oppName, solo }) {
     opp: { x: 0, y: 0, z: 0, yaw: 0, tx: 0, ty: 0, tz: 0, tyaw: 0, hp: DUEL_HP, dead: false, seen: false, speed: 0, phase: 0, st: 0, w: "ar", pw: 0, sp: 0 },
     kills: 0, deaths: 0, over: false, rematch: [false, false], keys: {}, fireDown: false, lastShot: 0, lastSend: 0, lastHeadHit: false,
     joy: null, look: null, tracers: [], status: "Loading the arena…", pc: null, sid: "", chFast: null, chSafe: null,
-    connected: false, relayTried: false, startedAt: 0, t0: performance.now(), ping: 0, lastRx: 0, weak: false, route: "", netAt: 0, pingShown: "", queue: [], timers: [], listeners: [], flash: 0, marker: 0, kick: 0, adsT: 0,
+    connected: false, relayTried: false, startedAt: 0, t0: performance.now(), matchId: Math.random().toString(36).slice(2, 12), reported: "", ping: 0, lastRx: 0, weak: false, route: "", netAt: 0, pingShown: "", queue: [], timers: [], listeners: [], flash: 0, marker: 0, kick: 0, adsT: 0,
+    scope: duelPref("scope", "3"), layout: {}, editing: false, drag: null, moved: {}, editBackup: null,
     sens: Number(duelPref("sens", 1)) || 1, adsSens: Number(duelPref("ads", 0.7)) || 0.7, sound: duelPref("snd", "1") === "1",
     sprintTouch: false, jumpTouch: false, invShown: "", ammoShown: "", lastMsg: "", picks: DUEL_PICKS.map(() => ({ on: true, until: 0 })), pickMeshes: [],
   };
@@ -116,6 +117,9 @@ async function duelOpen({ host, oppId, oppName, solo }) {
   d.opp.z = d.opp.tz = DUEL_SPAWNS[host ? 1 : 0][1];
   try { d.audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { d.audio = null; }
   duelBind(d);
+  duelBindEdit(d);
+  duelScopeHud(d);
+  if (!d.solo) duelLoadLayout(d);
   d.last = performance.now();
   d.raf = requestAnimationFrame((t) => duelFrame(d, t));
   if (d.solo) { d.status = ""; d.connected = true; } else { await duelStartMic(d); if (!d.closed) duelConnect(d); }
@@ -128,14 +132,15 @@ function duelBuildUi(d) {
   const root = document.createElement("div");
   root.id = "duel";
   root.innerHTML =
-    '<canvas id="duelCanvas"></canvas><div id="duelScope" class="hidden"></div>' +
+    '<canvas id="duelCanvas"></canvas><div id="duelScope" class="hidden"><i></i><span></span></div>' +
     '<div id="duelDmg"></div><div id="duelFlash"></div><div id="duelLow"></div>' +
     '<div class="duel-top"><canvas id="duelMap" width="120" height="120"></canvas><div id="duelScore"></div><div id="duelPing" class="hidden"></div>' +
     '<div class="duel-btns"><button id="duelMic" type="button" aria-label="Microphone">🎤</button><button id="duelGear" type="button" aria-label="Settings">⚙</button><button id="duelLeave" type="button">✕</button></div></div>' +
     '<div id="duelPower" class="hidden"></div>' +
     '<div id="duelSet" class="hidden"><label>Sensitivity <input id="duelSens" type="range" min="0.4" max="2.2" step="0.1"></label>' +
     '<label>Aiming (ADS) sensitivity <input id="duelAdsSens" type="range" min="0.2" max="1.6" step="0.1"></label>' +
-    '<label class="duel-chk"><input id="duelSnd" type="checkbox"> Sound</label></div>' +
+    '<label class="duel-chk"><input id="duelSnd" type="checkbox"> Sound</label><button id="duelEditBtn" type="button" class="hidden">Move buttons</button></div>' +
+    '<div id="duelEdit" class="hidden"><span>Drag the buttons where you want them</span><button id="duelEditSave" type="button">Save</button><button id="duelEditReset" type="button" class="ghost">Reset</button><button id="duelEditCancel" type="button" class="ghost">Cancel</button></div>' +
     '<ul id="duelFeed"></ul>' +
     '<div id="duelCross"><i></i><i></i><i></i><i></i></div><div id="duelHit"></div>' +
     '<div id="duelMsg"></div>' +
@@ -153,10 +158,11 @@ function duelBuildUi(d) {
     '<button id="duelProne" type="button" aria-label="Prone">▁</button>' +
     '<button id="duelReload" type="button" aria-label="Reload">⟳</button>' +
     '<button id="duelSwitch" type="button" aria-label="Switch weapon">⇄</button>' +
+    '<button id="duelScopeBtn" type="button" class="hidden" aria-label="Scope">🔭</button>' +
     '<div id="duelStick"><i></i></div>' +
     '<div id="duelOver" class="hidden"><h2 id="duelOverTitle"></h2><p id="duelOverSub"></p>' +
     '<button id="duelAgain" type="button">Rematch</button><button id="duelOut" type="button" class="ghost">Back to lobby</button></div>' +
-    '<div id="duelHelp">WASD move · Shift run · Space jump · C crouch · Z prone · right-click aim · R reload · 1 2 3 weapons · B bandage · N medkit · Esc frees the mouse</div>';
+    '<div id="duelHelp">WASD move · Shift run · Space jump · C crouch · Z prone · right-click aim · R reload · V scope (sniper) · 1 2 3 weapons · B bandage · N medkit · Esc frees the mouse</div>';
   document.body.appendChild(root);
   d.root = root;
   d.touch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
@@ -213,6 +219,7 @@ function duelHud(d) {
   const o = r.querySelector("#duelOver");
   o.classList.toggle("hidden", !d.over);
   if (d.over) {
+    duelReport(d);
     const won = d.kills >= DUEL_WIN;
     r.querySelector("#duelOverTitle").textContent = won ? "🏆 WINNER WINNER" : d.oppName + " wins";
     r.querySelector("#duelOverSub").textContent = d.kills + " – " + d.deaths + (d.rematch[0] ? "  ·  waiting for " + d.oppName + " to accept the rematch" : "");
@@ -699,6 +706,7 @@ function duelTag(T, name) {
 }
 
 function duelResize(d) {
+  duelApplyLayout(d);
   if (!d.renderer) return;
   const w = window.innerWidth, h = window.innerHeight;
   d.renderer.setSize(w, h, false);
@@ -710,8 +718,122 @@ function duelResize(d) {
 
 function duelOn(d, t, ev, fn, opt) { t.addEventListener(ev, fn, opt); d.listeners.push([t, ev, fn, opt]); }
 
-/** Sensitivity now: aiming has its own setting, and a scope turns slower still. */
-const duelSensNow = (d) => d.sens * (d.me.ads ? d.adsSens * (d.me.w === "sn" ? 0.5 : 1) : 1);
+/** The sniper's sights: a red dot (no zoom mask) and 2x, 3x, 8x scopes. Zoom is the magnification against the normal 65 degree view. */
+const DUEL_SCOPES = [["dot", "Red dot", 1.3], ["2", "2x", 2], ["3", "3x", 3], ["8", "8x", 8]];
+const duelScopeDef = (d) => DUEL_SCOPES.find((s) => s[0] === d.scope) || DUEL_SCOPES[2];
+const duelScopeFov = (z) => (2 * Math.atan(Math.tan((65 * Math.PI) / 360) / z) * 180) / Math.PI;
+
+/** Sensitivity now: aiming has its own setting, and a scope turns slower still (the more it zooms, the slower). */
+const duelSensNow = (d) => d.sens * (d.me.ads ? d.adsSens * (d.me.w === "sn" ? 0.5 * Math.min(1, 3 / duelScopeDef(d)[2]) : 1) : 1);
+
+function duelScopeHud(d) {
+  const def = duelScopeDef(d), sc = d.root.querySelector("#duelScope");
+  sc.classList.toggle("dot", d.scope === "dot");
+  sc.querySelector("span").textContent = def[1];
+  d.root.querySelector("#duelScopeBtn").textContent = "🔭 " + (d.scope === "dot" ? "•" : def[1]);
+}
+
+/** V or the 🔭 button: red dot → 2x → 3x → 8x → red dot (sniper rifle only). */
+function duelScopeCycle(d) {
+  if (d.me.w !== "sn" || d.me.dead) return;
+  d.scope = DUEL_SCOPES[(DUEL_SCOPES.findIndex((s) => s[0] === d.scope) + 1) % DUEL_SCOPES.length][0];
+  duelSetPref("scope", d.scope);
+  duelSound(d, "click");
+  duelScopeHud(d);
+  duelFeed(d, "Scope: <b>" + duelScopeDef(d)[1] + "</b>");
+}
+
+/* ---------------- button layout (saved per player on the server) ---------------- */
+
+const DUEL_BTNS = ["duelFire", "duelFireL", "duelAim", "duelJump", "duelCrouch", "duelProne", "duelReload", "duelSwitch", "duelScopeBtn"];
+const duelOrient = () => (window.innerWidth >= window.innerHeight ? "land" : "port");
+const duelBtnOf = (el) => { const b = el && el.closest ? el.closest("button") : null; return b && DUEL_BTNS.includes(b.id) ? b : null; };
+
+/** Puts each button where this player saved it (for this screen orientation); buttons not saved keep their place from the style sheet. */
+function duelApplyLayout(d) {
+  if (!d.root) return;
+  const spots = (d.layout && d.layout[duelOrient()]) || {};
+  const W = window.innerWidth, H = window.innerHeight;
+  for (const id of DUEL_BTNS) {
+    const el = d.root.querySelector("#" + id), p = spots[id];
+    if (!p) { el.style.left = el.style.top = el.style.right = el.style.bottom = ""; continue; }
+    const w = el.offsetWidth || 60, h = el.offsetHeight || 60;
+    el.style.right = "auto"; el.style.bottom = "auto";
+    el.style.left = Math.round(Math.max(0, Math.min(W - w, p[0] * W - w / 2))) + "px";
+    el.style.top = Math.round(Math.max(0, Math.min(H - h, p[1] * H - h / 2))) + "px";
+  }
+}
+
+/** The saved layout comes from Redis (the server warmed it when the duel was offered); a failure just keeps the default places. */
+function duelLoadLayout(d) {
+  api({ op: "duelLayout" }).then((r) => { if (!d.closed && r && r.layout) { d.layout = r.layout; duelApplyLayout(d); } }).catch(() => {});
+}
+
+function duelEditMode(d, on) {
+  d.editing = on;
+  d.drag = null;
+  d.root.classList.toggle("editing", on);
+  d.root.querySelector("#duelEdit").classList.toggle("hidden", !on);
+  if (on) {
+    d.moved = {}; d.editBackup = JSON.parse(JSON.stringify(d.layout || {}));
+    d.root.querySelector("#duelSet").classList.add("hidden");
+    d.fireDown = false; d.joy = null; d.look = null;
+  }
+}
+
+function duelEditSave(d) {
+  const o = duelOrient(), W = window.innerWidth, H = window.innerHeight;
+  const next = { ...(d.layout || {}) };
+  next[o] = { ...(next[o] || {}) };
+  for (const id of Object.keys(d.moved)) {
+    const r = d.root.querySelector("#" + id).getBoundingClientRect();
+    next[o][id] = [Math.max(0, Math.min(1, (r.left + r.width / 2) / W)), Math.max(0, Math.min(1, (r.top + r.height / 2) / H))];
+  }
+  duelEditMode(d, false);
+  d.layout = next;
+  api({ op: "duelLayoutSave", layout: next }).then((r) => { if (r && r.layout) d.layout = r.layout; toast("Button layout saved"); }).catch(() => toast("Could not save the layout. It stays for this match only."));
+}
+
+function duelEditReset(d) {
+  const next = { ...(d.layout || {}) };
+  delete next[duelOrient()];
+  d.layout = next;
+  duelApplyLayout(d);
+  duelEditMode(d, false);
+  api({ op: "duelLayoutSave", layout: next }).then(() => toast("Buttons back to the default places")).catch(() => {});
+}
+
+/** While editing, the buttons are dragged instead of pressed (pointer events; the touch handlers are cut off first). */
+function duelBindEdit(d) {
+  const root = d.root;
+  ["touchstart", "mousedown", "click"].forEach((ev) => duelOn(d, root, ev, (e) => { if (d.editing && duelBtnOf(e.target)) { e.preventDefault(); e.stopPropagation(); } }, { capture: true, passive: false }));
+  duelOn(d, root, "pointerdown", (e) => {
+    const b = d.editing ? duelBtnOf(e.target) : null;
+    if (!b) return;
+    const r = b.getBoundingClientRect();
+    d.drag = { el: b, dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+    try { b.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
+  }, { capture: true });
+  duelOn(d, window, "pointermove", (e) => {
+    if (!d.drag || e.pointerId !== d.drag.id) return;
+    const el = d.drag.el, w = el.offsetWidth, h = el.offsetHeight;
+    el.style.right = "auto"; el.style.bottom = "auto";
+    el.style.left = Math.round(Math.max(0, Math.min(window.innerWidth - w, e.clientX - d.drag.dx))) + "px";
+    el.style.top = Math.round(Math.max(0, Math.min(window.innerHeight - h, e.clientY - d.drag.dy))) + "px";
+    d.moved[el.id] = true;
+  });
+  const up = (e) => { if (d.drag && e.pointerId === d.drag.id) d.drag = null; };
+  duelOn(d, window, "pointerup", up);
+  duelOn(d, window, "pointercancel", up);
+  const q = (s) => root.querySelector(s);
+  q("#duelEditBtn").classList.toggle("hidden", !d.touch);
+  q("#duelEditBtn").addEventListener("click", () => duelEditMode(d, true));
+  q("#duelEditSave").addEventListener("click", () => duelEditSave(d));
+  q("#duelEditReset").addEventListener("click", () => duelEditReset(d));
+  q("#duelEditCancel").addEventListener("click", () => { d.layout = d.editBackup || {}; duelApplyLayout(d); duelEditMode(d, false); });
+  q("#duelScopeBtn").addEventListener("touchstart", (e) => { if (d.editing) return; e.preventDefault(); e.stopPropagation(); duelScopeCycle(d); }, { passive: false });
+  q("#duelScopeBtn").addEventListener("click", () => { if (!d.editing && !d.touch) duelScopeCycle(d); });
+}
 
 function duelBind(d) {
   const canvas = d.root.querySelector("#duelCanvas");
@@ -723,6 +845,7 @@ function duelBind(d) {
     if (e.code === "Tab" || e.code === "KeyI") { e.preventDefault(); duelToggle(d, "panel"); }
     else if (e.code === "KeyM") duelToggle(d, "map");
     else if (e.code === "Escape") { duelToggle(d, "panel", false); duelToggle(d, "map", false); }
+    else if (e.code === "KeyV") duelScopeCycle(d);
     else if (e.code === "KeyR") duelReload(d);
     else if (e.code === "Digit1") duelSwitch(d, "ar");
     else if (e.code === "Digit2") duelSwitch(d, "smg");
@@ -994,6 +1117,7 @@ function duelFrame(d, now) {
   r.querySelector("#duelCross").style.setProperty("--gap", (6 + (me.moving ? (me.running ? 12 : 5) : 0) + (me.grounded ? 0 : 8) + d.kick * 14 - d.adsT * 4) + "px");
   r.querySelector("#duelScope").classList.toggle("hidden", !(me.w === "sn" && d.adsT > 0.85 && !me.dead));
   r.querySelector("#duelCross").style.opacity = me.w === "sn" && d.adsT > 0.85 ? 0 : 1;
+  r.querySelector("#duelScopeBtn").classList.toggle("hidden", me.w !== "sn" && !d.editing);
   duelAmmoHud(d, now);
   duelMap(d, now);
   if ((d.frames = (d.frames || 0) + 1) % 6 === 0) duelTalking(d);
@@ -1054,7 +1178,7 @@ function duelCamParams(d) {
   return {
     dist: sn ? 4.2 + (0.15 - 4.2) * t : 4.2 + (2.6 - 4.2) * t,
     side: sn ? 0.8 * (1 - t) : 0.8 + (0.5 - 0.8) * t,
-    fov: sn ? 65 + (14 - 65) * t : 65 + (50 - 65) * t,
+    fov: sn ? 65 + (duelScopeFov(duelScopeDef(d)[2]) - 65) * t : 65 + (50 - 65) * t,
   };
 }
 
@@ -1373,10 +1497,17 @@ function duelOnMessage(d, raw) {
   }
 }
 
+/** Tells the server my score once per finished match (the admin's 3D duel total). A failed report is dropped: it is only a scoreboard. */
+function duelReport(d) {
+  if (d.solo || d.reported === d.matchId) return;
+  d.reported = d.matchId;
+  api({ op: "duelResult", id: d.matchId, kills: d.kills, deaths: d.deaths }).catch(() => {});
+}
+
 function duelRematchCheck(d) {
   if (!(d.rematch[0] && d.rematch[1])) { duelHud(d); return; }
   d.rematch = [false, false];
-  d.kills = 0; d.deaths = 0; d.over = false; d.status = "";
+  d.kills = 0; d.deaths = 0; d.over = false; d.status = ""; d.matchId = Math.random().toString(36).slice(2, 12);
   d.opp.hp = DUEL_HP; d.opp.dead = false;
   d.picks.forEach((s) => { s.on = true; s.until = 0; });
   duelSpawn(d, d.host ? 0 : 1);

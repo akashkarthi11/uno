@@ -292,7 +292,7 @@ test('API: stats are available to members of the room only', async () => {
   const a = await call({ op: 'join', room, name: 'Boss', password: '110299' });
   const r = await call({ op: 'stats', room, playerId: a.body.state.you });
   assert.equal(r.code, 200);
-  assert.deepEqual(r.body.stats, { current: 'public', modes: { public: { table: [], history: [] }, private: { table: [], history: [] } } }, 'the admin sees both, each empty');
+  assert.deepEqual(r.body.stats, { current: 'public', duel: [], modes: { public: { table: [], history: [] }, private: { table: [], history: [] } } }, 'the admin sees both, each empty, and the 3D duel table');
   assert.equal((await call({ op: 'stats', room, playerId: 'nobody' })).code, 400);
 });
 

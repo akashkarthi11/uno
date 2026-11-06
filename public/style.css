@@ -1669,3 +1669,17 @@ html:not([data-theme="classic"]):not([data-theme="midnight"]) body:has(#roomScre
 #duel.touch button#duelFireL { display: block; }
 #duel button#duelFireL.down { background: rgba(239,68,68,.95); transform: scale(.94); }
 @media (max-height: 420px) { #duel button#duelFireL { bottom: 84px; width: 66px; height: 66px; } }
+#duel button#duelScopeBtn { position: absolute; border-radius: 22px; padding: 0 10px; color: #fff; border: 3px solid rgba(255,255,255,.7); display: none; right: 200px; bottom: max(210px, calc(env(safe-area-inset-bottom) + 196px)); height: 42px; font-size: 15px; font-weight: 800; background: rgba(40,120,90,.75); }
+#duel.touch button#duelScopeBtn { display: block; }
+#duel button#duelScopeBtn.hidden { display: none; }
+#duelScope i { display: none; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: #ff2a2a; box-shadow: 0 0 8px 3px rgba(255,40,40,.7); }
+#duelScope.dot { background: none; }
+#duelScope.dot::before, #duelScope.dot::after { display: none; }
+#duelScope.dot i { display: block; }
+#duelScope span { position: absolute; left: 50%; top: calc(50% + 32vmin); transform: translateX(-50%); color: #fff; font-weight: 800; font-size: 13px; text-shadow: 0 1px 3px #000; }
+#duelScope.dot span { top: calc(50% + 18vmin); }
+#duelEditBtn { align-self: stretch; }
+#duelEdit { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 6; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center; background: rgba(10,16,30,.94); border: 1px solid rgba(255,255,255,.25); padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 94vw; }
+#duelEdit.hidden { display: none; }
+#duel.editing button#duelFire, #duel.editing button#duelFireL, #duel.editing button#duelAim, #duel.editing button#duelJump, #duel.editing button#duelCrouch, #duel.editing button#duelProne, #duel.editing button#duelReload, #duel.editing button#duelSwitch, #duel.editing button#duelScopeBtn { display: block; outline: 2px dashed #ffd23f; outline-offset: 3px; cursor: grab; touch-action: none; z-index: 5; }
+@media (max-height: 420px) { #duel button#duelScopeBtn { bottom: 150px; right: 150px; } }

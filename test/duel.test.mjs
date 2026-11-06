@@ -38,8 +38,8 @@ test('a duel needs exactly two players; the other sees the invite; set-up messag
 
 test('three players in the room: no duel; an observer cannot take part', async () => {
   const room = 'duel-b';
-  const a = await call({ op: 'join', sys: await pub('Cy'), room, create: true });
-  await call({ op: 'join', sys: await pub('Di'), room });
+  const a = await call({ op: 'join', sys: await pub('Cyd'), room, create: true });
+  await call({ op: 'join', sys: await pub('Hal'), room });
   await call({ op: 'join', sys: await pub('Ed'), room });
   assert.equal((await call({ op: 'duelStart', ...who(a, room) })).code, 400);
   const obs = (await call({ op: 'login', name: 'Watcher', password: '1102' })).body;
@@ -47,4 +47,36 @@ test('three players in the room: no duel; an observer cannot take part', async (
     const o = await call({ op: 'join', sys: obs.sys, room });
     assert.equal((await call({ op: 'duelSignal', ...who(o, room), to: a.body.state.you, kind: 'hello' })).code, 400);
   }
+});
+
+test('the admin sees the 3D duel total score; each result counts once and impossible scores are refused', async () => {
+  const room = 'duel-score';
+  const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
+  const a = await call({ op: 'join', sys: await pub('Gus'), room, create: true });
+  const b = await call({ op: 'join', sys: await pub('Ivy'), room });
+const A = who(a, room), B = who(b, room);
+  assert.equal((await call({ op: 'duelResult', ...A, id: 'match0001', kills: 5, deaths: 3 })).body.ok, true);
+  assert.equal((await call({ op: 'duelResult', ...B, id: 'match0001', kills: 3, deaths: 5 })).body.ok, true);
+  assert.equal((await call({ op: 'duelResult', ...A, id: 'match0001', kills: 5, deaths: 3 })).body.ok, false, 'a repeat counts once');
+  assert.equal((await call({ op: 'duelResult', ...A, id: 'match0002', kills: 7, deaths: 0 })).body.ok, false, 'more than 5 kills is impossible');
+  assert.equal((await call({ op: 'duelResult', ...A, id: 'match0003', kills: 2, deaths: 2 })).body.ok, false, 'nobody reached 5');
+  const st = (await call({ op: 'stats', ...A })).body.stats;
+  assert.equal(st.duel, undefined, 'only the admin sees the table');
+  const boss = await call({ op: 'join', sys: admin, room });
+  const rows = (await call({ op: 'stats', ...who(boss, room) })).body.stats.duel;
+  assert.deepEqual(rows.map((r) => [r.name, r.played, r.wins, r.losses, r.kills, r.deaths]), [['Gus', 1, 1, 0, 5, 3], ['Ivy', 1, 0, 1, 3, 5]]);
+});
+
+test('a player\'s duel button layout is saved by name, cleaned, and read back from Redis; other players keep their own', async () => {
+  const room = 'duel-layout';
+  const a = await call({ op: 'join', sys: await pub('Jon'), room, create: true });
+  const b = await call({ op: 'join', sys: await pub('Kit'), room });
+  const A = who(a, room), B = who(b, room);
+  assert.deepEqual((await call({ op: 'duelLayout', ...A })).body.layout, {}, 'nothing saved: the default');
+  const sent = { land: { duelFire: [0.9, 0.7], duelBogus: [0.5, 0.5], duelJump: [2, 0.1] }, port: { duelAim: [0.2, 0.3] }, junk: 1 };
+  const r = await call({ op: 'duelLayoutSave', ...A, layout: sent });
+  assert.deepEqual(r.body.layout, { land: { duelFire: [0.9, 0.7] }, port: { duelAim: [0.2, 0.3] } }, 'unknown buttons and out-of-range spots are dropped');
+  assert.deepEqual((await call({ op: 'duelLayout', ...A })).body.layout, r.body.layout);
+  assert.deepEqual((await call({ op: 'duelLayout', ...B })).body.layout, {}, 'the other player is not affected');
+  assert.equal((await call({ op: 'duelLayoutSave', ...A, layout: 'nope' })).code, 400);
 });

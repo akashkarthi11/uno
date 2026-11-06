@@ -61,7 +61,8 @@ async function q(text, params = []) {
     run.query('ALTER TABLE growx_games ADD COLUMN IF NOT EXISTS job_id TEXT'),
     run.query('CREATE UNIQUE INDEX IF NOT EXISTS growx_games_job ON growx_games (job_id) WHERE job_id IS NOT NULL'),
     run.query('CREATE INDEX IF NOT EXISTS growx_games_room_mode ON growx_games (room, mode, played_at DESC)'),
-    run.query('CREATE INDEX IF NOT EXISTS growx_game_players_name ON growx_game_players (name_key)')]).catch((e) => { ready = null; throw e; });
+    run.query('CREATE INDEX IF NOT EXISTS growx_game_players_name ON growx_game_players (name_key)'),
+    run.query('CREATE TABLE IF NOT EXISTS growx_duel_layout (name_key TEXT PRIMARY KEY, name TEXT NOT NULL, layout JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())')]).catch((e) => { ready = null; throw e; });
   }
   await ready;
   return run.query(text, params);

@@ -3465,6 +3465,26 @@ function renderStats() {
   }
   if (!d.history.length) { const n = document.createElement("div"); n.className = "none"; n.textContent = "—"; hist.appendChild(n); }
   renderDeviceStats(statsMode);
+  renderDuelTotals();
+}
+
+/** The admin's 3D duel total score: every player's finished duels, wins, losses, kills and deaths (public and private together). */
+function renderDuelTotals() {
+  const rows = statsData && statsData.duel;
+  $("statsDuelBox").classList.toggle("hidden", !rows);
+  if (!rows) return;
+  const box = $("statsDuel");
+  box.textContent = "";
+  if (!rows.length) { box.className = "none"; box.textContent = "No finished 3D duels yet."; return; }
+  box.className = "";
+  const t = document.createElement("table");
+  const head = t.insertRow();
+  ["Player", "Duels", "Won", "Lost", "Kills", "Deaths"].forEach((h) => { const th = document.createElement("th"); th.textContent = h; head.appendChild(th); });
+  for (const r of rows) {
+    const tr = t.insertRow();
+    [r.name, r.played, r.wins, r.losses, r.kills, r.deaths].forEach((v) => { tr.insertCell().textContent = String(v); });
+  }
+  box.appendChild(t);
 }
 
 function renderDeviceStats(mode) {
