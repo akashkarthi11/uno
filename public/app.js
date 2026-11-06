@@ -682,6 +682,62 @@ function toggleBotSwitch() {
 $("pubVideoBtn").addEventListener("click", togglePublicVideo);
 $("botSwitchBtn").addEventListener("click", toggleBotSwitch);
 
+/* ---------- Settings → Game vs: the 3D duel bot (the main admin edits, a co-admin only sees) ---------- */
+const BOT_LEVELS = { easy: { react: 700, aim: 0.07, speed: 3.6, dmg: 70 }, medium: { react: 380, aim: 0.035, speed: 4.6, dmg: 100 }, hard: { react: 180, aim: 0.015, speed: 6, dmg: 120 } };
+const botDuelOf = (s) => ({ on: true, level: "medium", ...BOT_LEVELS.medium, ...((s && s.settings && s.settings.botDuel) || {}) });
+const aimToAcc = (aim) => Math.max(0, Math.min(100, Math.round(((0.12 - aim) / 0.115) * 100)));
+const accToAim = (acc) => Math.round((0.12 - (acc / 100) * 0.115) * 1000) / 1000;
+
+function setVsTab(on) {
+  $("settingsModal").querySelector(".settings-box").classList.toggle("vs-on", on);
+  $("setTabVs").classList.toggle("on", on);
+  $("setTabGen").classList.toggle("on", !on);
+}
+$("setTabVs").addEventListener("click", () => setVsTab(true));
+$("setTabGen").addEventListener("click", () => setVsTab(false));
+
+function renderVs(s) {
+  const show = Boolean(s.admin || s.canStart);
+  $("setTabs").classList.toggle("hidden", !show);
+  if (!show) setVsTab(false);
+  const c = botDuelOf(s), edit = Boolean(s.admin);
+  $("vsNote").textContent = edit ? "Choose how strong the practice bot is in the 3D duel." : "Only the main admin can change these. This is what is set now.";
+  const on = $("vsOn");
+  on.textContent = "Players can play it: " + (c.on ? "on" : "off");
+  on.classList.toggle("on", c.on);
+  on.disabled = !edit;
+  $("vsLevels").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.l === c.level); b.disabled = !edit; });
+  const set = (id, val, label) => {
+    const el = $(id);
+    el.disabled = !edit;
+    if (document.activeElement !== el) el.value = val;
+    $(id + "V").textContent = label;
+  };
+  set("vsReact", c.react, c.react + " ms");
+  set("vsAim", aimToAcc(c.aim), aimToAcc(c.aim) + "%");
+  set("vsSpeed", c.speed, c.speed + " m/s");
+  set("vsDmg", c.dmg, c.dmg + "%");
+}
+
+/** The main admin's change to the bot: shown at once, saved to the room, and put back if the server says no. */
+function saveVs(patch) {
+  if (busy || !state || !state.admin) return;
+  const next = { ...botDuelOf(state), ...patch };
+  const before = state;
+  state = { ...state, settings: { ...state.settings, botDuel: next } };
+  render();
+  send({ op: "config", botDuel: next }, () => { state = before; render(); });
+}
+$("vsOn").addEventListener("click", () => saveVs({ on: !botDuelOf(state).on }));
+$("vsLevels").addEventListener("click", (e) => { const b = e.target.closest("[data-l]"); if (b) saveVs({ level: b.dataset.l, ...BOT_LEVELS[b.dataset.l] }); });
+[["vsReact", "react", (v) => v], ["vsAim", "aim", accToAim], ["vsSpeed", "speed", (v) => v], ["vsDmg", "dmg", (v) => v]].forEach(([id, key, conv]) => {
+  $(id).addEventListener("input", () => {
+    const v = Number($(id).value);
+    $(id + "V").textContent = key === "react" ? v + " ms" : key === "aim" ? v + "%" : key === "speed" ? v + " m/s" : v + "%";
+  });
+  $(id).addEventListener("change", () => saveVs({ level: "custom", [key]: conv(Number($(id).value)) }));
+});
+
 /** The real admin's one button: shut down public play (nobody public can sign in, every public room is closed) or open it again. */
 let shutdownOn = false;
 async function toggleShutdown() {
@@ -772,6 +828,7 @@ function renderRelayBtn(s) {
   bsw.textContent = "🤖 Vs Bot: " + (botOn ? "on" : "off");
   bsw.classList.toggle("on", botOn);
   bsw.title = botOn ? "Players can start a match against the bot. Click to switch it off." : "The bot is off for players (you can still start one). Click to switch it on.";
+  renderVs(s);
   const btn = $("relayBtn");
   btn.classList.toggle("hidden", !s.admin); // only the real admin, not a co-admin
   const mode = relayModeOf(s);
@@ -2176,11 +2233,12 @@ $("drawPile").addEventListener("click", () => {
 /** Play vs Bot asks which game: the card game (a bot player at the table) or the 3D duel (a bot opponent in the arena). */
 function chooseBotGame() {
   if ($("botChoice")) return;
+  const duelBotOn = Boolean(state && (state.admin || botDuelOf(state).on));
   const m = document.createElement("div");
   m.id = "botChoice";
   m.className = "modal";
   m.innerHTML = '<div class="box sheet"><div class="sheet-head"><h2>🤖 Play vs Bot</h2><button class="icon ghost" type="button" data-x aria-label="Close">✕</button></div>' +
-    '<p class="hint">Choose a game</p><div class="set-buttons"><button type="button" data-g="cards">🃏 Card game</button><button type="button" data-g="duel">🎯 3D duel</button></div></div>';
+    '<p class="hint">Choose a game</p><div class="set-buttons"><button type="button" data-g="cards">🃏 Card game</button><button type="button" data-g="duel"' + (duelBotOn ? "" : " disabled") + '>🎯 3D duel' + (duelBotOn ? "" : " (off)") + '</button></div></div>';
   m.addEventListener("click", (e) => {
     const g = e.target.closest("[data-g]");
     if (!g && e.target !== m && !e.target.closest("[data-x]")) return;

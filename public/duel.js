@@ -95,7 +95,7 @@ const duelSetPref = (k, v) => { try { localStorage.setItem("duel-" + k, String(v
 async function duelOpen({ host, oppId, oppName, solo, bot }) {
   if (duel) return;
   const d = duel = {
-    host, oppId, oppName: oppName || "Opponent", solo: Boolean(solo || bot), bot: Boolean(bot), ai: null, closed: false,
+    host, oppId, oppName: oppName || "Opponent", solo: Boolean(solo || bot), bot: Boolean(bot), botCfg: bot ? duelBotCfg() : null, ai: null, closed: false,
     me: {
       x: 0, y: 0, z: 0, vy: 0, yaw: 0, el: -0.2, hp: DUEL_HP, dead: false, safeUntil: 0, moving: false, speed: 0, grounded: true, phase: 0,
       st: 0, eyeH: DUEL_EYE[0], w: "ar", mag: {}, res: {}, have: {}, inv: { band: 0, med: 0 }, switchUntil: 0, reload: null, ads: false, using: null, power: null,
@@ -1583,7 +1583,13 @@ function duelReport(d) {
 
 /* ---------------- the practice bot (Play vs Bot → 3D duel) ---------------- */
 
-const DUEL_BOT = { walk: 4.6, run: 7, react: 380, err: 0.035 }; // medium: slower than you, a short reaction time, a shaky aim
+/** The bot's numbers come from the admin's "Game vs" settings (medium when nothing was set): speed, reaction time, aim error, damage. */
+function duelBotCfg() {
+  const c = (typeof state !== "undefined" && state && state.settings && state.settings.botDuel) || {};
+  const n = (v, def) => (typeof v === "number" && isFinite(v) ? v : def);
+  const speed = n(c.speed, 4.6);
+  return { walk: speed, run: speed * 1.5, react: n(c.react, 380), aim: n(c.aim, 0.035), dmg: n(c.dmg, 100) / 100 };
+}
 
 const duelFarSpawn = (d) => DUEL_SPAWNS.map((p, i) => [Math.hypot(p[0] - d.me.x, p[1] - d.me.z), i]).sort((x, y) => y[0] - x[0])[0][1];
 
@@ -1597,7 +1603,7 @@ function duelBotReset(d, spawn) {
 
 /** One frame of the bot: look for me, close in or hold a fighting distance and strafe, shoot in bursts, retreat to a bandage or medkit when hurt. */
 function duelBotStep(d, now, dt) {
-  const o = d.opp, me = d.me, ai = d.ai, T = window.THREE, W = DUEL_WEAPONS.ar;
+  const o = d.opp, me = d.me, ai = d.ai, T = window.THREE, W = DUEL_WEAPONS.ar, c = d.botCfg;
   if (d.over || o.dead) { o.sp = 0; return; }
   const dx = me.x - o.x, dz = me.z - o.z, dist = Math.hypot(dx, dz) || 0.001, nx = dx / dist, nz = dz / dist;
   if (now - ai.losAt > 150) { // line of sight, a few times a second
@@ -1621,14 +1627,14 @@ function duelBotStep(d, now, dt) {
   }
   if (heal) {
     if (heal.k < 1.2) { o.hp = DUEL_PICKS[heal.i].k === "med" ? DUEL_HP : Math.min(75, Math.max(o.hp, o.hp + 25)); duelTake(d, heal.i, now, false); }
-    else { mx = (heal.x - o.x) / heal.k; mz = (heal.z - o.z) / heal.k; speed = DUEL_BOT.run; }
+    else { mx = (heal.x - o.x) / heal.k; mz = (heal.z - o.z) / heal.k; speed = c.run; }
   } else if (ai.sees) {
     if (now > ai.strafeAt) { ai.strafe = Math.random() < 0.5 ? -1 : 1; ai.strafeAt = now + 700 + Math.random() * 1400; }
     const fwd = dist > 18 ? 1 : dist < 8 ? -0.7 : 0.15;
     mx = nx * fwd - nz * ai.strafe * 0.9; mz = nz * fwd + nx * ai.strafe * 0.9;
-    speed = DUEL_BOT.walk;
+    speed = c.walk;
   } else {
-    mx = nx; mz = nz; speed = DUEL_BOT.run;
+    mx = nx; mz = nz; speed = c.run;
     if (now < ai.detour) { mx = -nz * ai.strafe; mz = nx * ai.strafe; } // walked into cover: sidestep around it
   }
   const m = Math.hypot(mx, mz);
@@ -1651,7 +1657,7 @@ function duelBotStep(d, now, dt) {
   o.tyaw = o.yaw;
   // shoot
   if (ai.reloadUntil && now >= ai.reloadUntil) { ai.mag = W.mag; ai.reloadUntil = 0; }
-  if (ai.sees && !ai.reloadUntil && now - ai.seeAt > DUEL_BOT.react && now >= ai.nextShot && Math.abs(dy) < 0.25 && dist < 45) {
+  if (ai.sees && !ai.reloadUntil && now - ai.seeAt > c.react && now >= ai.nextShot && Math.abs(dy) < 0.25 && dist < 45) {
     if (ai.mag <= 0) ai.reloadUntil = now + W.reload + 200;
     else {
       ai.mag--;
@@ -1664,11 +1670,11 @@ function duelBotStep(d, now, dt) {
 
 /** One bot shot: aimed at my chest with an error that grows with distance and with how fast I move; it can hit, hit my head, or miss into cover. */
 function duelBotShoot(d, now, dist) {
-  const T = window.THREE, o = d.opp, me = d.me, W = DUEL_WEAPONS.ar;
+  const T = window.THREE, o = d.opp, me = d.me, W = DUEL_WEAPONS.ar, c = d.botCfg;
   const origin = [o.x, 1.4, o.z];
   const a = [me.x - origin[0], me.y + DUEL_BODYY[me.st] + 0.15 - origin[1], me.z - origin[2]];
   const al = Math.hypot(a[0], a[1], a[2]);
-  const err = DUEL_BOT.err + dist * 0.0016 + me.speed * 0.004;
+  const err = c.aim + dist * 0.0016 + me.speed * 0.004;
   for (let i = 0; i < 3; i++) a[i] = a[i] / al + (Math.random() - 0.5) * 2 * err;
   const bl = Math.hypot(a[0], a[1], a[2]);
   a[0] /= bl; a[1] /= bl; a[2] /= bl;
@@ -1677,7 +1683,7 @@ function duelBotShoot(d, now, dist) {
   if (!me.dead) {
     const h = duelRaySphere(origin, a, [me.x, me.y + DUEL_HEADY[me.st], me.z], 0.27);
     const b = duelRaySphere(origin, a, [me.x, me.y + DUEL_BODYY[me.st], me.z], me.st === 2 ? 0.42 : 0.5);
-    if (h >= 0 && h < tMax) { tMax = h; hit = W.head; head = true; } else if (b >= 0 && b < tMax) { tMax = b; hit = W.dmg; }
+    if (h >= 0 && h < tMax) { tMax = h; hit = W.head * c.dmg; head = true; } else if (b >= 0 && b < tMax) { tMax = b; hit = W.dmg * c.dmg; }
   }
   const end = [origin[0] + a[0] * tMax, origin[1] + a[1] * tMax, origin[2] + a[2] * tMax];
   duelTracer(d, [o.x - Math.sin(o.yaw) * W.len, 1.2, o.z - Math.cos(o.yaw) * W.len], end);

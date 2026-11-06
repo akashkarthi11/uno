@@ -422,6 +422,21 @@ function chat(s, p, raw, now, extra = {}) {
 /** Voice chat is for the admin and private players. */
 export const canVoice = (s, p) => Boolean(p.admin || p.observer || p.role === 'private' || publicVoiceOf(s));
 // The practice match against the bot: on unless the real admin switched it off (the real admin can always start one).
+/** The 3D duel bot's settings (the real admin's "Game vs" tab): on for players, a difficulty label, and the numbers the bot plays by. */
+export const BOT_DUEL_DEFAULT = { on: true, level: 'medium', react: 380, aim: 0.035, speed: 4.6, dmg: 100 };
+export const botDuelOf = (s) => ({ ...BOT_DUEL_DEFAULT, ...((s.settings && s.settings.botDuel) || {}) });
+const clampNum = (v, lo, hi, def) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def);
+function cleanBotDuel(v, base) {
+  if (!v || typeof v !== 'object') fail('Bad settings.');
+  return {
+    on: typeof v.on === 'boolean' ? v.on : base.on,
+    level: ['easy', 'medium', 'hard', 'custom'].includes(v.level) ? v.level : base.level,
+    react: Math.round(clampNum(v.react, 100, 1500, base.react)),
+    aim: Math.round(clampNum(v.aim, 0.005, 0.12, base.aim) * 1000) / 1000,
+    speed: Math.round(clampNum(v.speed, 2, 9, base.speed) * 10) / 10,
+    dmg: Math.round(clampNum(v.dmg, 25, 200, base.dmg)),
+  };
+}
 export const botOf = (s) => !(s.settings && s.settings.botMatch === false);
 export const canBot = (s, p) => Boolean(!p.observer && (p.admin || botOf(s))); // an observer only watches: no bot matches either
 // Public players' camera: its own switch, independent of Public voice (off by default; the admin and private players always may).
@@ -638,11 +653,11 @@ function start(s, p, now, only = null) {
 /** Admin chooses which super cards are in the deck. Only possible before a game starts (lobby or results screen). */
 function setConfig(s, p, b) {
   if (!p.admin && !p.starter) fail('Only the admin can do that.'); // the admin, or a player the admin allowed to start games
-  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, publicVideo, botMatch: botOpt, stacking, challenge: challengeOpt } = b || {};
+  const { supers, theme, handSize, voiceRelay, turnSecs, publicVoice, publicVideo, botMatch: botOpt, botDuel: botDuelOpt, stacking, challenge: challengeOpt } = b || {};
   const hasSupers = supers && typeof supers === 'object';
   // the voice route and public voice are the real admin's alone (a co-admin has the rest of the game settings)
-  if ((voiceRelay !== undefined || publicVoice !== undefined || publicVideo !== undefined || botOpt !== undefined) && !p.admin) fail('Only the admin can do that.');
-  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && publicVideo === undefined && botOpt === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
+  if ((voiceRelay !== undefined || publicVoice !== undefined || publicVideo !== undefined || botOpt !== undefined || botDuelOpt !== undefined) && !p.admin) fail('Only the admin can do that.');
+  if (!hasSupers && theme === undefined && handSize === undefined && voiceRelay === undefined && turnSecs === undefined && publicVoice === undefined && publicVideo === undefined && botOpt === undefined && botDuelOpt === undefined && stacking === undefined && challengeOpt === undefined) fail('Bad settings.');
   if (stacking !== undefined && typeof stacking !== 'boolean') fail('Bad settings.');
   if (challengeOpt !== undefined && typeof challengeOpt !== 'boolean') fail('Bad settings.');
   if (publicVoice !== undefined && typeof publicVoice !== 'boolean') fail('Bad settings.');
@@ -670,6 +685,7 @@ function setConfig(s, p, b) {
     publicVoice: publicVoice !== undefined ? publicVoice : publicVoiceOf(s),
     publicVideo: publicVideo !== undefined ? publicVideo : publicVideoOf(s),
     botMatch: botOpt !== undefined ? botOpt : botOf(s),
+    botDuel: botDuelOpt !== undefined ? cleanBotDuel(botDuelOpt, botDuelOf(s)) : botDuelOf(s),
     stacking: stacking !== undefined ? stacking : stackingOf(s),
     challenge: challengeOpt !== undefined ? challengeOpt : challengeOf(s),
     turnSecs: turnSecs !== undefined ? turnSecs : turnMsOf(s) / 1000,
@@ -1422,7 +1438,7 @@ export function view(s, me, now) {
       role: me.admin ? p.role || 'public' : undefined, // only the admin needs to know who joined how
     })),
     chat: (s.chat || []).slice(-30),
-    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), botMatch: botOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
+    settings: { supers: superSettings(s), theme: themeOf(s), handSize: handSizeOf(s), voiceRelay: voiceRelayOf(s), publicVoice: publicVoiceOf(s), publicVideo: publicVideoOf(s), botMatch: botOf(s), botDuel: botDuelOf(s), turnSecs: turnMsOf(s) / 1000, stacking: stackingOf(s), challenge: challengeOf(s) },
     map: mapView(s, me, now), // the location radar (everyone in the room except the observer account)
     learn: learnView(s, me), // the live Korean lesson: undefined (not even sent) for anyone but the admin and private players
     canVoice: canVoice(s, me),

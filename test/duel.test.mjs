@@ -80,3 +80,20 @@ test('a player\'s duel button layout is saved by name, cleaned, and read back fr
   assert.deepEqual((await call({ op: 'duelLayout', ...B })).body.layout, {}, 'the other player is not affected');
   assert.equal((await call({ op: 'duelLayoutSave', ...A, layout: 'nope' })).code, 400);
 });
+
+test('the real admin sets the 3D duel bot (difficulty and numbers); values are clamped; a co-admin and players cannot', async () => {
+  const room = 'duel-botcfg';
+  const admin = (await call({ op: 'login', name: 'Boss', password: '110299' })).body.sys;
+  const boss = await call({ op: 'join', sys: admin, room, create: true });
+  const pl = await call({ op: 'join', sys: await pub('Lex'), room });
+  const A = who(boss, room), P = who(pl, room);
+  const get = async (w) => (await call({ op: 'state', ...w })).body.state.settings.botDuel;
+  assert.deepEqual(await get(P), { on: true, level: 'medium', react: 380, aim: 0.035, speed: 4.6, dmg: 100 }, 'the default is medium, and players can read it');
+  const r = await call({ op: 'config', ...A, botDuel: { on: false, level: 'hard', react: 50, aim: 0.015, speed: 99, dmg: 120 } });
+  assert.equal(r.code, 200);
+  assert.deepEqual(await get(P), { on: false, level: 'hard', react: 100, aim: 0.015, speed: 9, dmg: 120 }, 'saved and clamped (reaction 100 ms at the least, speed 9 at the most)');
+  assert.equal((await call({ op: 'config', ...P, botDuel: { level: 'easy' } })).code, 400, 'a player cannot');
+  assert.equal((await call({ op: 'config', ...A, botDuel: 'x' })).code, 400, 'bad data is refused');
+  assert.equal((await call({ op: 'config', ...A, botDuel: { level: 'easy', react: 700, aim: 0.07, speed: 3.6, dmg: 70, on: true } })).code, 200);
+  assert.equal((await get(P)).level, 'easy');
+});

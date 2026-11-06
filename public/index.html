@@ -165,6 +165,7 @@
       <h2>⚙ Settings</h2>
       <button id="settingsX" class="icon ghost" type="button" title="Close" aria-label="Close">✕</button>
     </div>
+    <div id="setTabs" class="hidden"><button id="setTabGen" class="ghost on" type="button">⚙ General</button><button id="setTabVs" class="ghost" type="button">🎮 Game vs</button></div>
     <div id="settingsMine">
       <div class="set-label">For you</div>
       <div class="set-buttons">
@@ -227,6 +228,19 @@
       <button id="authSwitchBtn" class="ghost hidden" type="button">🔑 Sign-in: current</button>
       <button id="observerSwitchBtn" class="ghost hidden" type="button">👁 Observer account: on</button>
     </div>
+  </div>
+  <div id="settingsVs" class="hidden">
+    <h3>Game vs Bot</h3>
+    <p id="vsNote" class="hint"></p>
+    <div class="set-label">🎯 3D duel bot</div>
+    <div class="set-buttons"><button id="vsOn" class="ghost" type="button">Players can play it: on</button></div>
+    <div class="set-label">Difficulty</div>
+    <div id="vsLevels" class="set-buttons three"><button data-l="easy" class="ghost" type="button">😊 Easy</button><button data-l="medium" class="ghost" type="button">🙂 Medium</button><button data-l="hard" class="ghost" type="button">😈 Hard</button></div>
+    <div class="vs-row"><label><span>Reaction time</span><b id="vsReactV"></b><input id="vsReact" type="range" min="100" max="1500" step="50"></label></div>
+    <div class="vs-row"><label><span>Accuracy</span><b id="vsAimV"></b><input id="vsAim" type="range" min="0" max="100" step="5"></label></div>
+    <div class="vs-row"><label><span>Speed</span><b id="vsSpeedV"></b><input id="vsSpeed" type="range" min="2" max="9" step="0.2"></label></div>
+    <div class="vs-row"><label><span>Bot damage</span><b id="vsDmgV"></b><input id="vsDmg" type="range" min="25" max="200" step="5"></label></div>
+    <p class="hint">Applies to the next 3D duel a player starts against the bot (Play vs Bot → 3D duel).</p>
   </div>
     <button id="settingsClose" class="ghost sticky-close" type="button">Close</button>
   </div>
