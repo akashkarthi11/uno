@@ -344,9 +344,10 @@ async function locked(code, fn) {
   const r = await client();
   const token = randomUUID();
   let got = false;
-  for (let i = 0; i < 40 && !got; i++) {
+  // Redis answers in about a millisecond, so a waiting write checks again after 8-20 ms (it used to wait 75 ms), for the same 3 s in all
+  for (let i = 0; i < 180 && !got; i++) {
     got = Boolean(await r.set(lockKey(code), token, { nx: true, px: 5000 }));
-    if (!got) await sleep(75);
+    if (!got) await sleep(8 + Math.random() * 12);
   }
   if (!got) throw new Error('Room busy, please retry.');
   try {
