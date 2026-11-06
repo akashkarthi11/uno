@@ -2173,7 +2173,25 @@ $("drawPile").addEventListener("click", () => {
   if (dealingNow()) { toast("The cards are still being dealt."); return; }
   send({ op: "draw" });
 });
-$("botBtn").addEventListener("click", () => send({ op: "botMatch" }));
+/** Play vs Bot asks which game: the card game (a bot player at the table) or the 3D duel (a bot opponent in the arena). */
+function chooseBotGame() {
+  if ($("botChoice")) return;
+  const m = document.createElement("div");
+  m.id = "botChoice";
+  m.className = "modal";
+  m.innerHTML = '<div class="box sheet"><div class="sheet-head"><h2>🤖 Play vs Bot</h2><button class="icon ghost" type="button" data-x aria-label="Close">✕</button></div>' +
+    '<p class="hint">Choose a game</p><div class="set-buttons"><button type="button" data-g="cards">🃏 Card game</button><button type="button" data-g="duel">🎯 3D duel</button></div></div>';
+  m.addEventListener("click", (e) => {
+    const g = e.target.closest("[data-g]");
+    if (!g && e.target !== m && !e.target.closest("[data-x]")) return;
+    m.remove();
+    if (!g) return;
+    if (g.dataset.g === "cards") send({ op: "botMatch" });
+    else if (typeof duelOpen === "function") duelOpen({ host: true, solo: true, bot: true, oppName: "Bot" });
+  });
+  document.body.appendChild(m);
+}
+$("botBtn").addEventListener("click", chooseBotGame);
 $("pauseBtn").addEventListener("click", () => send({ op: state && state.paused ? "resume" : "pause" }));
 $("restartBtn").addEventListener("click", () => {
   if (confirm("End this game and send everyone back to the lobby?")) send({ op: "lobby" });

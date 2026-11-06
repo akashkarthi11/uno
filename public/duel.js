@@ -92,10 +92,10 @@ const duelPref = (k, def) => { try { const v = localStorage.getItem("duel-" + k)
 const duelSetPref = (k, v) => { try { localStorage.setItem("duel-" + k, String(v)); } catch (e) { /* not available */ } };
 
 /** Opens the match. `solo` (tests only) runs the arena with a still dummy and no connection. */
-async function duelOpen({ host, oppId, oppName, solo }) {
+async function duelOpen({ host, oppId, oppName, solo, bot }) {
   if (duel) return;
   const d = duel = {
-    host, oppId, oppName: oppName || "Opponent", solo: Boolean(solo), closed: false,
+    host, oppId, oppName: oppName || "Opponent", solo: Boolean(solo || bot), bot: Boolean(bot), ai: null, closed: false,
     me: {
       x: 0, y: 0, z: 0, vy: 0, yaw: 0, el: -0.2, hp: DUEL_HP, dead: false, safeUntil: 0, moving: false, speed: 0, grounded: true, phase: 0,
       st: 0, eyeH: DUEL_EYE[0], w: "ar", mag: {}, res: {}, have: {}, inv: { band: 0, med: 0 }, switchUntil: 0, reload: null, ads: false, using: null, power: null,
@@ -115,11 +115,12 @@ async function duelOpen({ host, oppId, oppName, solo }) {
   duelSpawn(d, host ? 0 : 1);
   d.opp.x = d.opp.tx = DUEL_SPAWNS[host ? 1 : 0][0];
   d.opp.z = d.opp.tz = DUEL_SPAWNS[host ? 1 : 0][1];
+  if (d.bot) duelBotReset(d, host ? 1 : 0);
   try { d.audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { d.audio = null; }
   duelBind(d);
   duelBindEdit(d);
   duelScopeHud(d);
-  if (!d.solo) duelLoadLayout(d);
+  if (!d.solo || d.bot) duelLoadLayout(d);
   d.last = performance.now();
   d.raf = requestAnimationFrame((t) => duelFrame(d, t));
   if (d.solo) { d.status = ""; d.connected = true; } else { await duelStartMic(d); if (!d.closed) duelConnect(d); }
@@ -194,6 +195,7 @@ function duelBuildUi(d) {
   q("#duelMed").addEventListener("click", () => duelUse(d, "med"));
   q("#duelAgain").addEventListener("click", () => {
     d.rematch[0] = true;
+    if (d.bot) d.rematch[1] = true;
     duelSend(d, "safe", { t: "rematch" });
     d.status = "Waiting for " + d.oppName + "…";
     duelRematchCheck(d);
@@ -1163,6 +1165,7 @@ function duelFrame(d, now) {
   me.speed = sp;
   me.eyeH += (DUEL_EYE[me.st] - me.eyeH) * Math.min(1, dt * 10);
   d.adsT += ((me.ads && !me.dead ? 1 : 0) - d.adsT) * Math.min(1, dt * 12);
+  if (d.bot) duelBotStep(d, now, dt);
   // the opponent glides to the last place they reported
   const o = d.opp, k = Math.min(1, dt * 14);
   o.x += (o.tx - o.x) * k;
@@ -1380,7 +1383,7 @@ function duelShoot(d, now) {
   const ray = new T.Raycaster(new T.Vector3(...origin), new T.Vector3(...a), 0, 120);
   const wall = ray.intersectObjects(d.solids, false)[0];
   let tMax = wall ? wall.distance : 120, hit = 0, head = false;
-  if (!o.dead) {
+  if (!o.dead && !(d.bot && now < d.ai.safeUntil)) { // a bot that has just appeared cannot be hurt, as for a player
     const ost = o.st || 0;
     const h = duelRaySphere(origin, a, [o.x, o.y + DUEL_HEADY[ost], o.z], 0.27);
     const b = duelRaySphere(origin, a, [o.x, o.y + DUEL_BODYY[ost], o.z], ost === 2 ? 0.42 : 0.5);
@@ -1403,6 +1406,7 @@ function duelShoot(d, now) {
     duelSound(d, head ? "head" : "hit");
     duelDamageNumber(d, hit, head);
     duelSend(d, "safe", { t: "hit", d: hit, h: head ? 1 : 0 });
+    if (d.bot && o.hp <= 0 && !o.dead) duelBotDied(d, head);
   }
   if (me.mag[me.w] === 0 && me.res[me.w] > 0) d.timers.push(setTimeout(() => { if (!d.closed) duelReload(d); }, 250));
 }
@@ -1576,11 +1580,132 @@ function duelReport(d) {
   api({ op: "duelResult", id: d.matchId, kills: d.kills, deaths: d.deaths }).catch(() => {});
 }
 
+
+/* ---------------- the practice bot (Play vs Bot → 3D duel) ---------------- */
+
+const DUEL_BOT = { walk: 4.6, run: 7, react: 380, err: 0.035 }; // medium: slower than you, a short reaction time, a shaky aim
+
+const duelFarSpawn = (d) => DUEL_SPAWNS.map((p, i) => [Math.hypot(p[0] - d.me.x, p[1] - d.me.z), i]).sort((x, y) => y[0] - x[0])[0][1];
+
+/** The bot (re)appears at a spawn with full health and 1.5 seconds of protection. */
+function duelBotReset(d, spawn) {
+  const o = d.opp, sp = DUEL_SPAWNS[spawn];
+  o.x = o.tx = sp[0]; o.z = o.tz = sp[1]; o.y = o.ty = 0;
+  o.hp = DUEL_HP; o.dead = false; o.st = 0; o.w = "ar"; o.pw = 0; o.seen = true; o.sp = 0;
+  d.ai = { safeUntil: performance.now() + DUEL_SAFE_MS, strafe: 1, strafeAt: 0, seeAt: 0, sees: false, losAt: 0, mag: DUEL_WEAPONS.ar.mag, reloadUntil: 0, nextShot: 0, burst: 0, burstLen: 4, stuck: 0, detour: 0 };
+}
+
+/** One frame of the bot: look for me, close in or hold a fighting distance and strafe, shoot in bursts, retreat to a bandage or medkit when hurt. */
+function duelBotStep(d, now, dt) {
+  const o = d.opp, me = d.me, ai = d.ai, T = window.THREE, W = DUEL_WEAPONS.ar;
+  if (d.over || o.dead) { o.sp = 0; return; }
+  const dx = me.x - o.x, dz = me.z - o.z, dist = Math.hypot(dx, dz) || 0.001, nx = dx / dist, nz = dz / dist;
+  if (now - ai.losAt > 150) { // line of sight, a few times a second
+    ai.losAt = now;
+    const from = new T.Vector3(o.x, 1.45, o.z), to = new T.Vector3(me.x, me.y + DUEL_BODYY[me.st] + 0.1, me.z);
+    const dir = to.clone().sub(from), len = dir.length();
+    dir.normalize();
+    const sees = !me.dead && !new T.Raycaster(from, dir, 0, len).intersectObjects(d.solids, false)[0];
+    if (sees && !ai.sees) ai.seeAt = now;
+    ai.sees = sees;
+  }
+  // where to go
+  let mx = 0, mz = 0, speed = 0;
+  let heal = null;
+  if (o.hp < 45 && !ai.sees) {
+    DUEL_PICKS.forEach((p, i) => {
+      if ((p.k !== "band" && p.k !== "med") || !d.picks[i].on) return;
+      const k = Math.hypot(p.x - o.x, p.z - o.z);
+      if (!heal || k < heal.k) heal = { i, k, x: p.x, z: p.z };
+    });
+  }
+  if (heal) {
+    if (heal.k < 1.2) { o.hp = DUEL_PICKS[heal.i].k === "med" ? DUEL_HP : Math.min(75, Math.max(o.hp, o.hp + 25)); duelTake(d, heal.i, now, false); }
+    else { mx = (heal.x - o.x) / heal.k; mz = (heal.z - o.z) / heal.k; speed = DUEL_BOT.run; }
+  } else if (ai.sees) {
+    if (now > ai.strafeAt) { ai.strafe = Math.random() < 0.5 ? -1 : 1; ai.strafeAt = now + 700 + Math.random() * 1400; }
+    const fwd = dist > 18 ? 1 : dist < 8 ? -0.7 : 0.15;
+    mx = nx * fwd - nz * ai.strafe * 0.9; mz = nz * fwd + nx * ai.strafe * 0.9;
+    speed = DUEL_BOT.walk;
+  } else {
+    mx = nx; mz = nz; speed = DUEL_BOT.run;
+    if (now < ai.detour) { mx = -nz * ai.strafe; mz = nx * ai.strafe; } // walked into cover: sidestep around it
+  }
+  const m = Math.hypot(mx, mz);
+  let moved = 0;
+  if (m > 0.01 && speed) {
+    const step = speed * dt, lim = DUEL_HALF - 0.8, bx = o.x, bz = o.z;
+    const px = Math.max(-lim, Math.min(lim, o.x + (mx / m) * step)), pz = Math.max(-lim, Math.min(lim, o.z + (mz / m) * step));
+    if (duelGround(px, o.z, 0.45) <= 0.35) o.x = px;
+    if (duelGround(o.x, pz, 0.45) <= 0.35) o.z = pz;
+    moved = Math.hypot(o.x - bx, o.z - bz);
+    if (moved < step * 0.3) { ai.stuck += dt; if (ai.stuck > 0.35) { ai.stuck = 0; ai.detour = now + 900; ai.strafe = Math.random() < 0.5 ? -1 : 1; ai.strafeAt = now + 900; } } else ai.stuck = 0;
+  }
+  o.tx = o.x; o.tz = o.z; o.ty = 0; o.y = 0;
+  o.sp = moved > 0 ? moved / dt : 0;
+  // face me (turning at a limited rate)
+  const want = Math.atan2(-dx, -dz);
+  let dy = want - o.yaw;
+  dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  o.yaw += Math.max(-7 * dt, Math.min(7 * dt, dy));
+  o.tyaw = o.yaw;
+  // shoot
+  if (ai.reloadUntil && now >= ai.reloadUntil) { ai.mag = W.mag; ai.reloadUntil = 0; }
+  if (ai.sees && !ai.reloadUntil && now - ai.seeAt > DUEL_BOT.react && now >= ai.nextShot && Math.abs(dy) < 0.25 && dist < 45) {
+    if (ai.mag <= 0) ai.reloadUntil = now + W.reload + 200;
+    else {
+      ai.mag--;
+      duelBotShoot(d, now, dist);
+      ai.nextShot = now + W.rate * 1.9;
+      if (++ai.burst >= ai.burstLen) { ai.burst = 0; ai.burstLen = 3 + Math.floor(Math.random() * 4); ai.nextShot = now + 450 + Math.random() * 600; }
+    }
+  }
+}
+
+/** One bot shot: aimed at my chest with an error that grows with distance and with how fast I move; it can hit, hit my head, or miss into cover. */
+function duelBotShoot(d, now, dist) {
+  const T = window.THREE, o = d.opp, me = d.me, W = DUEL_WEAPONS.ar;
+  const origin = [o.x, 1.4, o.z];
+  const a = [me.x - origin[0], me.y + DUEL_BODYY[me.st] + 0.15 - origin[1], me.z - origin[2]];
+  const al = Math.hypot(a[0], a[1], a[2]);
+  const err = DUEL_BOT.err + dist * 0.0016 + me.speed * 0.004;
+  for (let i = 0; i < 3; i++) a[i] = a[i] / al + (Math.random() - 0.5) * 2 * err;
+  const bl = Math.hypot(a[0], a[1], a[2]);
+  a[0] /= bl; a[1] /= bl; a[2] /= bl;
+  const wall = new T.Raycaster(new T.Vector3(...origin), new T.Vector3(...a), 0, 120).intersectObjects(d.solids, false)[0];
+  let tMax = wall ? wall.distance : 120, hit = 0, head = false;
+  if (!me.dead) {
+    const h = duelRaySphere(origin, a, [me.x, me.y + DUEL_HEADY[me.st], me.z], 0.27);
+    const b = duelRaySphere(origin, a, [me.x, me.y + DUEL_BODYY[me.st], me.z], me.st === 2 ? 0.42 : 0.5);
+    if (h >= 0 && h < tMax) { tMax = h; hit = W.head; head = true; } else if (b >= 0 && b < tMax) { tMax = b; hit = W.dmg; }
+  }
+  const end = [origin[0] + a[0] * tMax, origin[1] + a[1] * tMax, origin[2] + a[2] * tMax];
+  duelTracer(d, [o.x - Math.sin(o.yaw) * W.len, 1.2, o.z - Math.cos(o.yaw) * W.len], end);
+  d.oppFig.flashUntil = now + 55;
+  duelSound(d, "shot", Math.max(0.15, 1 - dist / 50));
+  duelImpact(d, end, !hit && wall && wall.face ? [wall.face.normal.x, wall.face.normal.y, wall.face.normal.z] : null, Boolean(hit));
+  if (hit) duelGotHit(d, hit, head);
+}
+
+/** I took the bot's last health: counted like the other player's "died" message, then it comes back after a moment. */
+function duelBotDied(d, head) {
+  const o = d.opp;
+  o.dead = true; o.sp = 0;
+  d.kills++;
+  duelFeed(d, "You eliminated <b>" + duelEsc(d.oppName) + "</b>" + (head ? " 💀 headshot" : ""), "good");
+  d.root.querySelector("#duelHit").className = "kill";
+  d.marker = 1;
+  if (d.kills >= DUEL_WIN) { d.over = true; duelSound(d, "win"); document.exitPointerLock && document.exitPointerLock(); }
+  else d.timers.push(setTimeout(() => { if (!d.closed && !d.over) duelBotReset(d, duelFarSpawn(d)); }, DUEL_RESPAWN_MS));
+  duelHud(d);
+}
+
 function duelRematchCheck(d) {
   if (!(d.rematch[0] && d.rematch[1])) { duelHud(d); return; }
   d.rematch = [false, false];
   d.kills = 0; d.deaths = 0; d.over = false; d.status = ""; d.matchId = Math.random().toString(36).slice(2, 12);
   d.opp.hp = DUEL_HP; d.opp.dead = false;
+  if (d.bot) duelBotReset(d, d.host ? 1 : 0);
   d.picks.forEach((s) => { s.on = true; s.until = 0; });
   duelSpawn(d, d.host ? 0 : 1);
   duelHud(d);
