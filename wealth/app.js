@@ -26,7 +26,7 @@ $('authForm').onsubmit=async e=>{
  }catch(x){$('authMsg').textContent=x.message}
 };
 async function showApp(){
- $('auth').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('who').textContent=user.email+ (user.role==='admin'?' · OWNER / ADMIN':'');await load();
+ $('auth').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('who').textContent=user.email+ (user.role==='admin'?' · OWNER / ADMIN':'');await load();if(user.role==='admin')await loadSnapshot();
 }
 async function load(){
  const d=await api('/api/ledger');items=d.transactions||[];
@@ -35,7 +35,23 @@ async function load(){
  $('entries').innerHTML=items.length?items.map(x=>{const sign=x.kind==='income'?'+':x.kind==='expense'?'-':'';return '<div class="entry"><div><b>'+esc(x.category)+'</b><small>'+esc(x.description||x.kind)+' · '+esc(x.account||'No account')+' · '+esc(String(x.occurred_on).slice(0,10))+'</small></div><span class="value '+(x.kind==='income'?'income':x.kind==='expense'?'expense':'')+'">'+sign+money(x.amount)+'</span><button class="delete" data-id="'+x.id+'" aria-label="Delete entry">×</button></div>'}).join(''):'<p class="muted">No entries yet. Add your first transaction.</p>';
  $('entries').querySelectorAll('.delete').forEach(b=>b.onclick=async()=>{if(confirm('Delete this ledger entry?')){await api('/api/ledger?id='+encodeURIComponent(b.dataset.id),{method:'DELETE'});await load()}});
 }
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+async function loadSnapshot(){
+ const panel=$('snapshotPanel');panel.classList.remove('hidden');
+ try{
+  let d=await api('/api/snapshot');
+  if(!d.snapshot){$('snapshotStatus').textContent='Importing source…';await api('/api/snapshot',{method:'POST',body:'{}'});d=await api('/api/snapshot')}
+  const snap=d.snapshot?.payload;
+  if(!snap){$('snapshotStatus').textContent='Not imported';return}
+  $('snapshotStatus').textContent='Saved in database · '+snap.snapshotDate;
+  $('snapshotContent').innerHTML=snap.sections.map((s,i)=>{
+   const tables=(s.tables||[]).map(rows=>'<div class="snapshot-table-wrap"><table class="snapshot-table"><tbody>'+rows.map((r,ri)=>'<tr>'+r.map(cell=>ri===0?'<th>'+esc(cell)+'</th>':'<td>'+esc(cell)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>').join('');
+   const notes=(s.notes||[]).map(n=>'<li>'+esc(n)+'</li>').join('');
+   return '<details class="snapshot-section" '+(i<5?'open':'')+'><summary>'+esc(s.heading)+'</summary>'+tables+(notes?'<ul class="snapshot-notes">'+notes+'</ul>':'')+'</details>';
+  }).join('');
+ }catch(e){$('snapshotStatus').textContent='Import error';$('snapshotContent').innerHTML='<p class="message">'+esc(e.message)+'</p>'}
+}
+\nfunction esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 $('logout').onclick=async()=>{await api('/api/auth?action=logout',{method:'POST',body:'{}'});location.reload()};
 $('addToggle').onclick=()=>{$('txForm').classList.remove('hidden');$('date').value=new Date().toISOString().slice(0,10)};
 $('cancel').onclick=()=>$('txForm').classList.add('hidden');
