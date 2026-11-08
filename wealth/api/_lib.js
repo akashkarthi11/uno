@@ -4,8 +4,8 @@ const dbUrl=process.env.WEALTH_DATABASE_URL;
 if(!dbUrl) throw new Error('WEALTH_DATABASE_URL is not configured');
 export const sql=neon(dbUrl);
 export async function schema(){
- await sql(`CREATE TABLE IF NOT EXISTS wealth_users(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
- await sql(`CREATE TABLE IF NOT EXISTS wealth_transactions(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES wealth_users(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN ('income','expense','transfer','investment','liability')),category TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',amount NUMERIC(16,2) NOT NULL CHECK(amount>0),account TEXT NOT NULL DEFAULT '',occurred_on DATE NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+ await sql`CREATE TABLE IF NOT EXISTS wealth_users(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),email TEXT NOT NULL UNIQUE,password_hash TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+ await sql`CREATE TABLE IF NOT EXISTS wealth_transactions(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES wealth_users(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN ('income','expense','transfer','investment','liability')),category TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',amount NUMERIC(16,2) NOT NULL CHECK(amount>0),account TEXT NOT NULL DEFAULT '',occurred_on DATE NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
  await sql`CREATE INDEX IF NOT EXISTS wealth_tx_user_date ON wealth_transactions(user_id,occurred_on DESC)`;
 }
 export function hash(p){const s=randomBytes(16);return 's1$'+s.toString('base64url')+'$'+scryptSync(p,s,64).toString('base64url')}
