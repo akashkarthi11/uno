@@ -51,7 +51,8 @@ async function loadSnapshot(){
   }).join('');
  }catch(e){$('snapshotStatus').textContent='Import error';$('snapshotContent').innerHTML='<p class="message">'+esc(e.message)+'</p>'}
 }
-\nfunction esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 $('logout').onclick=async()=>{await api('/api/auth?action=logout',{method:'POST',body:'{}'});location.reload()};
 $('addToggle').onclick=()=>{$('txForm').classList.remove('hidden');$('date').value=new Date().toISOString().slice(0,10)};
 $('cancel').onclick=()=>$('txForm').classList.add('hidden');
