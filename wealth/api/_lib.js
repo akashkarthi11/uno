@@ -9,6 +9,7 @@ export async function schema(){
  await sql`UPDATE wealth_users SET role='admin' WHERE lower(email)='karthickkeyan303@gmail.com'`;
  await sql`CREATE TABLE IF NOT EXISTS wealth_transactions(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES wealth_users(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN ('income','expense','transfer','investment','liability')),category TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',amount NUMERIC(16,2) NOT NULL CHECK(amount>0),account TEXT NOT NULL DEFAULT '',occurred_on DATE NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
  await sql`CREATE INDEX IF NOT EXISTS wealth_tx_user_date ON wealth_transactions(user_id,occurred_on DESC)`;
+ await sql`CREATE TABLE IF NOT EXISTS wealth_snapshots(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES wealth_users(id) ON DELETE CASCADE,source_key TEXT NOT NULL,source_name TEXT NOT NULL,snapshot_date DATE NOT NULL,payload JSONB NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(user_id,source_key))`;
 }
 export function hash(p){const s=randomBytes(16);return 's1$'+s.toString('base64url')+'$'+scryptSync(p,s,64).toString('base64url')}
 export function check(p,h){try{const [v,s,x]=h.split('$');if(v!=='s1')return false;const a=Buffer.from(x,'base64url'),b=scryptSync(p,Buffer.from(s,'base64url'),a.length);return a.length===b.length&&timingSafeEqual(a,b)}catch{return false}}
