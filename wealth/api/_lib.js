@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
-const dbUrl=process.env.WEALTH_DATABASE_URL;
+const dbUrl=process.env.POSTGRES_URL || process.env.WEALTH_DATABASE_URL || process.env.DATABASE_URL;
 export const sql=dbUrl ? neon(dbUrl) : null;
 export async function schema(){
  if(!sql) throw new Error('WEALTH_DATABASE_URL is not configured');
