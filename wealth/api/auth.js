@@ -41,6 +41,7 @@ export default async function handler(req,res){
   }
   return json(res,400,{error:'Unknown action'});
  } catch(e) {
+  console.error('Wealth auth failure:', e?.message || 'unknown error');
   return json(res,500,{error:'Server configuration or database error.'});
  }
 }
